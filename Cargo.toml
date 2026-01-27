@@ -1,0 +1,11 @@
+[package]
+name = "monokrom"
+version = "0.1.0"
+edition = "2021"
+description = "A fantasy console text editor"
+
+[dependencies]
+macroquad = "0.4"
+ropey = "1.6"
+arboard = "3.2"
+directories = "5.0"
