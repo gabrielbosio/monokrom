@@ -11,14 +11,14 @@ pub const SCREEN_TILES_X: u32 = 32;
 pub const SCREEN_TILES_Y: u32 = 30;
 
 // Screen dimensions in pixels (native resolution)
-pub const SCREEN_WIDTH: u32 = SCREEN_TILES_X * TILE_WIDTH;   // 256
+pub const SCREEN_WIDTH: u32 = SCREEN_TILES_X * TILE_WIDTH; // 256
 pub const SCREEN_HEIGHT: u32 = SCREEN_TILES_Y * TILE_HEIGHT; // 240
 
 // Window scale factor
 pub const SCALE: u32 = 3;
 
 // Window dimensions
-pub const WINDOW_WIDTH: u32 = SCREEN_WIDTH * SCALE;   // 768
+pub const WINDOW_WIDTH: u32 = SCREEN_WIDTH * SCALE; // 768
 pub const WINDOW_HEIGHT: u32 = SCREEN_HEIGHT * SCALE; // 720
 
 // Color palette

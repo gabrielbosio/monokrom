@@ -33,7 +33,8 @@ impl<'a> TextRenderer<'a> {
 
         for (i, c) in text.chars().enumerate() {
             let x = start_x + (i as f32 * TILE_WIDTH as f32);
-            self.font.draw_char_with_shadow(c, x, y, fg_color, shadow_color);
+            self.font
+                .draw_char_with_shadow(c, x, y, fg_color, shadow_color);
         }
     }
 
@@ -53,20 +54,30 @@ impl<'a> TextRenderer<'a> {
     ) {
         for (i, c) in text.chars().enumerate() {
             let char_x = x + (i as f32 * TILE_WIDTH as f32);
-            self.font.draw_char_with_shadow(c, char_x, y, fg_color, shadow_color);
+            self.font
+                .draw_char_with_shadow(c, char_x, y, fg_color, shadow_color);
         }
     }
 
     /// Draw a single character at tile coordinates
-    pub fn draw_char(&self, c: char, tile_x: u32, tile_y: u32, fg_color: Color, shadow_color: Color) {
+    pub fn draw_char(
+        &self,
+        c: char,
+        tile_x: u32,
+        tile_y: u32,
+        fg_color: Color,
+        shadow_color: Color,
+    ) {
         let x = (tile_x * TILE_WIDTH) as f32;
         let y = (tile_y * TILE_HEIGHT) as f32;
-        self.font.draw_char_with_shadow(c, x, y, fg_color, shadow_color);
+        self.font
+            .draw_char_with_shadow(c, x, y, fg_color, shadow_color);
     }
 
     /// Draw a single character at pixel coordinates
     pub fn draw_char_px(&self, c: char, x: f32, y: f32, fg_color: Color, shadow_color: Color) {
-        self.font.draw_char_with_shadow(c, x, y, fg_color, shadow_color);
+        self.font
+            .draw_char_with_shadow(c, x, y, fg_color, shadow_color);
     }
 
     /// Draw text with selection highlighting
@@ -90,11 +101,18 @@ impl<'a> TextRenderer<'a> {
 
             if is_selected {
                 // Draw selection background
-                draw_rectangle(x, y, TILE_WIDTH as f32, TILE_HEIGHT as f32, COLOR_SELECTION_BG);
+                draw_rectangle(
+                    x,
+                    y,
+                    TILE_WIDTH as f32,
+                    TILE_HEIGHT as f32,
+                    COLOR_SELECTION_BG,
+                );
                 // Draw text in inverted colors (no shadow on selection)
                 self.font.draw_char(c, x, y, COLOR_SELECTION_FG);
             } else {
-                self.font.draw_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
+                self.font
+                    .draw_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
             }
         }
     }

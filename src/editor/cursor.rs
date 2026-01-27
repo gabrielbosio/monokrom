@@ -125,12 +125,12 @@ impl Cursor {
             let mut col = self.position.col;
 
             // Skip whitespace going backwards
-            while col > 0 && chars.get(col - 1).map_or(false, |c| c.is_whitespace()) {
+            while col > 0 && chars.get(col - 1).is_some_and(|c| c.is_whitespace()) {
                 col -= 1;
             }
 
             // Skip word characters going backwards
-            while col > 0 && chars.get(col - 1).map_or(false, |c| !c.is_whitespace()) {
+            while col > 0 && chars.get(col - 1).is_some_and(|c| !c.is_whitespace()) {
                 col -= 1;
             }
 

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use ropey::Rope;
+use std::fmt;
 
 #[derive(Clone)]
 pub struct TextBuffer {
@@ -13,11 +14,15 @@ impl Default for TextBuffer {
     }
 }
 
+impl fmt::Display for TextBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.rope)
+    }
+}
+
 impl TextBuffer {
     pub fn new() -> Self {
-        Self {
-            rope: Rope::new(),
-        }
+        Self { rope: Rope::new() }
     }
 
     pub fn from_str(text: &str) -> Self {
@@ -139,11 +144,6 @@ impl TextBuffer {
         } else {
             String::new()
         }
-    }
-
-    /// Get all text as a string
-    pub fn to_string(&self) -> String {
-        self.rope.to_string()
     }
 
     /// Check if buffer is empty

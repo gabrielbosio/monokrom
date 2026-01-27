@@ -125,7 +125,10 @@ impl InputDialog {
         // Input text (truncate if too long)
         let max_chars = ((input_width / TILE_WIDTH as f32) as usize).saturating_sub(1);
         let display_input: String = if self.input.len() > max_chars {
-            self.input.chars().skip(self.input.len() - max_chars).collect()
+            self.input
+                .chars()
+                .skip(self.input.len() - max_chars)
+                .collect()
         } else {
             self.input.clone()
         };

@@ -49,7 +49,11 @@ impl History {
     }
 
     /// Undo: restore previous state, save current to redo stack
-    pub fn undo(&mut self, current_buffer: &TextBuffer, current_cursor: CursorPosition) -> Option<HistoryEntry> {
+    pub fn undo(
+        &mut self,
+        current_buffer: &TextBuffer,
+        current_cursor: CursorPosition,
+    ) -> Option<HistoryEntry> {
         let entry = self.undo_stack.pop()?;
 
         // Save current state to redo stack
@@ -62,7 +66,11 @@ impl History {
     }
 
     /// Redo: restore next state from redo stack, save current to undo stack
-    pub fn redo(&mut self, current_buffer: &TextBuffer, current_cursor: CursorPosition) -> Option<HistoryEntry> {
+    pub fn redo(
+        &mut self,
+        current_buffer: &TextBuffer,
+        current_cursor: CursorPosition,
+    ) -> Option<HistoryEntry> {
         let entry = self.redo_stack.pop()?;
 
         // Save current state to undo stack

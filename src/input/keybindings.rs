@@ -6,9 +6,9 @@ use macroquad::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KeyCombo {
     pub key: KeyCode,
-    pub ctrl: bool,   // Cmd on macOS
+    pub ctrl: bool, // Cmd on macOS
     pub shift: bool,
-    pub alt: bool,    // Option on macOS
+    pub alt: bool, // Option on macOS
 }
 
 impl KeyCombo {

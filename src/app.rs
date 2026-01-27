@@ -5,7 +5,9 @@ use crate::editor::{operations, Cursor, CursorPosition, History, Selection, Text
 use crate::filesystem;
 use crate::input::{get_editor_action, EditorAction};
 use crate::render::{BitmapFont, ScrollbarState};
-use crate::ui::{ConfirmDialog, DialogResult, FilePicker, FilePickerMode, FilePickerResult, InputDialog};
+use crate::ui::{
+    ConfirmDialog, DialogResult, FilePicker, FilePickerMode, FilePickerResult, InputDialog,
+};
 
 /// Application state modes
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -340,7 +342,10 @@ impl App {
                     }
                 }
                 EditorAction::ScrollDown => {
-                    let max_scroll = self.buffer.line_count().saturating_sub(self.visible_lines());
+                    let max_scroll = self
+                        .buffer
+                        .line_count()
+                        .saturating_sub(self.visible_lines());
                     if self.scroll_y < max_scroll {
                         self.scroll_y += 1;
                     }
@@ -351,7 +356,10 @@ impl App {
                     }
                 }
                 EditorAction::ScrollRight => {
-                    let max_scroll = self.buffer.max_line_width().saturating_sub(self.visible_cols());
+                    let max_scroll = self
+                        .buffer
+                        .max_line_width()
+                        .saturating_sub(self.visible_cols());
                     if self.scroll_x < max_scroll {
                         self.scroll_x += 1;
                     }
@@ -551,12 +559,14 @@ impl App {
 
     fn draw_scaled_char(&self, c: char, x: f32, y: f32, color: Color) {
         let scale = SCALE as f32;
-        self.font.draw_char_scaled(c, x * scale, y * scale, scale, color);
+        self.font
+            .draw_char_scaled(c, x * scale, y * scale, scale, color);
     }
 
     fn draw_scaled_char_with_shadow(&self, c: char, x: f32, y: f32, fg: Color, shadow: Color) {
         let scale = SCALE as f32;
-        self.font.draw_char_with_shadow_scaled(c, x * scale, y * scale, scale, fg, shadow);
+        self.font
+            .draw_char_with_shadow_scaled(c, x * scale, y * scale, scale, fg, shadow);
     }
 
     fn draw_editor(&self) {
@@ -615,7 +625,13 @@ impl App {
                 let cursor_y = (cursor_screen_line * TILE_HEIGHT as usize) as f32;
 
                 // Draw cursor as a block (slightly larger to cover text shadow)
-                self.draw_scaled_rect(cursor_x, cursor_y, TILE_WIDTH as f32 + 1.0, TILE_HEIGHT as f32 + 1.0, COLOR_WHITE);
+                self.draw_scaled_rect(
+                    cursor_x,
+                    cursor_y,
+                    TILE_WIDTH as f32 + 1.0,
+                    TILE_HEIGHT as f32 + 1.0,
+                    COLOR_WHITE,
+                );
 
                 // Draw character under cursor in inverted colors
                 let line_text = self.buffer.get_line(self.cursor.line());
@@ -640,11 +656,23 @@ impl App {
                 SCREEN_HEIGHT
             } as f32;
 
-            self.draw_scaled_rect(track_x, track_y, SCROLLBAR_WIDTH as f32, track_height, track_color);
+            self.draw_scaled_rect(
+                track_x,
+                track_y,
+                SCROLLBAR_WIDTH as f32,
+                track_height,
+                track_color,
+            );
 
             let handle_height = (track_height * state.vertical_size).max(TILE_HEIGHT as f32);
             let handle_y = track_y + (track_height - handle_height) * state.vertical_position;
-            self.draw_scaled_rect(track_x, handle_y, SCROLLBAR_WIDTH as f32, handle_height, handle_color);
+            self.draw_scaled_rect(
+                track_x,
+                handle_y,
+                SCROLLBAR_WIDTH as f32,
+                handle_height,
+                handle_color,
+            );
         }
 
         // Horizontal scrollbar (bottom edge)
@@ -657,18 +685,36 @@ impl App {
                 SCREEN_WIDTH
             } as f32;
 
-            self.draw_scaled_rect(track_x, track_y, track_width, SCROLLBAR_WIDTH as f32, track_color);
+            self.draw_scaled_rect(
+                track_x,
+                track_y,
+                track_width,
+                SCROLLBAR_WIDTH as f32,
+                track_color,
+            );
 
             let handle_width = (track_width * state.horizontal_size).max(TILE_WIDTH as f32);
             let handle_x = track_x + (track_width - handle_width) * state.horizontal_position;
-            self.draw_scaled_rect(handle_x, track_y, handle_width, SCROLLBAR_WIDTH as f32, handle_color);
+            self.draw_scaled_rect(
+                handle_x,
+                track_y,
+                handle_width,
+                SCROLLBAR_WIDTH as f32,
+                handle_color,
+            );
         }
 
         // Corner square when both are visible
         if state.vertical_visible && state.horizontal_visible {
             let corner_x = (SCREEN_WIDTH - SCROLLBAR_WIDTH) as f32;
             let corner_y = (SCREEN_HEIGHT - SCROLLBAR_WIDTH) as f32;
-            self.draw_scaled_rect(corner_x, corner_y, SCROLLBAR_WIDTH as f32, SCROLLBAR_WIDTH as f32, track_color);
+            self.draw_scaled_rect(
+                corner_x,
+                corner_y,
+                SCROLLBAR_WIDTH as f32,
+                SCROLLBAR_WIDTH as f32,
+                track_color,
+            );
         }
     }
 
@@ -684,44 +730,80 @@ impl App {
         let dialog_y = ((SCREEN_HEIGHT - dialog_height) / 2) as f32;
 
         // Background
-        self.draw_scaled_rect(dialog_x, dialog_y, dialog_width as f32, dialog_height as f32, COLOR_BLACK);
+        self.draw_scaled_rect(
+            dialog_x,
+            dialog_y,
+            dialog_width as f32,
+            dialog_height as f32,
+            COLOR_BLACK,
+        );
 
         // Border
         let scale = SCALE as f32;
         draw_rectangle_lines(
-            dialog_x * scale, dialog_y * scale,
-            dialog_width as f32 * scale, dialog_height as f32 * scale,
-            2.0, COLOR_WHITE,
+            dialog_x * scale,
+            dialog_y * scale,
+            dialog_width as f32 * scale,
+            dialog_height as f32 * scale,
+            2.0,
+            COLOR_WHITE,
         );
 
         // Title
         let title_x = dialog_x + TILE_WIDTH as f32;
         let title_y = dialog_y + TILE_HEIGHT as f32;
         for (i, c) in dialog.title.chars().enumerate() {
-            self.draw_scaled_char_with_shadow(c, title_x + (i as f32 * TILE_WIDTH as f32), title_y, COLOR_WHITE, COLOR_GRAY);
+            self.draw_scaled_char_with_shadow(
+                c,
+                title_x + (i as f32 * TILE_WIDTH as f32),
+                title_y,
+                COLOR_WHITE,
+                COLOR_GRAY,
+            );
         }
 
         // Input field background
         let input_x = dialog_x + TILE_WIDTH as f32;
         let input_y = dialog_y + (3 * TILE_HEIGHT) as f32;
         let input_width = (dialog_width - 2 * TILE_WIDTH) as f32;
-        self.draw_scaled_rect(input_x, input_y, input_width, TILE_HEIGHT as f32, COLOR_GRAY);
+        self.draw_scaled_rect(
+            input_x,
+            input_y,
+            input_width,
+            TILE_HEIGHT as f32,
+            COLOR_GRAY,
+        );
 
         // Input text
         let max_chars = ((input_width / TILE_WIDTH as f32) as usize).saturating_sub(1);
         let display_input: String = if dialog.input.len() > max_chars {
-            dialog.input.chars().skip(dialog.input.len() - max_chars).collect()
+            dialog
+                .input
+                .chars()
+                .skip(dialog.input.len() - max_chars)
+                .collect()
         } else {
             dialog.input.clone()
         };
 
         for (i, c) in display_input.chars().enumerate() {
-            self.draw_scaled_char(c, input_x + (i as f32 * TILE_WIDTH as f32), input_y, COLOR_WHITE);
+            self.draw_scaled_char(
+                c,
+                input_x + (i as f32 * TILE_WIDTH as f32),
+                input_y,
+                COLOR_WHITE,
+            );
         }
 
         // Cursor
         let cursor_x = input_x + (display_input.len() as f32 * TILE_WIDTH as f32);
-        self.draw_scaled_rect(cursor_x, input_y, TILE_WIDTH as f32, TILE_HEIGHT as f32, COLOR_WHITE);
+        self.draw_scaled_rect(
+            cursor_x,
+            input_y,
+            TILE_WIDTH as f32,
+            TILE_HEIGHT as f32,
+            COLOR_WHITE,
+        );
     }
 
     fn draw_confirm_dialog(&self) {
@@ -736,21 +818,36 @@ impl App {
         let dialog_y = ((SCREEN_HEIGHT - dialog_height) / 2) as f32;
 
         // Background
-        self.draw_scaled_rect(dialog_x, dialog_y, dialog_width as f32, dialog_height as f32, COLOR_BLACK);
+        self.draw_scaled_rect(
+            dialog_x,
+            dialog_y,
+            dialog_width as f32,
+            dialog_height as f32,
+            COLOR_BLACK,
+        );
 
         // Border
         let scale = SCALE as f32;
         draw_rectangle_lines(
-            dialog_x * scale, dialog_y * scale,
-            dialog_width as f32 * scale, dialog_height as f32 * scale,
-            2.0, COLOR_WHITE,
+            dialog_x * scale,
+            dialog_y * scale,
+            dialog_width as f32 * scale,
+            dialog_height as f32 * scale,
+            2.0,
+            COLOR_WHITE,
         );
 
         // Message
         let msg_x = dialog_x + TILE_WIDTH as f32;
         let msg_y = dialog_y + TILE_HEIGHT as f32;
         for (i, c) in dialog.message.chars().enumerate() {
-            self.draw_scaled_char_with_shadow(c, msg_x + (i as f32 * TILE_WIDTH as f32), msg_y, COLOR_WHITE, COLOR_GRAY);
+            self.draw_scaled_char_with_shadow(
+                c,
+                msg_x + (i as f32 * TILE_WIDTH as f32),
+                msg_y,
+                COLOR_WHITE,
+                COLOR_GRAY,
+            );
         }
 
         // Instructions
@@ -758,7 +855,13 @@ impl App {
         let hint_x = dialog_x + TILE_WIDTH as f32;
         let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
         for (i, c) in hint.chars().enumerate() {
-            self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint_y, COLOR_GRAY, COLOR_BLACK);
+            self.draw_scaled_char_with_shadow(
+                c,
+                hint_x + (i as f32 * TILE_WIDTH as f32),
+                hint_y,
+                COLOR_GRAY,
+                COLOR_BLACK,
+            );
         }
     }
 
@@ -774,14 +877,23 @@ impl App {
         let picker_y = ((SCREEN_HEIGHT - picker_height) / 2) as f32;
 
         // Background
-        self.draw_scaled_rect(picker_x, picker_y, picker_width as f32, picker_height as f32, COLOR_BLACK);
+        self.draw_scaled_rect(
+            picker_x,
+            picker_y,
+            picker_width as f32,
+            picker_height as f32,
+            COLOR_BLACK,
+        );
 
         // Border
         let scale = SCALE as f32;
         draw_rectangle_lines(
-            picker_x * scale, picker_y * scale,
-            picker_width as f32 * scale, picker_height as f32 * scale,
-            2.0, COLOR_WHITE,
+            picker_x * scale,
+            picker_y * scale,
+            picker_width as f32 * scale,
+            picker_height as f32 * scale,
+            2.0,
+            COLOR_WHITE,
         );
 
         // Title
@@ -789,7 +901,13 @@ impl App {
         let title_x = picker_x + TILE_WIDTH as f32;
         let title_y = picker_y + TILE_HEIGHT as f32;
         for (i, c) in title.chars().enumerate() {
-            self.draw_scaled_char_with_shadow(c, title_x + (i as f32 * TILE_WIDTH as f32), title_y, COLOR_WHITE, COLOR_GRAY);
+            self.draw_scaled_char_with_shadow(
+                c,
+                title_x + (i as f32 * TILE_WIDTH as f32),
+                title_y,
+                COLOR_WHITE,
+                COLOR_GRAY,
+            );
         }
 
         if picker.files.is_empty() {
@@ -797,7 +915,13 @@ impl App {
             let msg_x = picker_x + TILE_WIDTH as f32;
             let msg_y = picker_y + (3 * TILE_HEIGHT) as f32;
             for (i, c) in msg.chars().enumerate() {
-                self.draw_scaled_char_with_shadow(c, msg_x + (i as f32 * TILE_WIDTH as f32), msg_y, COLOR_GRAY, COLOR_BLACK);
+                self.draw_scaled_char_with_shadow(
+                    c,
+                    msg_x + (i as f32 * TILE_WIDTH as f32),
+                    msg_y,
+                    COLOR_GRAY,
+                    COLOR_BLACK,
+                );
             }
             return;
         }
@@ -821,13 +945,30 @@ impl App {
             };
 
             if is_selected {
-                self.draw_scaled_rect(list_x, y, (display_name.len() * TILE_WIDTH as usize) as f32, TILE_HEIGHT as f32, COLOR_WHITE);
+                self.draw_scaled_rect(
+                    list_x,
+                    y,
+                    (display_name.len() * TILE_WIDTH as usize) as f32,
+                    TILE_HEIGHT as f32,
+                    COLOR_WHITE,
+                );
                 for (j, c) in display_name.chars().enumerate() {
-                    self.draw_scaled_char(c, list_x + (j as f32 * TILE_WIDTH as f32), y, COLOR_BLACK);
+                    self.draw_scaled_char(
+                        c,
+                        list_x + (j as f32 * TILE_WIDTH as f32),
+                        y,
+                        COLOR_BLACK,
+                    );
                 }
             } else {
                 for (j, c) in display_name.chars().enumerate() {
-                    self.draw_scaled_char_with_shadow(c, list_x + (j as f32 * TILE_WIDTH as f32), y, COLOR_WHITE, COLOR_BLACK);
+                    self.draw_scaled_char_with_shadow(
+                        c,
+                        list_x + (j as f32 * TILE_WIDTH as f32),
+                        y,
+                        COLOR_WHITE,
+                        COLOR_BLACK,
+                    );
                 }
             }
         }
@@ -840,7 +981,13 @@ impl App {
             // Show delete confirmation prompt
             let prompt = "Delete file? (y/n)";
             for (i, c) in prompt.chars().enumerate() {
-                self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint_y, COLOR_WHITE, COLOR_BLACK);
+                self.draw_scaled_char_with_shadow(
+                    c,
+                    hint_x + (i as f32 * TILE_WIDTH as f32),
+                    hint_y,
+                    COLOR_WHITE,
+                    COLOR_BLACK,
+                );
             }
         } else {
             // Show normal instructions on two lines
@@ -849,10 +996,22 @@ impl App {
             let hint1_y = hint_y - TILE_HEIGHT as f32;
 
             for (i, c) in hint1.chars().enumerate() {
-                self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint1_y, COLOR_GRAY, COLOR_BLACK);
+                self.draw_scaled_char_with_shadow(
+                    c,
+                    hint_x + (i as f32 * TILE_WIDTH as f32),
+                    hint1_y,
+                    COLOR_GRAY,
+                    COLOR_BLACK,
+                );
             }
             for (i, c) in hint2.chars().enumerate() {
-                self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint_y, COLOR_GRAY, COLOR_BLACK);
+                self.draw_scaled_char_with_shadow(
+                    c,
+                    hint_x + (i as f32 * TILE_WIDTH as f32),
+                    hint_y,
+                    COLOR_GRAY,
+                    COLOR_BLACK,
+                );
             }
         }
     }

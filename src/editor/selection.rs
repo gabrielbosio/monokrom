@@ -67,8 +67,9 @@ impl Selection {
     pub fn get_ordered_positions(&self) -> Option<(CursorPosition, CursorPosition)> {
         let anchor = self.anchor?;
 
-        if anchor.line < self.cursor.line ||
-           (anchor.line == self.cursor.line && anchor.col <= self.cursor.col) {
+        if anchor.line < self.cursor.line
+            || (anchor.line == self.cursor.line && anchor.col <= self.cursor.col)
+        {
             Some((anchor, self.cursor))
         } else {
             Some((self.cursor, anchor))

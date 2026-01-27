@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use crate::input::keybindings::*;
 
 /// Key repeat timing constants
-const KEY_REPEAT_DELAY: f32 = 0.4;  // Initial delay before repeat starts
-const KEY_REPEAT_RATE: f32 = 0.03;  // Time between repeats
+const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
+const KEY_REPEAT_RATE: f32 = 0.03; // Time between repeats
 
 /// State for key repeat tracking
 struct KeyRepeatState {
@@ -27,20 +27,20 @@ fn drain_char_queue() {
 
 /// Check if any navigation or control key is being held down
 fn is_navigation_key_held() -> bool {
-    is_key_down(KeyCode::Left) ||
-    is_key_down(KeyCode::Right) ||
-    is_key_down(KeyCode::Up) ||
-    is_key_down(KeyCode::Down) ||
-    is_key_down(KeyCode::Home) ||
-    is_key_down(KeyCode::End) ||
-    is_key_down(KeyCode::PageUp) ||
-    is_key_down(KeyCode::PageDown) ||
-    is_key_down(KeyCode::Backspace) ||
-    is_key_down(KeyCode::Delete) ||
-    is_key_down(KeyCode::Escape) ||
-    is_key_down(KeyCode::Tab) ||
-    is_key_down(KeyCode::Enter) ||
-    is_key_down(KeyCode::KpEnter)
+    is_key_down(KeyCode::Left)
+        || is_key_down(KeyCode::Right)
+        || is_key_down(KeyCode::Up)
+        || is_key_down(KeyCode::Down)
+        || is_key_down(KeyCode::Home)
+        || is_key_down(KeyCode::End)
+        || is_key_down(KeyCode::PageUp)
+        || is_key_down(KeyCode::PageDown)
+        || is_key_down(KeyCode::Backspace)
+        || is_key_down(KeyCode::Delete)
+        || is_key_down(KeyCode::Escape)
+        || is_key_down(KeyCode::Tab)
+        || is_key_down(KeyCode::Enter)
+        || is_key_down(KeyCode::KpEnter)
 }
 
 /// Check if a key should fire (either just pressed or repeating)
