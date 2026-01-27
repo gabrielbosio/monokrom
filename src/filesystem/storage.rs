@@ -108,3 +108,46 @@ pub fn is_valid_filename(filename: &str) -> bool {
 
     true
 }
+
+/// Delete a file from the working directory
+pub fn delete_file(filename: &str) -> io::Result<()> {
+    let path = get_working_directory().join(filename);
+    fs::remove_file(path)
+}
+
+/// Duplicate a file in the working directory
+/// Returns the name of the new file
+/// Naming scheme: original -> original0, original0 -> original1, etc.
+pub fn duplicate_file(filename: &str) -> io::Result<String> {
+    let dir = get_working_directory();
+    let source_path = dir.join(filename);
+
+    // Read source file content
+    let content = fs::read_to_string(&source_path)?;
+
+    // Find the next available name
+    let new_name = find_next_duplicate_name(filename);
+    let dest_path = dir.join(&new_name);
+
+    // Write to new file
+    fs::write(dest_path, content)?;
+
+    Ok(new_name)
+}
+
+/// Find the next available name for a duplicate file
+/// my_file -> my_file0, my_file0 -> my_file1, etc.
+fn find_next_duplicate_name(filename: &str) -> String {
+    let dir = get_working_directory();
+
+    // Start with index 0
+    let mut index = 0;
+    loop {
+        let candidate = format!("{}{}", filename, index);
+        let candidate_path = dir.join(&candidate);
+        if !candidate_path.exists() {
+            return candidate;
+        }
+        index += 1;
+    }
+}

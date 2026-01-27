@@ -5,7 +5,7 @@ use crate::editor::{operations, Cursor, CursorPosition, History, Selection, Text
 use crate::filesystem;
 use crate::input::{get_editor_action, EditorAction};
 use crate::render::{BitmapFont, ScrollbarState};
-use crate::ui::{ConfirmDialog, DialogResult, FilePicker, InputDialog};
+use crate::ui::{ConfirmDialog, DialogResult, FilePicker, FilePickerMode, FilePickerResult, InputDialog};
 
 /// Application state modes
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -411,12 +411,41 @@ impl App {
     fn update_open_picker(&mut self) {
         if let Some(result) = self.file_picker.update() {
             match result {
-                DialogResult::Confirm(filename) => {
+                FilePickerResult::Open(filename) => {
                     self.open_file(&filename);
+                    self.mode = AppMode::Editing;
                 }
-                DialogResult::Cancel => {}
+                FilePickerResult::Duplicate(filename) => {
+                    // Duplicate the file and refresh the picker
+                    if let Ok(new_name) = filesystem::duplicate_file(&filename) {
+                        // Refresh file list
+                        if let Ok(files) = filesystem::list_files() {
+                            // Find the index of the new file
+                            let new_index = files.iter().position(|f| f == &new_name).unwrap_or(0);
+                            self.file_picker.show(files);
+                            self.file_picker.selected_index = new_index;
+                        }
+                    }
+                }
+                FilePickerResult::Delete(filename) => {
+                    // Delete the file and refresh the picker
+                    if filesystem::delete_file(&filename).is_ok() {
+                        // Refresh file list
+                        if let Ok(files) = filesystem::list_files() {
+                            let old_index = self.file_picker.selected_index;
+                            self.file_picker.show(files);
+                            // Adjust selected index if needed
+                            if !self.file_picker.files.is_empty() {
+                                self.file_picker.selected_index =
+                                    old_index.min(self.file_picker.files.len() - 1);
+                            }
+                        }
+                    }
+                }
+                FilePickerResult::Cancel => {
+                    self.mode = AppMode::Editing;
+                }
             }
-            self.mode = AppMode::Editing;
         }
     }
 
@@ -803,12 +832,28 @@ impl App {
             }
         }
 
-        // Instructions
-        let hint = "Enter:Select Esc:Cancel";
+        // Instructions or delete confirmation
         let hint_x = picker_x + TILE_WIDTH as f32;
         let hint_y = picker_y + picker_height as f32 - (1.5 * TILE_HEIGHT as f32);
-        for (i, c) in hint.chars().enumerate() {
-            self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint_y, COLOR_GRAY, COLOR_BLACK);
+
+        if picker.mode == FilePickerMode::ConfirmDelete {
+            // Show delete confirmation prompt
+            let prompt = "Delete file? (y/n)";
+            for (i, c) in prompt.chars().enumerate() {
+                self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint_y, COLOR_WHITE, COLOR_BLACK);
+            }
+        } else {
+            // Show normal instructions on two lines
+            let hint1 = "Enter:Open ^D:Copy ^Del:Del";
+            let hint2 = "Esc:Cancel";
+            let hint1_y = hint_y - TILE_HEIGHT as f32;
+
+            for (i, c) in hint1.chars().enumerate() {
+                self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint1_y, COLOR_GRAY, COLOR_BLACK);
+            }
+            for (i, c) in hint2.chars().enumerate() {
+                self.draw_scaled_char_with_shadow(c, hint_x + (i as f32 * TILE_WIDTH as f32), hint_y, COLOR_GRAY, COLOR_BLACK);
+            }
         }
     }
 }

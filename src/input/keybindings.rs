@@ -87,6 +87,10 @@ pub enum EditorAction {
     Open,
     New,
 
+    // File picker operations
+    DuplicateFile,
+    DeleteFile,
+
     // Dialog navigation
     DialogConfirm,
     DialogCancel,

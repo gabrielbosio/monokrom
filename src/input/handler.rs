@@ -298,6 +298,18 @@ pub fn get_dialog_action() -> Option<EditorAction> {
 
 /// Process keyboard input for file picker
 pub fn get_file_picker_action() -> Option<EditorAction> {
+    let modifier = is_modifier_pressed();
+
+    // File operations with Cmd/Ctrl
+    if modifier {
+        if is_key_pressed(KeyCode::D) {
+            return Some(EditorAction::DuplicateFile);
+        }
+        if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
+            return Some(EditorAction::DeleteFile);
+        }
+    }
+
     if is_key_pressed(KeyCode::Up) {
         return Some(EditorAction::MoveUp);
     }
