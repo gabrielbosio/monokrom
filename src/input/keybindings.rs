@@ -91,6 +91,11 @@ pub enum EditorAction {
     DuplicateFile,
     DeleteFile,
 
+    // Find and replace
+    Find,
+    Replace,
+    FindNext,
+
     // Dialog navigation
     DialogConfirm,
     DialogCancel,

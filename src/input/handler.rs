@@ -138,6 +138,14 @@ pub fn get_editor_action() -> Option<EditorAction> {
             drain_char_queue();
             return Some(EditorAction::SelectAll);
         }
+        if is_key_pressed(KeyCode::F) {
+            drain_char_queue();
+            return Some(EditorAction::Find);
+        }
+        if is_key_pressed(KeyCode::R) {
+            drain_char_queue();
+            return Some(EditorAction::Replace);
+        }
 
         // Scrolling with Cmd/Ctrl + Arrow
         if is_key_pressed(KeyCode::Up) {

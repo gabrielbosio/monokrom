@@ -20,6 +20,10 @@ pub enum AppMode {
     OpenPicker,
     /// Close confirmation dialog
     CloseConfirm,
+    /// Find dialog open
+    FindDialog,
+    /// Replace dialog open
+    ReplaceDialog,
 }
 
 pub struct App {
@@ -43,7 +47,14 @@ pub struct App {
     pub input_dialog: InputDialog,
     pub confirm_dialog: ConfirmDialog,
     pub file_picker: FilePicker,
-    pub pending_new_file: bool, // Create new file after save dialog completes
+    pub pending_new_file: bool,  // Create new file after save dialog completes
+    pub pending_open_file: bool, // Open file picker after save dialog completes
+
+    // Search state
+    pub search_query: String,
+    pub replace_text: String,
+    pub current_match_pos: Option<usize>, // Character index of current match
+    pub is_replacing: bool,               // True if in replace mode (vs find mode)
 
     // Clipboard
     pub clipboard: Option<arboard::Clipboard>,
@@ -79,6 +90,12 @@ impl App {
             confirm_dialog: ConfirmDialog::new(),
             file_picker: FilePicker::new(),
             pending_new_file: false,
+            pending_open_file: false,
+
+            search_query: String::new(),
+            replace_text: String::new(),
+            current_match_pos: None,
+            is_replacing: false,
 
             clipboard,
 
@@ -87,6 +104,10 @@ impl App {
 
             font,
         }
+    }
+
+    fn is_in_search_mode(&self) -> bool {
+        !self.search_query.is_empty()
     }
 
     pub fn update(&mut self) {
@@ -102,6 +123,8 @@ impl App {
             AppMode::SaveDialog => self.update_save_dialog(),
             AppMode::OpenPicker => self.update_open_picker(),
             AppMode::CloseConfirm => self.update_close_confirm(),
+            AppMode::FindDialog => self.update_find_dialog(),
+            AppMode::ReplaceDialog => self.update_replace_dialog(),
         }
 
         // Update scrollbar state
@@ -142,6 +165,9 @@ impl App {
             match action {
                 // Text input
                 EditorAction::InsertChar(c) => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::insert_char(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -153,6 +179,16 @@ impl App {
                     self.ensure_cursor_visible();
                 }
                 EditorAction::InsertNewline => {
+                    // If in replace mode with an active match, replace and find next
+                    if self.is_replacing && self.current_match_pos.is_some() {
+                        self.replace_and_find_next();
+                        return;
+                    }
+                    // If in find mode (not replace) with active search, find next
+                    if self.is_in_search_mode() {
+                        self.find_next();
+                        return;
+                    }
                     operations::insert_char(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -250,6 +286,9 @@ impl App {
 
                 // Editing
                 EditorAction::Backspace => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::delete_before(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -260,6 +299,9 @@ impl App {
                     self.ensure_cursor_visible();
                 }
                 EditorAction::Delete => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::delete_at(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -269,6 +311,9 @@ impl App {
                     self.is_modified = true;
                 }
                 EditorAction::SwapLineUp => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::swap_line_up(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -279,6 +324,9 @@ impl App {
                     self.ensure_cursor_visible();
                 }
                 EditorAction::SwapLineDown => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::swap_line_down(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -291,6 +339,9 @@ impl App {
 
                 // Clipboard
                 EditorAction::Cut => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::cut_selection(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -304,6 +355,9 @@ impl App {
                     operations::copy_selection(&self.buffer, &self.selection, &mut self.clipboard);
                 }
                 EditorAction::Paste => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::paste(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -317,6 +371,9 @@ impl App {
 
                 // History
                 EditorAction::Undo => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::undo(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -326,6 +383,9 @@ impl App {
                     self.ensure_cursor_visible();
                 }
                 EditorAction::Redo => {
+                    if self.is_in_search_mode() {
+                        return;
+                    }
                     operations::redo(
                         &mut self.buffer,
                         &mut self.cursor,
@@ -375,9 +435,15 @@ impl App {
                     }
                 }
                 EditorAction::Open => {
-                    self.mode = AppMode::OpenPicker;
-                    let files = filesystem::list_files().unwrap_or_default();
-                    self.file_picker.show(files);
+                    if self.is_modified {
+                        self.pending_open_file = true;
+                        self.mode = AppMode::CloseConfirm;
+                        self.confirm_dialog.show("Save changes?");
+                    } else {
+                        self.mode = AppMode::OpenPicker;
+                        let files = filesystem::list_files().unwrap_or_default();
+                        self.file_picker.show(files);
+                    }
                 }
                 EditorAction::New => {
                     if self.is_modified {
@@ -385,6 +451,31 @@ impl App {
                         self.confirm_dialog.show("Save changes?");
                     } else {
                         self.create_new_file();
+                    }
+                }
+
+                EditorAction::Find => {
+                    self.is_replacing = false;
+                    self.mode = AppMode::FindDialog;
+                    self.input_dialog.show("Find:");
+                }
+                EditorAction::Replace => {
+                    self.is_replacing = true;
+                    self.mode = AppMode::FindDialog;
+                    self.input_dialog.show("Find:");
+                }
+                EditorAction::FindNext => {
+                    self.find_next();
+                }
+
+                EditorAction::DialogCancel => {
+                    // Escape pressed - clear search mode if active
+                    if !self.search_query.is_empty() {
+                        self.search_query.clear();
+                        self.replace_text.clear();
+                        self.current_match_pos = None;
+                        self.is_replacing = false;
+                        self.selection.clear();
                     }
                 }
 
@@ -400,16 +491,17 @@ impl App {
                     if filesystem::is_valid_filename(&filename) {
                         self.current_filename = Some(filename);
                         self.save_current_file();
-                        // Check if we need to create a new file after saving
-                        if self.pending_new_file {
-                            self.pending_new_file = false;
-                            self.create_new_file();
+                        // Check if we have a pending action after saving
+                        if self.pending_new_file || self.pending_open_file {
+                            self.after_close_confirm_action();
+                            return;
                         }
                     }
                     // If invalid, just close dialog without saving
                 }
-                DialogResult::Cancel => {
+                DialogResult::Reject | DialogResult::Cancel => {
                     self.pending_new_file = false;
+                    self.pending_open_file = false;
                 }
             }
             self.mode = AppMode::Editing;
@@ -461,24 +553,176 @@ impl App {
         if let Some(result) = self.confirm_dialog.update() {
             match result {
                 DialogResult::Confirm(_) => {
-                    // User wants to save
+                    // User wants to save ('y')
                     if self.current_filename.is_some() {
                         self.save_current_file();
-                        self.create_new_file();
+                        self.after_close_confirm_action();
+                        return;
                     } else {
-                        self.pending_new_file = true;
+                        // Need to ask for filename first
                         self.mode = AppMode::SaveDialog;
                         self.input_dialog.show("Save as:");
                         return; // Don't change mode yet, save dialog will handle it
                     }
                 }
+                DialogResult::Reject => {
+                    // User doesn't want to save ('n')
+                    self.after_close_confirm_action();
+                    return;
+                }
                 DialogResult::Cancel => {
-                    // User doesn't want to save
-                    self.create_new_file();
+                    // User pressed Escape - cancel the prompt, go back to editing
+                    self.pending_new_file = false;
+                    self.pending_open_file = false;
                 }
             }
             self.mode = AppMode::Editing;
         }
+    }
+
+    fn after_close_confirm_action(&mut self) {
+        if self.pending_open_file {
+            self.pending_open_file = false;
+            self.pending_new_file = false;
+            self.mode = AppMode::OpenPicker;
+            let files = filesystem::list_files().unwrap_or_default();
+            self.file_picker.show(files);
+        } else {
+            self.pending_new_file = false;
+            self.create_new_file();
+        }
+    }
+
+    fn update_find_dialog(&mut self) {
+        if let Some(result) = self.input_dialog.update() {
+            match result {
+                DialogResult::Confirm(query) => {
+                    self.search_query = query;
+                    if self.is_replacing {
+                        // Move to replace dialog to get replacement text
+                        self.mode = AppMode::ReplaceDialog;
+                        self.input_dialog.show("Replace with:");
+                    } else {
+                        // Just find - search for first match
+                        self.mode = AppMode::Editing;
+                        self.find_next();
+                    }
+                }
+                DialogResult::Reject | DialogResult::Cancel => {
+                    self.mode = AppMode::Editing;
+                }
+            }
+        }
+    }
+
+    fn update_replace_dialog(&mut self) {
+        if let Some(result) = self.input_dialog.update() {
+            match result {
+                DialogResult::Confirm(replacement) => {
+                    self.replace_text = replacement;
+                    self.mode = AppMode::Editing;
+                    // Find first match
+                    self.find_next();
+                }
+                DialogResult::Reject | DialogResult::Cancel => {
+                    self.mode = AppMode::Editing;
+                }
+            }
+        }
+    }
+
+    fn find_next(&mut self) {
+        if self.search_query.is_empty() {
+            return;
+        }
+
+        let text = self.buffer.to_string();
+        let query = &self.search_query;
+
+        // Start searching from current cursor position
+        let cursor_idx = self.cursor.char_index(&self.buffer);
+        let search_start = if self.current_match_pos == Some(cursor_idx) {
+            // If we're at a match, search from after it
+            cursor_idx + query.len()
+        } else {
+            cursor_idx
+        };
+
+        // Search from cursor to end
+        if let Some(rel_pos) = text[search_start..].find(query) {
+            let match_pos = search_start + rel_pos;
+            self.select_match(match_pos, query.len());
+            return;
+        }
+
+        // Wrap around: search from beginning to cursor
+        if let Some(match_pos) = text[..cursor_idx].find(query) {
+            self.select_match(match_pos, query.len());
+            return;
+        }
+
+        // No match found
+        self.current_match_pos = None;
+    }
+
+    fn select_match(&mut self, char_idx: usize, len: usize) {
+        self.current_match_pos = Some(char_idx);
+
+        // Move cursor to start of match
+        let (line, col) = self.buffer.char_to_line_col(char_idx);
+        self.cursor.set_position(line, col);
+
+        // Select the match
+        self.selection.start(self.cursor.position);
+        let end_idx = char_idx + len;
+        let (end_line, end_col) = self.buffer.char_to_line_col(end_idx);
+        self.selection.cursor = CursorPosition {
+            line: end_line,
+            col: end_col,
+        };
+
+        self.ensure_cursor_visible();
+
+        // If in replace mode and Enter is pressed, replace and find next
+        if self.is_replacing {
+            self.try_replace_current();
+        }
+    }
+
+    fn try_replace_current(&mut self) {
+        // This is called after finding a match in replace mode
+        // The actual replacement happens when Enter is pressed again
+        // For now, just highlight the match - replacement happens on next Enter
+    }
+
+    fn replace_and_find_next(&mut self) {
+        if self.current_match_pos.is_none() || self.search_query.is_empty() {
+            return;
+        }
+
+        let match_pos = self.current_match_pos.unwrap();
+        let query_len = self.search_query.len();
+
+        // Save for undo
+        self.history.push(&self.buffer, self.cursor.position);
+
+        // Delete the matched text
+        self.buffer.delete_range(match_pos, match_pos + query_len);
+
+        // Insert replacement
+        self.buffer.insert(match_pos, &self.replace_text);
+
+        // Update cursor position
+        let new_pos = match_pos + self.replace_text.len();
+        let (line, col) = self.buffer.char_to_line_col(new_pos);
+        self.cursor.set_position(line, col);
+        self.selection.clear();
+
+        self.is_modified = true;
+        self.current_match_pos = None;
+
+        // Find next match
+        self.find_next();
     }
 
     fn ensure_cursor_visible(&mut self) {
@@ -545,10 +789,47 @@ impl App {
 
         // Draw dialogs (scaled)
         match self.mode {
-            AppMode::SaveDialog => self.draw_input_dialog(),
+            AppMode::SaveDialog | AppMode::FindDialog | AppMode::ReplaceDialog => {
+                self.draw_input_dialog()
+            }
             AppMode::OpenPicker => self.draw_file_picker(),
             AppMode::CloseConfirm => self.draw_confirm_dialog(),
-            _ => {}
+            AppMode::Editing => {
+                // Draw search hint if we have an active search
+                if !self.search_query.is_empty() {
+                    self.draw_search_hint();
+                }
+            }
+        }
+    }
+
+    fn draw_search_hint(&self) {
+        // Draw hint at bottom of screen for active search
+        let hint = if self.is_replacing {
+            "Enter:Replace+Next  Esc:Done"
+        } else {
+            "Enter:Find Next  Esc:Done"
+        };
+        let hint_x = TILE_WIDTH as f32;
+        let hint_y = (SCREEN_HEIGHT - TILE_HEIGHT * 2) as f32;
+
+        // Draw background
+        self.draw_scaled_rect(
+            0.0,
+            hint_y - 2.0,
+            SCREEN_WIDTH as f32,
+            (TILE_HEIGHT + 4) as f32,
+            COLOR_BLACK,
+        );
+
+        for (i, c) in hint.chars().enumerate() {
+            self.draw_scaled_char_with_shadow(
+                c,
+                hint_x + (i as f32 * TILE_WIDTH as f32),
+                hint_y,
+                COLOR_WHITE,
+                COLOR_GRAY,
+            );
         }
     }
 

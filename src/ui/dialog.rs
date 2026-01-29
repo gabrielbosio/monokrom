@@ -198,12 +198,13 @@ impl ConfirmDialog {
                 }
                 'n' => {
                     self.hide();
-                    return Some(DialogResult::Cancel);
+                    return Some(DialogResult::Reject);
                 }
                 _ => {}
             }
         }
 
+        // Escape cancels the prompt (goes back to editing)
         if is_key_pressed(KeyCode::Escape) {
             self.hide();
             return Some(DialogResult::Cancel);
@@ -274,5 +275,6 @@ impl ConfirmDialog {
 #[derive(Debug, Clone)]
 pub enum DialogResult {
     Confirm(String),
+    Reject,
     Cancel,
 }
