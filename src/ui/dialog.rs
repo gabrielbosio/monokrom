@@ -2,7 +2,7 @@ use macroquad::prelude::*;
 
 use crate::config::*;
 use crate::input::{get_dialog_action, EditorAction};
-use crate::render::BitmapFont;
+use crate::render::{BitmapFont, DrawHelpers};
 
 /// Dialog for prompting user input (filename)
 pub struct InputDialog {
@@ -153,6 +153,70 @@ impl InputDialog {
             COLOR_WHITE,
         );
     }
+
+    pub fn draw_scaled(&self, helpers: &DrawHelpers) {
+        if !self.visible {
+            return;
+        }
+
+        let dialog_width = (28 * TILE_WIDTH) as f32;
+        let dialog_height = (5 * TILE_HEIGHT) as f32;
+        let dialog_x = (SCREEN_WIDTH as f32 - dialog_width) / 2.0;
+        let dialog_y = (SCREEN_HEIGHT as f32 - dialog_height) / 2.0;
+
+        // Background
+        helpers.draw_rect(dialog_x, dialog_y, dialog_width, dialog_height, COLOR_BLACK);
+
+        // Border
+        helpers.draw_rect_lines(
+            dialog_x,
+            dialog_y,
+            dialog_width,
+            dialog_height,
+            2.0,
+            COLOR_WHITE,
+        );
+
+        // Title
+        let title_x = dialog_x + TILE_WIDTH as f32;
+        let title_y = dialog_y + TILE_HEIGHT as f32;
+        helpers.draw_text_with_shadow(&self.title, title_x, title_y, COLOR_WHITE, COLOR_GRAY);
+
+        // Input field background
+        let input_x = dialog_x + TILE_WIDTH as f32;
+        let input_y = dialog_y + (3 * TILE_HEIGHT) as f32;
+        let input_width = dialog_width - (2 * TILE_WIDTH) as f32;
+        helpers.draw_rect(
+            input_x,
+            input_y,
+            input_width,
+            TILE_HEIGHT as f32,
+            COLOR_GRAY,
+        );
+
+        // Input text (truncate if too long)
+        let max_chars = ((input_width / TILE_WIDTH as f32) as usize).saturating_sub(1);
+        let display_input: String = if self.input.len() > max_chars {
+            self.input
+                .chars()
+                .skip(self.input.len() - max_chars)
+                .collect()
+        } else {
+            self.input.clone()
+        };
+
+        helpers.draw_text(&display_input, input_x, input_y, COLOR_WHITE);
+
+        // Cursor
+        let cursor_x = input_x + (display_input.len() as f32 * TILE_WIDTH as f32);
+        helpers.draw_rect(
+            cursor_x,
+            input_y,
+            TILE_WIDTH as f32,
+            TILE_HEIGHT as f32,
+            COLOR_WHITE,
+        );
+    }
 }
 
 /// Confirmation dialog (yes/no)
@@ -272,6 +336,40 @@ impl ConfirmDialog {
             );
         }
     }
+
+    pub fn draw_scaled(&self, helpers: &DrawHelpers) {
+        if !self.visible {
+            return;
+        }
+
+        let dialog_width = (28 * TILE_WIDTH) as f32;
+        let dialog_height = (4 * TILE_HEIGHT) as f32;
+        let dialog_x = (SCREEN_WIDTH as f32 - dialog_width) / 2.0;
+        let dialog_y = (SCREEN_HEIGHT as f32 - dialog_height) / 2.0;
+
+        // Background
+        helpers.draw_rect(dialog_x, dialog_y, dialog_width, dialog_height, COLOR_BLACK);
+
+        // Border
+        helpers.draw_rect_lines(
+            dialog_x,
+            dialog_y,
+            dialog_width,
+            dialog_height,
+            2.0,
+            COLOR_WHITE,
+        );
+
+        // Message
+        let msg_x = dialog_x + TILE_WIDTH as f32;
+        let msg_y = dialog_y + TILE_HEIGHT as f32;
+        helpers.draw_text_with_shadow(&self.message, msg_x, msg_y, COLOR_WHITE, COLOR_GRAY);
+
+        // Instructions
+        let hint_x = dialog_x + TILE_WIDTH as f32;
+        let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
+        helpers.draw_text_with_shadow("(y/n)", hint_x, hint_y, COLOR_GRAY, COLOR_BLACK);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -386,5 +484,39 @@ impl MessageDialog {
                 COLOR_BLACK,
             );
         }
+    }
+
+    pub fn draw_scaled(&self, helpers: &DrawHelpers) {
+        if !self.visible {
+            return;
+        }
+
+        let dialog_width = (28 * TILE_WIDTH) as f32;
+        let dialog_height = (4 * TILE_HEIGHT) as f32;
+        let dialog_x = (SCREEN_WIDTH as f32 - dialog_width) / 2.0;
+        let dialog_y = (SCREEN_HEIGHT as f32 - dialog_height) / 2.0;
+
+        // Background
+        helpers.draw_rect(dialog_x, dialog_y, dialog_width, dialog_height, COLOR_BLACK);
+
+        // Border
+        helpers.draw_rect_lines(
+            dialog_x,
+            dialog_y,
+            dialog_width,
+            dialog_height,
+            2.0,
+            COLOR_WHITE,
+        );
+
+        // Message
+        let msg_x = dialog_x + TILE_WIDTH as f32;
+        let msg_y = dialog_y + TILE_HEIGHT as f32;
+        helpers.draw_text_with_shadow(&self.message, msg_x, msg_y, COLOR_WHITE, COLOR_GRAY);
+
+        // Instructions
+        let hint_x = dialog_x + TILE_WIDTH as f32;
+        let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
+        helpers.draw_text_with_shadow("(press any key)", hint_x, hint_y, COLOR_GRAY, COLOR_BLACK);
     }
 }
