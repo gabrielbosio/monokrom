@@ -7,6 +7,7 @@ use crate::input::{get_editor_action, EditorAction};
 use crate::render::{BitmapFont, ScrollbarState};
 use crate::ui::{
     ConfirmDialog, DialogResult, FilePicker, FilePickerMode, FilePickerResult, InputDialog,
+    MessageDialog,
 };
 
 /// Application state modes
@@ -24,6 +25,8 @@ pub enum AppMode {
     FindDialog,
     /// Replace dialog open
     ReplaceDialog,
+    /// Message dialog (error/info)
+    Message,
 }
 
 pub struct App {
@@ -46,8 +49,9 @@ pub struct App {
     pub mode: AppMode,
     pub input_dialog: InputDialog,
     pub confirm_dialog: ConfirmDialog,
+    pub message_dialog: MessageDialog,
     pub file_picker: FilePicker,
-    pub pending_new_file: bool,  // Create new file after save dialog completes
+    pub pending_new_file: bool, // Create new file after save dialog completes
     pub pending_open_file: bool, // Open file picker after save dialog completes
 
     // Search state
@@ -88,6 +92,7 @@ impl App {
             mode: AppMode::Editing,
             input_dialog: InputDialog::new(),
             confirm_dialog: ConfirmDialog::new(),
+            message_dialog: MessageDialog::new(),
             file_picker: FilePicker::new(),
             pending_new_file: false,
             pending_open_file: false,
@@ -125,6 +130,7 @@ impl App {
             AppMode::CloseConfirm => self.update_close_confirm(),
             AppMode::FindDialog => self.update_find_dialog(),
             AppMode::ReplaceDialog => self.update_replace_dialog(),
+            AppMode::Message => self.update_message_dialog(),
         }
 
         // Update scrollbar state
@@ -342,17 +348,23 @@ impl App {
                     if self.is_in_search_mode() {
                         return;
                     }
-                    operations::cut_selection(
+                    let (text, _clipboard_ok) = operations::cut_selection(
                         &mut self.buffer,
                         &mut self.cursor,
                         &mut self.selection,
                         &mut self.history,
                         &mut self.clipboard,
                     );
-                    self.is_modified = true;
+                    if text.is_some() {
+                        self.is_modified = true;
+                    }
                 }
                 EditorAction::Copy => {
-                    operations::copy_selection(&self.buffer, &self.selection, &mut self.clipboard);
+                    let (_text, _clipboard_ok) = operations::copy_selection(
+                        &self.buffer,
+                        &self.selection,
+                        &mut self.clipboard,
+                    );
                 }
                 EditorAction::Paste => {
                     if self.is_in_search_mode() {
@@ -488,16 +500,25 @@ impl App {
         if let Some(result) = self.input_dialog.update() {
             match result {
                 DialogResult::Confirm(filename) => {
-                    if filesystem::is_valid_filename(&filename) {
-                        self.current_filename = Some(filename);
-                        self.save_current_file();
+                    if filename.is_empty() {
+                        self.show_message("Error: Filename cannot be empty");
+                        return;
+                    }
+                    if !filesystem::is_valid_filename(&filename) {
+                        self.show_message("Error: Invalid filename");
+                        return;
+                    }
+                    self.current_filename = Some(filename);
+                    if self.save_current_file() {
                         // Check if we have a pending action after saving
                         if self.pending_new_file || self.pending_open_file {
                             self.after_close_confirm_action();
                             return;
                         }
+                    } else {
+                        // Save failed, error message already shown
+                        return;
                     }
-                    // If invalid, just close dialog without saving
                 }
                 DialogResult::Reject | DialogResult::Cancel => {
                     self.pending_new_file = false;
@@ -631,6 +652,17 @@ impl App {
         }
     }
 
+    fn update_message_dialog(&mut self) {
+        if self.message_dialog.update() {
+            self.mode = AppMode::Editing;
+        }
+    }
+
+    fn show_message(&mut self, message: &str) {
+        self.message_dialog.show(message);
+        self.mode = AppMode::Message;
+    }
+
     fn find_next(&mut self) {
         if self.search_query.is_empty() {
             return;
@@ -696,11 +728,13 @@ impl App {
     }
 
     fn replace_and_find_next(&mut self) {
-        if self.current_match_pos.is_none() || self.search_query.is_empty() {
+        let Some(match_pos) = self.current_match_pos else {
+            return;
+        };
+        if self.search_query.is_empty() {
             return;
         }
 
-        let match_pos = self.current_match_pos.unwrap();
         let query_len = self.search_query.len();
 
         // Save for undo
@@ -744,25 +778,39 @@ impl App {
         }
     }
 
-    fn save_current_file(&mut self) {
+    fn save_current_file(&mut self) -> bool {
         if let Some(ref filename) = self.current_filename {
             let content = self.buffer.to_string();
-            if filesystem::write_file(filename, &content).is_ok() {
-                self.is_modified = false;
+            match filesystem::write_file(filename, &content) {
+                Ok(()) => {
+                    self.is_modified = false;
+                    true
+                }
+                Err(_) => {
+                    self.show_message("Error: Could not save file");
+                    false
+                }
             }
+        } else {
+            false
         }
     }
 
     fn open_file(&mut self, filename: &str) {
-        if let Ok(content) = filesystem::read_file(filename) {
-            self.buffer = TextBuffer::from_str(&content);
-            self.cursor = Cursor::new();
-            self.selection = Selection::new();
-            self.history.clear();
-            self.scroll_x = 0;
-            self.scroll_y = 0;
-            self.current_filename = Some(filename.to_string());
-            self.is_modified = false;
+        match filesystem::read_file(filename) {
+            Ok(content) => {
+                self.buffer = TextBuffer::from_str(&content);
+                self.cursor = Cursor::new();
+                self.selection = Selection::new();
+                self.history.clear();
+                self.scroll_x = 0;
+                self.scroll_y = 0;
+                self.current_filename = Some(filename.to_string());
+                self.is_modified = false;
+            }
+            Err(_) => {
+                self.show_message("Error: Could not open file");
+            }
         }
     }
 
@@ -794,6 +842,7 @@ impl App {
             }
             AppMode::OpenPicker => self.draw_file_picker(),
             AppMode::CloseConfirm => self.draw_confirm_dialog(),
+            AppMode::Message => self.draw_message_dialog(),
             AppMode::Editing => {
                 // Draw search hint if we have an active search
                 if !self.search_query.is_empty() {
@@ -1133,6 +1182,65 @@ impl App {
 
         // Instructions
         let hint = "(y/n)";
+        let hint_x = dialog_x + TILE_WIDTH as f32;
+        let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
+        for (i, c) in hint.chars().enumerate() {
+            self.draw_scaled_char_with_shadow(
+                c,
+                hint_x + (i as f32 * TILE_WIDTH as f32),
+                hint_y,
+                COLOR_GRAY,
+                COLOR_BLACK,
+            );
+        }
+    }
+
+    fn draw_message_dialog(&self) {
+        let dialog = &self.message_dialog;
+        if !dialog.visible {
+            return;
+        }
+
+        let dialog_width = 28 * TILE_WIDTH;
+        let dialog_height = 4 * TILE_HEIGHT;
+        let dialog_x = ((SCREEN_WIDTH - dialog_width) / 2) as f32;
+        let dialog_y = ((SCREEN_HEIGHT - dialog_height) / 2) as f32;
+
+        // Background
+        self.draw_scaled_rect(
+            dialog_x,
+            dialog_y,
+            dialog_width as f32,
+            dialog_height as f32,
+            COLOR_BLACK,
+        );
+
+        // Border
+        let scale = SCALE as f32;
+        draw_rectangle_lines(
+            dialog_x * scale,
+            dialog_y * scale,
+            dialog_width as f32 * scale,
+            dialog_height as f32 * scale,
+            2.0,
+            COLOR_WHITE,
+        );
+
+        // Message
+        let msg_x = dialog_x + TILE_WIDTH as f32;
+        let msg_y = dialog_y + TILE_HEIGHT as f32;
+        for (i, c) in dialog.message.chars().enumerate() {
+            self.draw_scaled_char_with_shadow(
+                c,
+                msg_x + (i as f32 * TILE_WIDTH as f32),
+                msg_y,
+                COLOR_WHITE,
+                COLOR_GRAY,
+            );
+        }
+
+        // Instructions
+        let hint = "(press any key)";
         let hint_x = dialog_x + TILE_WIDTH as f32;
         let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
         for (i, c) in hint.chars().enumerate() {

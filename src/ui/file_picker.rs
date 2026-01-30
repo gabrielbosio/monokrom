@@ -144,6 +144,7 @@ impl FilePicker {
         None
     }
 
+    #[allow(dead_code)]
     pub fn draw(&self, font: &BitmapFont) {
         if !self.visible {
             return;
@@ -255,29 +256,15 @@ impl FilePicker {
 
         // Scroll indicators
         if self.scroll_offset > 0 {
-            let indicator = "^";
             let ind_x = picker_x + (picker_width as f32 - 2.0 * TILE_WIDTH as f32);
             let ind_y = list_y;
-            font.draw_char_with_shadow(
-                indicator.chars().next().unwrap(),
-                ind_x,
-                ind_y,
-                COLOR_GRAY,
-                COLOR_BLACK,
-            );
+            font.draw_char_with_shadow('^', ind_x, ind_y, COLOR_GRAY, COLOR_BLACK);
         }
 
         if visible_end < self.files.len() {
-            let indicator = "v";
             let ind_x = picker_x + (picker_width as f32 - 2.0 * TILE_WIDTH as f32);
             let ind_y = list_y + ((Self::VISIBLE_ITEMS - 1) as f32 * TILE_HEIGHT as f32);
-            font.draw_char_with_shadow(
-                indicator.chars().next().unwrap(),
-                ind_x,
-                ind_y,
-                COLOR_GRAY,
-                COLOR_BLACK,
-            );
+            font.draw_char_with_shadow('v', ind_x, ind_y, COLOR_GRAY, COLOR_BLACK);
         }
 
         // Instructions or delete confirmation

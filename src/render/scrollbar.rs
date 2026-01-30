@@ -68,6 +68,7 @@ impl ScrollbarState {
     }
 }
 
+#[allow(dead_code)]
 pub fn draw_scrollbars(state: &ScrollbarState) {
     let track_color = Color::new(0.3, 0.3, 0.3, 1.0);
     let handle_color = COLOR_WHITE;

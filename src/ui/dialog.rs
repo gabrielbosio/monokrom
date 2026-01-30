@@ -66,6 +66,7 @@ impl InputDialog {
         None
     }
 
+    #[allow(dead_code)]
     pub fn draw(&self, font: &BitmapFont) {
         if !self.visible {
             return;
@@ -213,6 +214,7 @@ impl ConfirmDialog {
         None
     }
 
+    #[allow(dead_code)]
     pub fn draw(&self, font: &BitmapFont) {
         if !self.visible {
             return;
@@ -277,4 +279,112 @@ pub enum DialogResult {
     Confirm(String),
     Reject,
     Cancel,
+}
+
+/// Message dialog for displaying info/error messages (dismiss with any key)
+pub struct MessageDialog {
+    pub message: String,
+    pub visible: bool,
+}
+
+impl Default for MessageDialog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MessageDialog {
+    pub fn new() -> Self {
+        Self {
+            message: String::new(),
+            visible: false,
+        }
+    }
+
+    pub fn show(&mut self, message: &str) {
+        self.message = message.to_string();
+        self.visible = true;
+    }
+
+    pub fn hide(&mut self) {
+        self.visible = false;
+    }
+
+    /// Process input - dismiss on any key press
+    pub fn update(&mut self) -> bool {
+        if !self.visible {
+            return false;
+        }
+
+        // Dismiss on any key press
+        if is_key_pressed(KeyCode::Escape)
+            || is_key_pressed(KeyCode::Enter)
+            || is_key_pressed(KeyCode::Space)
+            || get_char_pressed().is_some()
+        {
+            self.hide();
+            return true;
+        }
+
+        false
+    }
+
+    #[allow(dead_code)]
+    pub fn draw(&self, font: &BitmapFont) {
+        if !self.visible {
+            return;
+        }
+
+        // Draw dialog background
+        let dialog_width = 28 * TILE_WIDTH;
+        let dialog_height = 4 * TILE_HEIGHT;
+        let dialog_x = ((SCREEN_WIDTH - dialog_width) / 2) as f32;
+        let dialog_y = ((SCREEN_HEIGHT - dialog_height) / 2) as f32;
+
+        // Background
+        draw_rectangle(
+            dialog_x,
+            dialog_y,
+            dialog_width as f32,
+            dialog_height as f32,
+            COLOR_BLACK,
+        );
+
+        // Border
+        draw_rectangle_lines(
+            dialog_x,
+            dialog_y,
+            dialog_width as f32,
+            dialog_height as f32,
+            2.0,
+            COLOR_WHITE,
+        );
+
+        // Message
+        let msg_x = dialog_x + TILE_WIDTH as f32;
+        let msg_y = dialog_y + TILE_HEIGHT as f32;
+        for (i, c) in self.message.chars().enumerate() {
+            font.draw_char_with_shadow(
+                c,
+                msg_x + (i as f32 * TILE_WIDTH as f32),
+                msg_y,
+                COLOR_WHITE,
+                COLOR_GRAY,
+            );
+        }
+
+        // Instructions
+        let hint = "(press any key)";
+        let hint_x = dialog_x + TILE_WIDTH as f32;
+        let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
+        for (i, c) in hint.chars().enumerate() {
+            font.draw_char_with_shadow(
+                c,
+                hint_x + (i as f32 * TILE_WIDTH as f32),
+                hint_y,
+                COLOR_GRAY,
+                COLOR_BLACK,
+            );
+        }
+    }
 }

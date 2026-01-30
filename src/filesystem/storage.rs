@@ -15,7 +15,9 @@ pub fn get_working_directory() -> PathBuf {
             .join("fs");
         // Create directory if it doesn't exist
         if !fs_dir.exists() {
-            let _ = fs::create_dir_all(&fs_dir);
+            if let Err(e) = fs::create_dir_all(&fs_dir) {
+                eprintln!("Warning: Could not create directory {:?}: {}", fs_dir, e);
+            }
         }
         fs_dir
     }
@@ -26,7 +28,12 @@ pub fn get_working_directory() -> PathBuf {
             let monokrom_dir = base_dirs.home_dir().join(".monokrom");
             // Create directory if it doesn't exist
             if !monokrom_dir.exists() {
-                let _ = fs::create_dir_all(&monokrom_dir);
+                if let Err(e) = fs::create_dir_all(&monokrom_dir) {
+                    eprintln!(
+                        "Warning: Could not create directory {:?}: {}",
+                        monokrom_dir, e
+                    );
+                }
             }
             monokrom_dir
         } else {
@@ -149,5 +156,57 @@ fn find_next_duplicate_name(filename: &str) -> String {
             return candidate;
         }
         index += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_filename_empty() {
+        assert!(!is_valid_filename(""));
+    }
+
+    #[test]
+    fn test_is_valid_filename_simple() {
+        assert!(is_valid_filename("hello"));
+        assert!(is_valid_filename("hello.txt"));
+        assert!(is_valid_filename("my_file_123"));
+    }
+
+    #[test]
+    fn test_is_valid_filename_with_slash() {
+        assert!(!is_valid_filename("path/to/file"));
+        assert!(!is_valid_filename("path\\to\\file"));
+    }
+
+    #[test]
+    fn test_is_valid_filename_special_names() {
+        assert!(!is_valid_filename("."));
+        assert!(!is_valid_filename(".."));
+    }
+
+    #[test]
+    fn test_is_valid_filename_too_long() {
+        let long_name = "a".repeat(256);
+        assert!(!is_valid_filename(&long_name));
+
+        let ok_name = "a".repeat(255);
+        assert!(is_valid_filename(&ok_name));
+    }
+
+    #[test]
+    fn test_is_valid_filename_spaces() {
+        assert!(is_valid_filename("hello world"));
+        assert!(is_valid_filename(" leading space"));
+        assert!(is_valid_filename("trailing space "));
+    }
+
+    #[test]
+    fn test_is_valid_filename_dots() {
+        assert!(is_valid_filename("..."));
+        assert!(is_valid_filename(".hidden"));
+        assert!(is_valid_filename("file.name.txt"));
     }
 }

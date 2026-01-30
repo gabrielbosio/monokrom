@@ -195,32 +195,44 @@ pub fn swap_line_down(
 }
 
 /// Copy selected text to clipboard
+/// Returns (copied_text, clipboard_success)
 pub fn copy_selection(
     buffer: &TextBuffer,
     selection: &Selection,
     clipboard: &mut Option<arboard::Clipboard>,
-) -> Option<String> {
-    let text = selection.get_text(buffer)?;
-    if let Some(cb) = clipboard.as_mut() {
-        let _ = cb.set_text(&text);
-    }
-    Some(text)
+) -> (Option<String>, bool) {
+    let text = match selection.get_text(buffer) {
+        Some(t) => t,
+        None => return (None, true), // No selection is not an error
+    };
+    let clipboard_ok = if let Some(cb) = clipboard.as_mut() {
+        cb.set_text(&text).is_ok()
+    } else {
+        false // No clipboard available
+    };
+    (Some(text), clipboard_ok)
 }
 
 /// Cut selected text to clipboard
+/// Returns (cut_text, clipboard_success)
 pub fn cut_selection(
     buffer: &mut TextBuffer,
     cursor: &mut Cursor,
     selection: &mut Selection,
     history: &mut History,
     clipboard: &mut Option<arboard::Clipboard>,
-) -> Option<String> {
-    let text = selection.get_text(buffer)?;
+) -> (Option<String>, bool) {
+    let text = match selection.get_text(buffer) {
+        Some(t) => t,
+        None => return (None, true), // No selection is not an error
+    };
 
     // Copy to clipboard
-    if let Some(cb) = clipboard.as_mut() {
-        let _ = cb.set_text(&text);
-    }
+    let clipboard_ok = if let Some(cb) = clipboard.as_mut() {
+        cb.set_text(&text).is_ok()
+    } else {
+        false // No clipboard available
+    };
 
     // Delete the selection
     if let Some((start, end)) = selection.get_range(buffer) {
@@ -233,7 +245,7 @@ pub fn cut_selection(
         }
     }
 
-    Some(text)
+    (Some(text), clipboard_ok)
 }
 
 /// Paste from clipboard
@@ -299,5 +311,250 @@ pub fn redo(
         buffer.restore(&entry.buffer);
         cursor.set_position(entry.cursor.line, entry.cursor.col);
         selection.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::editor::cursor::CursorPosition;
+
+    fn setup() -> (TextBuffer, Cursor, Selection, History) {
+        (
+            TextBuffer::from_str("hello world"),
+            Cursor::new(),
+            Selection::new(),
+            History::new(),
+        )
+    }
+
+    #[test]
+    fn test_insert_char() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        cursor.set_position(0, 5);
+
+        insert_char(&mut buffer, &mut cursor, &mut selection, &mut history, '!');
+
+        assert_eq!(buffer.to_string(), "hello! world");
+        assert_eq!(cursor.col(), 6);
+    }
+
+    #[test]
+    fn test_insert_char_newline() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        cursor.set_position(0, 5);
+
+        insert_char(&mut buffer, &mut cursor, &mut selection, &mut history, '\n');
+
+        assert_eq!(buffer.line_count(), 2);
+        assert_eq!(buffer.get_line(0), "hello");
+        assert_eq!(buffer.get_line(1), " world");
+        assert_eq!(cursor.line(), 1);
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_insert_char_replaces_selection() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(0, 5);
+        cursor.set_position(0, 5);
+
+        insert_char(&mut buffer, &mut cursor, &mut selection, &mut history, 'X');
+
+        assert_eq!(buffer.to_string(), "X world");
+        assert!(!selection.is_active());
+    }
+
+    #[test]
+    fn test_delete_before() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        cursor.set_position(0, 5);
+
+        delete_before(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.to_string(), "hell world");
+        assert_eq!(cursor.col(), 4);
+    }
+
+    #[test]
+    fn test_delete_before_at_start() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+
+        delete_before(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.to_string(), "hello world");
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_delete_before_at_line_start() {
+        let mut buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        cursor.set_position(1, 0);
+
+        delete_before(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.to_string(), "helloworld");
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 5);
+    }
+
+    #[test]
+    fn test_delete_before_with_selection() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(0, 6);
+        cursor.set_position(0, 6);
+
+        delete_before(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.to_string(), "world");
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_delete_at() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        cursor.set_position(0, 5);
+
+        delete_at(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.to_string(), "helloworld");
+    }
+
+    #[test]
+    fn test_delete_at_end() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        cursor.set_position(0, 11);
+
+        delete_at(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_swap_line_up() {
+        let mut buffer = TextBuffer::from_str("line1\nline2\nline3");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        cursor.set_position(1, 0);
+
+        swap_line_up(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "line2");
+        assert_eq!(buffer.get_line(1), "line1");
+        assert_eq!(cursor.line(), 0);
+    }
+
+    #[test]
+    fn test_swap_line_up_at_first_line() {
+        let mut buffer = TextBuffer::from_str("line1\nline2");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+
+        swap_line_up(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "line1");
+        assert_eq!(buffer.get_line(1), "line2");
+    }
+
+    #[test]
+    fn test_swap_line_down() {
+        let mut buffer = TextBuffer::from_str("line1\nline2\nline3");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        cursor.set_position(0, 0);
+
+        swap_line_down(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "line2");
+        assert_eq!(buffer.get_line(1), "line1");
+        assert_eq!(cursor.line(), 1);
+    }
+
+    #[test]
+    fn test_swap_line_down_at_last_line() {
+        let mut buffer = TextBuffer::from_str("line1\nline2");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        cursor.set_position(1, 0);
+
+        swap_line_down(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "line1");
+        assert_eq!(buffer.get_line(1), "line2");
+    }
+
+    #[test]
+    fn test_undo_redo() {
+        let (mut buffer, mut cursor, mut selection, mut history) = setup();
+        cursor.set_position(0, 5);
+
+        insert_char(&mut buffer, &mut cursor, &mut selection, &mut history, '!');
+        assert_eq!(buffer.to_string(), "hello! world");
+
+        undo(&mut buffer, &mut cursor, &mut selection, &mut history);
+        assert_eq!(buffer.to_string(), "hello world");
+
+        redo(&mut buffer, &mut cursor, &mut selection, &mut history);
+        assert_eq!(buffer.to_string(), "hello! world");
+    }
+
+    #[test]
+    fn test_copy_selection_no_clipboard() {
+        let buffer = TextBuffer::from_str("hello world");
+        let mut selection = Selection::new();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(0, 5);
+        let mut clipboard: Option<arboard::Clipboard> = None;
+
+        let (text, clipboard_ok) = copy_selection(&buffer, &selection, &mut clipboard);
+
+        assert_eq!(text, Some("hello".to_string()));
+        assert!(!clipboard_ok); // No clipboard available
+    }
+
+    #[test]
+    fn test_copy_selection_no_selection() {
+        let buffer = TextBuffer::from_str("hello");
+        let selection = Selection::new();
+        let mut clipboard: Option<arboard::Clipboard> = None;
+
+        let (text, clipboard_ok) = copy_selection(&buffer, &selection, &mut clipboard);
+
+        assert!(text.is_none());
+        assert!(clipboard_ok); // No selection is not an error
+    }
+
+    #[test]
+    fn test_cut_selection_no_clipboard() {
+        let mut buffer = TextBuffer::from_str("hello world");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(0, 6);
+        cursor.set_position(0, 6);
+        let mut clipboard: Option<arboard::Clipboard> = None;
+
+        let (text, clipboard_ok) = cut_selection(
+            &mut buffer,
+            &mut cursor,
+            &mut selection,
+            &mut history,
+            &mut clipboard,
+        );
+
+        assert_eq!(text, Some("hello ".to_string()));
+        assert!(!clipboard_ok); // No clipboard
+        assert_eq!(buffer.to_string(), "world");
+        assert!(!selection.is_active());
     }
 }

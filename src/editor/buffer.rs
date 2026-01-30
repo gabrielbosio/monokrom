@@ -173,3 +173,169 @@ impl TextBuffer {
         self.rope = snapshot.rope.clone();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_buffer_is_empty() {
+        let buffer = TextBuffer::new();
+        assert!(buffer.is_empty());
+        assert_eq!(buffer.len_chars(), 0);
+        assert_eq!(buffer.line_count(), 1); // Empty buffer has 1 line
+    }
+
+    #[test]
+    fn test_from_str_single_line() {
+        let buffer = TextBuffer::from_str("hello");
+        assert_eq!(buffer.line_count(), 1);
+        assert_eq!(buffer.line_len(0), 5);
+        assert_eq!(buffer.get_line(0), "hello");
+    }
+
+    #[test]
+    fn test_from_str_multi_line() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        assert_eq!(buffer.line_count(), 2);
+        assert_eq!(buffer.line_len(0), 5);
+        assert_eq!(buffer.line_len(1), 5);
+        assert_eq!(buffer.get_line(0), "hello");
+        assert_eq!(buffer.get_line(1), "world");
+    }
+
+    #[test]
+    fn test_from_str_with_trailing_newline() {
+        let buffer = TextBuffer::from_str("hello\n");
+        assert_eq!(buffer.line_count(), 2);
+        assert_eq!(buffer.line_len(0), 5);
+        assert_eq!(buffer.line_len(1), 0);
+    }
+
+    #[test]
+    fn test_line_len_out_of_bounds() {
+        let buffer = TextBuffer::from_str("hello");
+        assert_eq!(buffer.line_len(999), 0);
+    }
+
+    #[test]
+    fn test_get_line_out_of_bounds() {
+        let buffer = TextBuffer::from_str("hello");
+        assert_eq!(buffer.get_line(999), "");
+    }
+
+    #[test]
+    fn test_max_line_width() {
+        let buffer = TextBuffer::from_str("hi\nhello\nworld!");
+        assert_eq!(buffer.max_line_width(), 6); // "world!" is longest
+    }
+
+    #[test]
+    fn test_insert_at_start() {
+        let mut buffer = TextBuffer::from_str("world");
+        buffer.insert(0, "hello ");
+        assert_eq!(buffer.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_insert_at_end() {
+        let mut buffer = TextBuffer::from_str("hello");
+        buffer.insert(5, " world");
+        assert_eq!(buffer.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_insert_newline() {
+        let mut buffer = TextBuffer::from_str("helloworld");
+        buffer.insert(5, "\n");
+        assert_eq!(buffer.line_count(), 2);
+        assert_eq!(buffer.get_line(0), "hello");
+        assert_eq!(buffer.get_line(1), "world");
+    }
+
+    #[test]
+    fn test_delete_range() {
+        let mut buffer = TextBuffer::from_str("hello world");
+        buffer.delete_range(5, 11); // delete " world"
+        assert_eq!(buffer.to_string(), "hello");
+    }
+
+    #[test]
+    fn test_delete_range_empty() {
+        let mut buffer = TextBuffer::from_str("hello");
+        buffer.delete_range(2, 2); // empty range
+        assert_eq!(buffer.to_string(), "hello");
+    }
+
+    #[test]
+    fn test_delete_char_before() {
+        let mut buffer = TextBuffer::from_str("hello");
+        assert!(buffer.delete_char_before(0, 3)); // delete 'l'
+        assert_eq!(buffer.to_string(), "helo");
+    }
+
+    #[test]
+    fn test_delete_char_before_at_start() {
+        let mut buffer = TextBuffer::from_str("hello");
+        assert!(!buffer.delete_char_before(0, 0)); // nothing to delete
+        assert_eq!(buffer.to_string(), "hello");
+    }
+
+    #[test]
+    fn test_delete_char_at() {
+        let mut buffer = TextBuffer::from_str("hello");
+        assert!(buffer.delete_char_at(0, 2)); // delete 'l'
+        assert_eq!(buffer.to_string(), "helo");
+    }
+
+    #[test]
+    fn test_delete_char_at_end() {
+        let mut buffer = TextBuffer::from_str("hello");
+        assert!(!buffer.delete_char_at(0, 5)); // nothing to delete
+        assert_eq!(buffer.to_string(), "hello");
+    }
+
+    #[test]
+    fn test_line_col_to_char() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        assert_eq!(buffer.line_col_to_char(0, 0), 0);
+        assert_eq!(buffer.line_col_to_char(0, 5), 5);
+        assert_eq!(buffer.line_col_to_char(1, 0), 6);
+        assert_eq!(buffer.line_col_to_char(1, 3), 9);
+    }
+
+    #[test]
+    fn test_char_to_line_col() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        assert_eq!(buffer.char_to_line_col(0), (0, 0));
+        assert_eq!(buffer.char_to_line_col(5), (0, 5));
+        assert_eq!(buffer.char_to_line_col(6), (1, 0));
+        assert_eq!(buffer.char_to_line_col(9), (1, 3));
+    }
+
+    #[test]
+    fn test_get_range() {
+        let buffer = TextBuffer::from_str("hello world");
+        assert_eq!(buffer.get_range(0, 5), "hello");
+        assert_eq!(buffer.get_range(6, 11), "world");
+        assert_eq!(buffer.get_range(0, 11), "hello world");
+    }
+
+    #[test]
+    fn test_snapshot_and_restore() {
+        let mut buffer = TextBuffer::from_str("hello");
+        let snapshot = buffer.snapshot();
+        buffer.insert(5, " world");
+        assert_eq!(buffer.to_string(), "hello world");
+        buffer.restore(&snapshot);
+        assert_eq!(buffer.to_string(), "hello");
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut buffer = TextBuffer::from_str("hello world");
+        buffer.clear();
+        assert!(buffer.is_empty());
+        assert_eq!(buffer.len_chars(), 0);
+    }
+}

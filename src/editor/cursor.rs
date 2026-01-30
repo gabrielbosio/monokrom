@@ -173,3 +173,202 @@ impl Cursor {
         buffer.line_col_to_char(self.position.line, self.position.col)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cursor_new() {
+        let cursor = Cursor::new();
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_cursor_set_position() {
+        let mut cursor = Cursor::new();
+        cursor.set_position(5, 10);
+        assert_eq!(cursor.line(), 5);
+        assert_eq!(cursor.col(), 10);
+    }
+
+    #[test]
+    fn test_move_left_within_line() {
+        let buffer = TextBuffer::from_str("hello");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 3);
+        cursor.move_left(&buffer);
+        assert_eq!(cursor.col(), 2);
+        assert_eq!(cursor.line(), 0);
+    }
+
+    #[test]
+    fn test_move_left_at_line_start() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 0);
+        cursor.move_left(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 5); // end of "hello"
+    }
+
+    #[test]
+    fn test_move_left_at_start_of_file() {
+        let buffer = TextBuffer::from_str("hello");
+        let mut cursor = Cursor::new();
+        cursor.move_left(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_move_right_within_line() {
+        let buffer = TextBuffer::from_str("hello");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 2);
+        cursor.move_right(&buffer);
+        assert_eq!(cursor.col(), 3);
+        assert_eq!(cursor.line(), 0);
+    }
+
+    #[test]
+    fn test_move_right_at_line_end() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 5);
+        cursor.move_right(&buffer);
+        assert_eq!(cursor.line(), 1);
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_move_right_at_end_of_file() {
+        let buffer = TextBuffer::from_str("hello");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 5);
+        cursor.move_right(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 5);
+    }
+
+    #[test]
+    fn test_move_up() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 3);
+        cursor.move_up(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 3);
+    }
+
+    #[test]
+    fn test_move_up_at_first_line() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 3);
+        cursor.move_up(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 3);
+    }
+
+    #[test]
+    fn test_move_up_clamps_to_shorter_line() {
+        let buffer = TextBuffer::from_str("hi\nhello");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 4);
+        cursor.move_up(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 2); // clamped to "hi" length
+    }
+
+    #[test]
+    fn test_move_down() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 3);
+        cursor.move_down(&buffer);
+        assert_eq!(cursor.line(), 1);
+        assert_eq!(cursor.col(), 3);
+    }
+
+    #[test]
+    fn test_move_down_at_last_line() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 3);
+        cursor.move_down(&buffer);
+        assert_eq!(cursor.line(), 1);
+        assert_eq!(cursor.col(), 3);
+    }
+
+    #[test]
+    fn test_move_to_line_start() {
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 5);
+        cursor.move_to_line_start();
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_move_to_line_end() {
+        let buffer = TextBuffer::from_str("hello");
+        let mut cursor = Cursor::new();
+        cursor.move_to_line_end(&buffer);
+        assert_eq!(cursor.col(), 5);
+    }
+
+    #[test]
+    fn test_move_word_right() {
+        let buffer = TextBuffer::from_str("hello world");
+        let mut cursor = Cursor::new();
+        cursor.move_word_right(&buffer);
+        assert_eq!(cursor.col(), 6); // after "hello "
+    }
+
+    #[test]
+    fn test_move_word_right_at_end() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 5);
+        cursor.move_word_right(&buffer);
+        assert_eq!(cursor.line(), 1);
+        assert_eq!(cursor.col(), 0);
+    }
+
+    #[test]
+    fn test_move_word_left() {
+        let buffer = TextBuffer::from_str("hello world");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 11);
+        cursor.move_word_left(&buffer);
+        assert_eq!(cursor.col(), 6); // start of "world"
+    }
+
+    #[test]
+    fn test_move_word_left_at_start() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 0);
+        cursor.move_word_left(&buffer);
+        assert_eq!(cursor.line(), 0);
+        assert_eq!(cursor.col(), 5);
+    }
+
+    #[test]
+    fn test_char_index() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 3);
+        assert_eq!(cursor.char_index(&buffer), 9); // 6 (hello\n) + 3
+    }
+
+    #[test]
+    fn test_cursor_position_clamp() {
+        let buffer = TextBuffer::from_str("hi\nhello");
+        let pos = CursorPosition::new(5, 10);
+        let clamped = pos.clamp(&buffer);
+        assert_eq!(clamped.line, 1);
+        assert_eq!(clamped.col, 5);
+    }
+}
