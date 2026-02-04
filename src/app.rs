@@ -487,9 +487,6 @@ impl App {
                     self.mode = AppMode::FindDialog;
                     self.input_dialog.show("Find:");
                 }
-                EditorAction::FindNext => {
-                    self.find_next();
-                }
 
                 EditorAction::DialogCancel => {
                     // Escape pressed - clear search mode if active

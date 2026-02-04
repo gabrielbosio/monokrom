@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use ropey::Rope;
 use std::fmt;
 
@@ -98,12 +96,6 @@ impl TextBuffer {
         self.rope.insert(idx, text);
     }
 
-    /// Insert a character at line/column position
-    pub fn insert_at(&mut self, line: usize, col: usize, text: &str) {
-        let char_idx = self.line_col_to_char(line, col);
-        self.insert(char_idx, text);
-    }
-
     /// Delete a range of characters
     pub fn delete_range(&mut self, start_char: usize, end_char: usize) {
         let start = start_char.min(self.rope.len_chars());
@@ -147,6 +139,7 @@ impl TextBuffer {
     }
 
     /// Check if buffer is empty
+    #[allow(dead_code)] // Used in tests
     pub fn is_empty(&self) -> bool {
         self.rope.len_chars() == 0
     }
@@ -157,6 +150,7 @@ impl TextBuffer {
     }
 
     /// Clear the buffer
+    #[allow(dead_code)] // Used in tests
     pub fn clear(&mut self) {
         self.rope = Rope::new();
     }

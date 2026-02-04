@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::editor::buffer::TextBuffer;
 use crate::editor::cursor::CursorPosition;
 
@@ -80,16 +78,6 @@ impl History {
         });
 
         Some(entry)
-    }
-
-    /// Check if undo is available
-    pub fn can_undo(&self) -> bool {
-        !self.undo_stack.is_empty()
-    }
-
-    /// Check if redo is available
-    pub fn can_redo(&self) -> bool {
-        !self.redo_stack.is_empty()
     }
 
     /// Clear all history

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -85,12 +83,6 @@ pub fn write_file(filename: &str, content: &str) -> io::Result<()> {
 
     let path = dir.join(filename);
     fs::write(path, content)
-}
-
-/// Check if a file exists in the working directory
-pub fn file_exists(filename: &str) -> bool {
-    let path = get_working_directory().join(filename);
-    path.exists() && path.is_file()
 }
 
 /// Validate filename (no path separators, not empty, reasonable length)

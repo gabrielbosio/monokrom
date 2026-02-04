@@ -1,41 +1,4 @@
-#![allow(dead_code)]
-
 use macroquad::prelude::*;
-
-/// Key combination for hotkey detection
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct KeyCombo {
-    pub key: KeyCode,
-    pub ctrl: bool, // Cmd on macOS
-    pub shift: bool,
-    pub alt: bool, // Option on macOS
-}
-
-impl KeyCombo {
-    pub const fn new(key: KeyCode) -> Self {
-        Self {
-            key,
-            ctrl: false,
-            shift: false,
-            alt: false,
-        }
-    }
-
-    pub const fn ctrl(mut self) -> Self {
-        self.ctrl = true;
-        self
-    }
-
-    pub const fn shift(mut self) -> Self {
-        self.shift = true;
-        self
-    }
-
-    pub const fn alt(mut self) -> Self {
-        self.alt = true;
-        self
-    }
-}
 
 /// Editor actions that can be triggered by keyboard
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,7 +57,6 @@ pub enum EditorAction {
     // Find and replace
     Find,
     Replace,
-    FindNext,
 
     // Dialog navigation
     DialogConfirm,
@@ -107,6 +69,7 @@ pub fn is_cmd_pressed() -> bool {
 }
 
 /// Check if Ctrl key is pressed
+#[cfg(not(target_os = "macos"))]
 pub fn is_ctrl_pressed() -> bool {
     is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl)
 }

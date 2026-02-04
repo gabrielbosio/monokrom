@@ -1,7 +1,5 @@
 use macroquad::prelude::*;
 
-use crate::config::*;
-
 // 8x8 bitmap font data for ASCII 32-127 (96 characters)
 // Each character is 8 bytes (one byte per row, MSB is leftmost pixel)
 const FONT_DATA: [u8; 96 * 8] = [
@@ -166,37 +164,6 @@ impl BitmapFont {
         let col = idx % 16;
 
         Some(Rect::new((col * 8) as f32, (row * 8) as f32, 8.0, 8.0))
-    }
-
-    /// Draw a single character at the given position
-    pub fn draw_char(&self, c: char, x: f32, y: f32, color: Color) {
-        if let Some(src_rect) = self.get_char_rect(c) {
-            draw_texture_ex(
-                &self.texture,
-                x,
-                y,
-                color,
-                DrawTextureParams {
-                    source: Some(src_rect),
-                    ..Default::default()
-                },
-            );
-        }
-    }
-
-    /// Draw a character with a shadow
-    pub fn draw_char_with_shadow(
-        &self,
-        c: char,
-        x: f32,
-        y: f32,
-        fg_color: Color,
-        shadow_color: Color,
-    ) {
-        // Draw shadow first
-        self.draw_char(c, x + SHADOW_OFFSET_X, y + SHADOW_OFFSET_Y, shadow_color);
-        // Draw foreground
-        self.draw_char(c, x, y, fg_color);
     }
 
     /// Draw a single character at the given position with scaling

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use macroquad::prelude::Color;
 
 // Tile dimensions
@@ -26,10 +24,6 @@ pub const COLOR_BLACK: Color = Color::new(0.0, 0.0, 0.0, 1.0);
 pub const COLOR_WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
 pub const COLOR_GRAY: Color = Color::new(0.5, 0.5, 0.5, 1.0);
 
-// Text shadow offset
-pub const SHADOW_OFFSET_X: f32 = 1.0;
-pub const SHADOW_OFFSET_Y: f32 = 1.0;
-
 // Cursor blink rate (in seconds)
 pub const CURSOR_BLINK_RATE: f64 = 0.5;
 
@@ -40,6 +34,3 @@ pub const SCROLLBAR_WIDTH: u32 = 8;
 pub const EDITOR_TILES_X: u32 = SCREEN_TILES_X - 1; // 31 tiles for text, 1 for scrollbar
 pub const EDITOR_TILES_Y: u32 = SCREEN_TILES_Y - 1; // 29 tiles for text, 1 for scrollbar
 
-// Selection highlight color (inverted)
-pub const COLOR_SELECTION_BG: Color = COLOR_WHITE;
-pub const COLOR_SELECTION_FG: Color = COLOR_BLACK;

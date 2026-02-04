@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::editor::buffer::TextBuffer;
 use crate::editor::cursor::CursorPosition;
 
@@ -20,6 +18,7 @@ impl Selection {
     }
 
     /// Check if there is an active selection
+    #[allow(dead_code)] // Used in tests
     pub fn is_active(&self) -> bool {
         self.anchor.is_some()
     }
@@ -31,6 +30,7 @@ impl Selection {
     }
 
     /// Extend selection to the given cursor position
+    #[allow(dead_code)] // Used in tests
     pub fn extend_to(&mut self, cursor: CursorPosition) {
         if self.anchor.is_none() {
             self.anchor = Some(self.cursor);
@@ -86,6 +86,7 @@ impl Selection {
     }
 
     /// Check if a given line/col is within the selection
+    #[allow(dead_code)] // Used in tests
     pub fn contains(&self, line: usize, col: usize, buffer: &TextBuffer) -> bool {
         if let Some((start, end)) = self.get_range(buffer) {
             let idx = buffer.line_col_to_char(line, col);
