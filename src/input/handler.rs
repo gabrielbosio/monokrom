@@ -45,51 +45,47 @@ fn is_navigation_key_held() -> bool {
 
 /// Check if a key should fire (either just pressed or repeating)
 fn should_key_fire(key: KeyCode) -> bool {
+    let mut state = match KEY_REPEAT.lock() {
+        Ok(s) => s,
+        Err(_) => return is_key_pressed(key),
+    };
+
+    // Key just pressed - reset and fire
     if is_key_pressed(key) {
-        // Key was just pressed - reset repeat state
-        if let Ok(mut state) = KEY_REPEAT.lock() {
-            state.last_key = Some(key);
-            state.time_held = 0.0;
-            state.is_repeating = false;
-        }
+        state.last_key = Some(key);
+        state.time_held = 0.0;
+        state.is_repeating = false;
         return true;
     }
 
-    if is_key_down(key) {
-        // Key is being held - check for repeat
-        if let Ok(mut state) = KEY_REPEAT.lock() {
-            if state.last_key == Some(key) {
-                let dt = get_frame_time();
-                state.time_held += dt;
-
-                if !state.is_repeating {
-                    // Still in initial delay
-                    if state.time_held >= KEY_REPEAT_DELAY {
-                        state.is_repeating = true;
-                        state.time_held = 0.0;
-                        return true;
-                    }
-                } else {
-                    // In repeat mode
-                    if state.time_held >= KEY_REPEAT_RATE {
-                        state.time_held = 0.0;
-                        return true;
-                    }
-                }
-            }
+    // Key released - clear state if tracked
+    if !is_key_down(key) {
+        if state.last_key == Some(key) {
+            state.last_key = None;
+            state.time_held = 0.0;
+            state.is_repeating = false;
         }
-    } else {
-        // Key was released - clear state if it was this key
-        if let Ok(mut state) = KEY_REPEAT.lock() {
-            if state.last_key == Some(key) {
-                state.last_key = None;
-                state.time_held = 0.0;
-                state.is_repeating = false;
-            }
-        }
+        return false;
     }
 
-    false
+    // Key held but not tracked
+    if state.last_key != Some(key) {
+        return false;
+    }
+
+    // Update timing
+    state.time_held += get_frame_time();
+
+    // Check threshold
+    let threshold = if state.is_repeating { KEY_REPEAT_RATE } else { KEY_REPEAT_DELAY };
+    if state.time_held < threshold {
+        return false;
+    }
+
+    // Fire repeat
+    state.is_repeating = true;
+    state.time_held = 0.0;
+    true
 }
 
 /// Process keyboard input and return the corresponding action
