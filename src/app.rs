@@ -347,7 +347,7 @@ impl App {
                     if self.is_in_search_mode() {
                         return;
                     }
-                    let (text, _clipboard_ok) = operations::cut_selection(
+                    let (text, clipboard_ok) = operations::cut_selection(
                         &mut self.buffer,
                         &mut self.cursor,
                         &mut self.selection,
@@ -356,14 +356,20 @@ impl App {
                     );
                     if text.is_some() {
                         self.is_modified = true;
+                        if !clipboard_ok && self.clipboard.is_some() {
+                            self.show_message("Warning: Clipboard error");
+                        }
                     }
                 }
                 EditorAction::Copy => {
-                    let (_text, _clipboard_ok) = operations::copy_selection(
+                    let (text, clipboard_ok) = operations::copy_selection(
                         &self.buffer,
                         &self.selection,
                         &mut self.clipboard,
                     );
+                    if text.is_some() && !clipboard_ok && self.clipboard.is_some() {
+                        self.show_message("Warning: Clipboard error");
+                    }
                 }
                 EditorAction::Paste => {
                     if self.is_in_search_mode() {
@@ -451,9 +457,15 @@ impl App {
                         self.mode = AppMode::CloseConfirm;
                         self.confirm_dialog.show("Save changes?");
                     } else {
-                        self.mode = AppMode::OpenPicker;
-                        let files = filesystem::list_files().unwrap_or_default();
-                        self.file_picker.show(files);
+                        match filesystem::list_files() {
+                            Ok(files) => {
+                                self.mode = AppMode::OpenPicker;
+                                self.file_picker.show(files);
+                            }
+                            Err(_) => {
+                                self.show_message("Error: Cannot list files");
+                            }
+                        }
                     }
                 }
                 EditorAction::New => {
@@ -604,9 +616,15 @@ impl App {
         if self.pending_open_file {
             self.pending_open_file = false;
             self.pending_new_file = false;
-            self.mode = AppMode::OpenPicker;
-            let files = filesystem::list_files().unwrap_or_default();
-            self.file_picker.show(files);
+            match filesystem::list_files() {
+                Ok(files) => {
+                    self.mode = AppMode::OpenPicker;
+                    self.file_picker.show(files);
+                }
+                Err(_) => {
+                    self.show_message("Error: Cannot list files");
+                }
+            }
         } else {
             self.pending_new_file = false;
             self.create_new_file();
