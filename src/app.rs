@@ -114,6 +114,25 @@ impl App {
         !self.search_query.is_empty()
     }
 
+    /// After cursor movement: clear selection and ensure cursor is visible
+    fn after_cursor_move(&mut self) {
+        self.selection.clear_and_sync(self.cursor.position);
+        self.ensure_cursor_visible();
+    }
+
+    /// Start selection if not already selecting
+    fn start_selection(&mut self) {
+        if self.selection.anchor.is_none() {
+            self.selection.anchor = Some(self.cursor.position);
+        }
+    }
+
+    /// After expanding selection: sync selection cursor and ensure visible
+    fn after_selection_move(&mut self) {
+        self.selection.cursor = self.cursor.position;
+        self.ensure_cursor_visible();
+    }
+
     pub fn update(&mut self) {
         // Update cursor blink
         self.cursor_blink_timer += get_frame_time() as f64;
@@ -208,78 +227,57 @@ impl App {
                 // Cursor movement
                 EditorAction::MoveLeft => {
                     self.cursor.move_left(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveRight => {
                     self.cursor.move_right(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveUp => {
                     self.cursor.move_up(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveDown => {
                     self.cursor.move_down(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveWordLeft => {
                     self.cursor.move_word_left(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveWordRight => {
                     self.cursor.move_word_right(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveToLineStart => {
                     self.cursor.move_to_line_start();
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
                 EditorAction::MoveToLineEnd => {
                     self.cursor.move_to_line_end(&self.buffer);
-                    self.selection.clear_and_sync(self.cursor.position);
-                    self.ensure_cursor_visible();
+                    self.after_cursor_move();
                 }
 
                 // Selection
                 EditorAction::SelectLeft => {
-                    // Set anchor at current position if not already selecting
-                    if self.selection.anchor.is_none() {
-                        self.selection.anchor = Some(self.cursor.position);
-                    }
+                    self.start_selection();
                     self.cursor.move_left(&self.buffer);
-                    self.selection.cursor = self.cursor.position;
-                    self.ensure_cursor_visible();
+                    self.after_selection_move();
                 }
                 EditorAction::SelectRight => {
-                    if self.selection.anchor.is_none() {
-                        self.selection.anchor = Some(self.cursor.position);
-                    }
+                    self.start_selection();
                     self.cursor.move_right(&self.buffer);
-                    self.selection.cursor = self.cursor.position;
-                    self.ensure_cursor_visible();
+                    self.after_selection_move();
                 }
                 EditorAction::SelectUp => {
-                    if self.selection.anchor.is_none() {
-                        self.selection.anchor = Some(self.cursor.position);
-                    }
+                    self.start_selection();
                     self.cursor.move_up(&self.buffer);
-                    self.selection.cursor = self.cursor.position;
-                    self.ensure_cursor_visible();
+                    self.after_selection_move();
                 }
                 EditorAction::SelectDown => {
-                    if self.selection.anchor.is_none() {
-                        self.selection.anchor = Some(self.cursor.position);
-                    }
+                    self.start_selection();
                     self.cursor.move_down(&self.buffer);
-                    self.selection.cursor = self.cursor.position;
-                    self.ensure_cursor_visible();
+                    self.after_selection_move();
                 }
                 EditorAction::SelectAll => {
                     self.selection.anchor = Some(CursorPosition::new(0, 0));
