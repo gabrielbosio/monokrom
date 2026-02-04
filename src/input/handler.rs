@@ -77,7 +77,11 @@ fn should_key_fire(key: KeyCode) -> bool {
     state.time_held += get_frame_time();
 
     // Check threshold
-    let threshold = if state.is_repeating { KEY_REPEAT_RATE } else { KEY_REPEAT_DELAY };
+    let threshold = if state.is_repeating {
+        KEY_REPEAT_RATE
+    } else {
+        KEY_REPEAT_DELAY
+    };
     if state.time_held < threshold {
         return false;
     }
