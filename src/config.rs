@@ -33,4 +33,3 @@ pub const SCROLLBAR_WIDTH: u32 = 8;
 // Editor area (accounting for potential scrollbars)
 pub const EDITOR_TILES_X: u32 = SCREEN_TILES_X - 1; // 31 tiles for text, 1 for scrollbar
 pub const EDITOR_TILES_Y: u32 = SCREEN_TILES_Y - 1; // 29 tiles for text, 1 for scrollbar
-

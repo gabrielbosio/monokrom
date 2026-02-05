@@ -64,7 +64,8 @@ pub enum EditorAction {
 }
 
 /// Check if Cmd (Super) key is pressed (for macOS)
-pub fn is_cmd_pressed() -> bool {
+#[cfg(target_os = "macos")]
+fn is_cmd_pressed() -> bool {
     is_key_down(KeyCode::LeftSuper) || is_key_down(KeyCode::RightSuper)
 }
 
