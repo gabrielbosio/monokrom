@@ -204,314 +204,44 @@ impl App {
 
     fn update_editing(&mut self) {
         if let Some(action) = get_editor_action() {
-            // Reset cursor blink on any action
             self.cursor_visible = true;
             self.cursor_blink_timer = 0.0;
 
             match action {
-                // Text input
-                EditorAction::InsertChar(c) => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::insert_char(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                        c,
-                    );
-                    self.is_modified = true;
-                    self.ensure_cursor_visible();
+                EditorAction::InsertChar(_) | EditorAction::InsertNewline => {
+                    self.handle_text_input(action)
                 }
-                EditorAction::InsertNewline => {
-                    // If in replace mode with an active match, replace and find next
-                    if self.search.is_replacing && self.search.match_pos.is_some() {
-                        self.replace_and_find_next();
-                        return;
-                    }
-                    // If in find mode (not replace) with active search, find next
-                    if self.is_in_search_mode() {
-                        self.find_next();
-                        return;
-                    }
-                    operations::insert_char(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                        '\n',
-                    );
-                    self.is_modified = true;
-                    self.ensure_cursor_visible();
+                EditorAction::MoveLeft
+                | EditorAction::MoveRight
+                | EditorAction::MoveUp
+                | EditorAction::MoveDown
+                | EditorAction::MoveWordLeft
+                | EditorAction::MoveWordRight
+                | EditorAction::MoveToLineStart
+                | EditorAction::MoveToLineEnd => self.handle_movement(action),
+                EditorAction::SelectLeft
+                | EditorAction::SelectRight
+                | EditorAction::SelectUp
+                | EditorAction::SelectDown
+                | EditorAction::SelectAll => self.handle_selection(action),
+                EditorAction::Backspace
+                | EditorAction::Delete
+                | EditorAction::SwapLineUp
+                | EditorAction::SwapLineDown => self.handle_delete(action),
+                EditorAction::Cut | EditorAction::Copy | EditorAction::Paste => {
+                    self.handle_clipboard(action)
                 }
-
-                // Cursor movement
-                EditorAction::MoveLeft => {
-                    self.editor.cursor.move_left(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveRight => {
-                    self.editor.cursor.move_right(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveUp => {
-                    self.editor.cursor.move_up(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveDown => {
-                    self.editor.cursor.move_down(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveWordLeft => {
-                    self.editor.cursor.move_word_left(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveWordRight => {
-                    self.editor.cursor.move_word_right(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveToLineStart => {
-                    self.editor.cursor.move_to_line_start();
-                    self.after_cursor_move();
-                }
-                EditorAction::MoveToLineEnd => {
-                    self.editor.cursor.move_to_line_end(&self.editor.buffer);
-                    self.after_cursor_move();
-                }
-
-                // Selection
-                EditorAction::SelectLeft => {
-                    self.start_selection();
-                    self.editor.cursor.move_left(&self.editor.buffer);
-                    self.after_selection_move();
-                }
-                EditorAction::SelectRight => {
-                    self.start_selection();
-                    self.editor.cursor.move_right(&self.editor.buffer);
-                    self.after_selection_move();
-                }
-                EditorAction::SelectUp => {
-                    self.start_selection();
-                    self.editor.cursor.move_up(&self.editor.buffer);
-                    self.after_selection_move();
-                }
-                EditorAction::SelectDown => {
-                    self.start_selection();
-                    self.editor.cursor.move_down(&self.editor.buffer);
-                    self.after_selection_move();
-                }
-                EditorAction::SelectAll => {
-                    self.editor.selection.anchor = Some(CursorPosition::new(0, 0));
-                    let last_line = self.editor.buffer.line_count().saturating_sub(1);
-                    let last_col = self.editor.buffer.line_len(last_line);
-                    self.editor.cursor.set_position(last_line, last_col);
-                    self.editor.selection.cursor = self.editor.cursor.position;
-                }
-
-                // Editing
-                EditorAction::Backspace => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::delete_before(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                    );
-                    self.is_modified = true;
-                    self.ensure_cursor_visible();
-                }
-                EditorAction::Delete => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::delete_at(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                    );
-                    self.is_modified = true;
-                }
-                EditorAction::SwapLineUp => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::swap_line_up(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                    );
-                    self.is_modified = true;
-                    self.ensure_cursor_visible();
-                }
-                EditorAction::SwapLineDown => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::swap_line_down(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                    );
-                    self.is_modified = true;
-                    self.ensure_cursor_visible();
-                }
-
-                // Clipboard
-                EditorAction::Cut => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    let (text, clipboard_ok) = operations::cut_selection(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                        &mut self.clipboard,
-                    );
-                    if text.is_some() {
-                        self.is_modified = true;
-                        if !clipboard_ok && self.clipboard.is_some() {
-                            self.show_message("Warning: Clipboard error");
-                        }
-                    }
-                }
-                EditorAction::Copy => {
-                    let (text, clipboard_ok) = operations::copy_selection(
-                        &self.editor.buffer,
-                        &self.editor.selection,
-                        &mut self.clipboard,
-                    );
-                    if text.is_some() && !clipboard_ok && self.clipboard.is_some() {
-                        self.show_message("Warning: Clipboard error");
-                    }
-                }
-                EditorAction::Paste => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::paste(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                        &mut self.clipboard,
-                    );
-                    self.is_modified = true;
-                    self.ensure_cursor_visible();
-                }
-
-                // History
-                EditorAction::Undo => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::undo(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                    );
-                    self.ensure_cursor_visible();
-                }
-                EditorAction::Redo => {
-                    if self.is_in_search_mode() {
-                        return;
-                    }
-                    operations::redo(
-                        &mut self.editor.buffer,
-                        &mut self.editor.cursor,
-                        &mut self.editor.selection,
-                        &mut self.editor.history,
-                    );
-                    self.ensure_cursor_visible();
-                }
-
-                // Scrolling
-                EditorAction::ScrollUp => {
-                    if self.view.scroll_y > 0 {
-                        self.view.scroll_y -= 1;
-                    }
-                }
-                EditorAction::ScrollDown => {
-                    let max_scroll = self
-                        .editor
-                        .buffer
-                        .line_count()
-                        .saturating_sub(self.visible_lines());
-                    if self.view.scroll_y < max_scroll {
-                        self.view.scroll_y += 1;
-                    }
-                }
-                EditorAction::ScrollLeft => {
-                    if self.view.scroll_x > 0 {
-                        self.view.scroll_x -= 1;
-                    }
-                }
-                EditorAction::ScrollRight => {
-                    let max_scroll = self
-                        .editor
-                        .buffer
-                        .max_line_width()
-                        .saturating_sub(self.visible_cols());
-                    if self.view.scroll_x < max_scroll {
-                        self.view.scroll_x += 1;
-                    }
-                }
-
-                // File operations
-                EditorAction::Save => {
-                    if self.current_filename.is_some() {
-                        self.save_current_file();
-                    } else {
-                        self.mode = AppMode::SaveDialog;
-                        self.input_dialog.show("Save as:");
-                    }
-                }
-                EditorAction::Open => {
-                    if self.is_modified {
-                        self.pending_action = PendingAction::OpenFile;
-                        self.mode = AppMode::CloseConfirm;
-                        self.confirm_dialog.show("Save changes?");
-                    } else {
-                        match filesystem::list_files() {
-                            Ok(files) => {
-                                self.mode = AppMode::OpenPicker;
-                                self.file_picker.show(files);
-                            }
-                            Err(_) => {
-                                self.show_message("Error: Cannot list files");
-                            }
-                        }
-                    }
-                }
-                EditorAction::New => {
-                    if self.is_modified {
-                        self.mode = AppMode::CloseConfirm;
-                        self.confirm_dialog.show("Save changes?");
-                    } else {
-                        self.create_new_file();
-                    }
-                }
-
-                EditorAction::Find => {
-                    self.search.is_replacing = false;
-                    self.mode = AppMode::FindDialog;
-                    self.input_dialog.show("Find:");
-                }
-                EditorAction::Replace => {
-                    self.search.is_replacing = true;
-                    self.mode = AppMode::FindDialog;
-                    self.input_dialog.show("Find:");
-                }
-
+                EditorAction::Undo | EditorAction::Redo => self.handle_history(action),
+                EditorAction::ScrollUp
+                | EditorAction::ScrollDown
+                | EditorAction::ScrollLeft
+                | EditorAction::ScrollRight => self.handle_scroll(action),
+                EditorAction::Save
+                | EditorAction::Open
+                | EditorAction::New
+                | EditorAction::Find
+                | EditorAction::Replace => self.handle_file_action(action),
                 EditorAction::DialogCancel => {
-                    // Escape pressed - clear search mode if active
                     if !self.search.query.is_empty() {
                         self.search.query.clear();
                         self.search.replace_text.clear();
@@ -520,9 +250,272 @@ impl App {
                         self.editor.selection.clear();
                     }
                 }
-
                 _ => {}
             }
+        }
+    }
+
+    fn handle_text_input(&mut self, action: EditorAction) {
+        match action {
+            EditorAction::InsertChar(c) => {
+                if self.is_in_search_mode() {
+                    return;
+                }
+                operations::insert_char(
+                    &mut self.editor.buffer,
+                    &mut self.editor.cursor,
+                    &mut self.editor.selection,
+                    &mut self.editor.history,
+                    c,
+                );
+                self.is_modified = true;
+                self.ensure_cursor_visible();
+            }
+            EditorAction::InsertNewline => {
+                if self.search.is_replacing && self.search.match_pos.is_some() {
+                    self.replace_and_find_next();
+                    return;
+                }
+                if self.is_in_search_mode() {
+                    self.find_next();
+                    return;
+                }
+                operations::insert_char(
+                    &mut self.editor.buffer,
+                    &mut self.editor.cursor,
+                    &mut self.editor.selection,
+                    &mut self.editor.history,
+                    '\n',
+                );
+                self.is_modified = true;
+                self.ensure_cursor_visible();
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_movement(&mut self, action: EditorAction) {
+        match action {
+            EditorAction::MoveLeft => self.editor.cursor.move_left(&self.editor.buffer),
+            EditorAction::MoveRight => self.editor.cursor.move_right(&self.editor.buffer),
+            EditorAction::MoveUp => self.editor.cursor.move_up(&self.editor.buffer),
+            EditorAction::MoveDown => self.editor.cursor.move_down(&self.editor.buffer),
+            EditorAction::MoveWordLeft => self.editor.cursor.move_word_left(&self.editor.buffer),
+            EditorAction::MoveWordRight => self.editor.cursor.move_word_right(&self.editor.buffer),
+            EditorAction::MoveToLineStart => self.editor.cursor.move_to_line_start(),
+            EditorAction::MoveToLineEnd => self.editor.cursor.move_to_line_end(&self.editor.buffer),
+            _ => return,
+        }
+        self.after_cursor_move();
+    }
+
+    fn handle_selection(&mut self, action: EditorAction) {
+        if action == EditorAction::SelectAll {
+            self.editor.selection.anchor = Some(CursorPosition::new(0, 0));
+            let last_line = self.editor.buffer.line_count().saturating_sub(1);
+            let last_col = self.editor.buffer.line_len(last_line);
+            self.editor.cursor.set_position(last_line, last_col);
+            self.editor.selection.cursor = self.editor.cursor.position;
+            return;
+        }
+        self.start_selection();
+        match action {
+            EditorAction::SelectLeft => self.editor.cursor.move_left(&self.editor.buffer),
+            EditorAction::SelectRight => self.editor.cursor.move_right(&self.editor.buffer),
+            EditorAction::SelectUp => self.editor.cursor.move_up(&self.editor.buffer),
+            EditorAction::SelectDown => self.editor.cursor.move_down(&self.editor.buffer),
+            _ => return,
+        }
+        self.after_selection_move();
+    }
+
+    fn handle_delete(&mut self, action: EditorAction) {
+        if self.is_in_search_mode() {
+            return;
+        }
+        match action {
+            EditorAction::Backspace => operations::delete_before(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::Delete => operations::delete_at(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::SwapLineUp => operations::swap_line_up(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::SwapLineDown => operations::swap_line_down(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            _ => return,
+        }
+        self.is_modified = true;
+        self.ensure_cursor_visible();
+    }
+
+    fn handle_clipboard(&mut self, action: EditorAction) {
+        match action {
+            EditorAction::Cut => {
+                if self.is_in_search_mode() {
+                    return;
+                }
+                let (text, clipboard_ok) = operations::cut_selection(
+                    &mut self.editor.buffer,
+                    &mut self.editor.cursor,
+                    &mut self.editor.selection,
+                    &mut self.editor.history,
+                    &mut self.clipboard,
+                );
+                if text.is_some() {
+                    self.is_modified = true;
+                    if !clipboard_ok && self.clipboard.is_some() {
+                        self.show_message("Warning: Clipboard error");
+                    }
+                }
+            }
+            EditorAction::Copy => {
+                let (text, clipboard_ok) = operations::copy_selection(
+                    &self.editor.buffer,
+                    &self.editor.selection,
+                    &mut self.clipboard,
+                );
+                if text.is_some() && !clipboard_ok && self.clipboard.is_some() {
+                    self.show_message("Warning: Clipboard error");
+                }
+            }
+            EditorAction::Paste => {
+                if self.is_in_search_mode() {
+                    return;
+                }
+                operations::paste(
+                    &mut self.editor.buffer,
+                    &mut self.editor.cursor,
+                    &mut self.editor.selection,
+                    &mut self.editor.history,
+                    &mut self.clipboard,
+                );
+                self.is_modified = true;
+                self.ensure_cursor_visible();
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_history(&mut self, action: EditorAction) {
+        if self.is_in_search_mode() {
+            return;
+        }
+        match action {
+            EditorAction::Undo => operations::undo(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::Redo => operations::redo(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            _ => return,
+        }
+        self.ensure_cursor_visible();
+    }
+
+    fn handle_scroll(&mut self, action: EditorAction) {
+        match action {
+            EditorAction::ScrollUp => {
+                if self.view.scroll_y > 0 {
+                    self.view.scroll_y -= 1;
+                }
+            }
+            EditorAction::ScrollDown => {
+                let max = self
+                    .editor
+                    .buffer
+                    .line_count()
+                    .saturating_sub(self.visible_lines());
+                if self.view.scroll_y < max {
+                    self.view.scroll_y += 1;
+                }
+            }
+            EditorAction::ScrollLeft => {
+                if self.view.scroll_x > 0 {
+                    self.view.scroll_x -= 1;
+                }
+            }
+            EditorAction::ScrollRight => {
+                let max = self
+                    .editor
+                    .buffer
+                    .max_line_width()
+                    .saturating_sub(self.visible_cols());
+                if self.view.scroll_x < max {
+                    self.view.scroll_x += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_file_action(&mut self, action: EditorAction) {
+        match action {
+            EditorAction::Save => {
+                if self.current_filename.is_some() {
+                    self.save_current_file();
+                } else {
+                    self.mode = AppMode::SaveDialog;
+                    self.input_dialog.show("Save as:");
+                }
+            }
+            EditorAction::Open => {
+                if self.is_modified {
+                    self.pending_action = PendingAction::OpenFile;
+                    self.mode = AppMode::CloseConfirm;
+                    self.confirm_dialog.show("Save changes?");
+                } else {
+                    match filesystem::list_files() {
+                        Ok(files) => {
+                            self.mode = AppMode::OpenPicker;
+                            self.file_picker.show(files);
+                        }
+                        Err(_) => {
+                            self.show_message("Error: Cannot list files");
+                        }
+                    }
+                }
+            }
+            EditorAction::New => {
+                if self.is_modified {
+                    self.mode = AppMode::CloseConfirm;
+                    self.confirm_dialog.show("Save changes?");
+                } else {
+                    self.create_new_file();
+                }
+            }
+            EditorAction::Find => {
+                self.search.is_replacing = false;
+                self.mode = AppMode::FindDialog;
+                self.input_dialog.show("Find:");
+            }
+            EditorAction::Replace => {
+                self.search.is_replacing = true;
+                self.mode = AppMode::FindDialog;
+                self.input_dialog.show("Find:");
+            }
+            _ => {}
         }
     }
 
