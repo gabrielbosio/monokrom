@@ -153,7 +153,7 @@ impl BitmapFont {
     }
 
     /// Get the source rectangle for a character in the font texture
-    fn get_char_rect(&self, c: char) -> Option<Rect> {
+    fn get_char_rect(c: char) -> Option<Rect> {
         let code = c as u32;
         if !(32..=127).contains(&code) {
             return None;
@@ -168,7 +168,7 @@ impl BitmapFont {
 
     /// Draw a single character at the given position with scaling
     pub fn draw_char_scaled(&self, c: char, x: f32, y: f32, scale: f32, color: Color) {
-        if let Some(src_rect) = self.get_char_rect(c) {
+        if let Some(src_rect) = Self::get_char_rect(c) {
             draw_texture_ex(
                 &self.texture,
                 x,

@@ -1,6 +1,10 @@
 use macroquad::prelude::*;
 
-use crate::config::*;
+use crate::config::{
+    COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X, EDITOR_TILES_Y, SCALE,
+    SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH, TILE_HEIGHT,
+    TILE_WIDTH,
+};
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
 use crate::input::{get_editor_action, EditorAction};
@@ -8,6 +12,33 @@ use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
 use crate::ui::{
     ConfirmDialog, DialogResult, FilePicker, FilePickerResult, InputDialog, MessageDialog,
 };
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum PendingAction {
+    #[default]
+    None,
+    OpenFile,
+}
+
+struct EditorState {
+    buffer: TextBuffer,
+    cursor: Cursor,
+    selection: Selection,
+    history: History,
+}
+
+struct ViewState {
+    scroll_x: usize,
+    scroll_y: usize,
+    scrollbar_state: ScrollbarState,
+}
+
+struct SearchState {
+    query: String,
+    replace_text: String,
+    match_pos: Option<usize>,
+    is_replacing: bool,
+}
 
 /// Application state modes
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,45 +60,31 @@ pub enum AppMode {
 }
 
 pub struct App {
-    // Editor state
-    pub buffer: TextBuffer,
-    pub cursor: Cursor,
-    pub selection: Selection,
-    pub history: History,
-
-    // Viewport
-    pub scroll_x: usize,
-    pub scroll_y: usize,
-    pub scrollbar_state: ScrollbarState,
+    editor: EditorState,
+    view: ViewState,
+    search: SearchState,
 
     // File state
-    pub current_filename: Option<String>,
-    pub is_modified: bool,
+    current_filename: Option<String>,
+    is_modified: bool,
 
     // UI state
-    pub mode: AppMode,
-    pub input_dialog: InputDialog,
-    pub confirm_dialog: ConfirmDialog,
-    pub message_dialog: MessageDialog,
-    pub file_picker: FilePicker,
-    pub pending_new_file: bool, // Create new file after save dialog completes
-    pub pending_open_file: bool, // Open file picker after save dialog completes
-
-    // Search state
-    pub search_query: String,
-    pub replace_text: String,
-    pub current_match_pos: Option<usize>, // Character index of current match
-    pub is_replacing: bool,               // True if in replace mode (vs find mode)
+    mode: AppMode,
+    input_dialog: InputDialog,
+    confirm_dialog: ConfirmDialog,
+    message_dialog: MessageDialog,
+    file_picker: FilePicker,
+    pending_action: PendingAction,
 
     // Clipboard
-    pub clipboard: Option<arboard::Clipboard>,
+    clipboard: Option<arboard::Clipboard>,
 
     // Cursor blink
-    pub cursor_blink_timer: f64,
-    pub cursor_visible: bool,
+    cursor_blink_timer: f64,
+    cursor_visible: bool,
 
     // Rendering
-    pub font: BitmapFont,
+    font: BitmapFont,
 }
 
 impl App {
@@ -76,14 +93,23 @@ impl App {
         let clipboard = arboard::Clipboard::new().ok();
 
         Self {
-            buffer: TextBuffer::new(),
-            cursor: Cursor::new(),
-            selection: Selection::new(),
-            history: History::new(),
-
-            scroll_x: 0,
-            scroll_y: 0,
-            scrollbar_state: ScrollbarState::default(),
+            editor: EditorState {
+                buffer: TextBuffer::new(),
+                cursor: Cursor::new(),
+                selection: Selection::new(),
+                history: History::new(),
+            },
+            view: ViewState {
+                scroll_x: 0,
+                scroll_y: 0,
+                scrollbar_state: ScrollbarState::default(),
+            },
+            search: SearchState {
+                query: String::new(),
+                replace_text: String::new(),
+                match_pos: None,
+                is_replacing: false,
+            },
 
             current_filename: None,
             is_modified: false,
@@ -93,13 +119,7 @@ impl App {
             confirm_dialog: ConfirmDialog::new(),
             message_dialog: MessageDialog::new(),
             file_picker: FilePicker::new(),
-            pending_new_file: false,
-            pending_open_file: false,
-
-            search_query: String::new(),
-            replace_text: String::new(),
-            current_match_pos: None,
-            is_replacing: false,
+            pending_action: PendingAction::None,
 
             clipboard,
 
@@ -111,25 +131,27 @@ impl App {
     }
 
     fn is_in_search_mode(&self) -> bool {
-        !self.search_query.is_empty()
+        !self.search.query.is_empty()
     }
 
     /// After cursor movement: clear selection and ensure cursor is visible
     fn after_cursor_move(&mut self) {
-        self.selection.clear_and_sync(self.cursor.position);
+        self.editor
+            .selection
+            .clear_and_sync(self.editor.cursor.position);
         self.ensure_cursor_visible();
     }
 
     /// Start selection if not already selecting
     fn start_selection(&mut self) {
-        if self.selection.anchor.is_none() {
-            self.selection.anchor = Some(self.cursor.position);
+        if self.editor.selection.anchor.is_none() {
+            self.editor.selection.anchor = Some(self.editor.cursor.position);
         }
     }
 
     /// After expanding selection: sync selection cursor and ensure visible
     fn after_selection_move(&mut self) {
-        self.selection.cursor = self.cursor.position;
+        self.editor.selection.cursor = self.editor.cursor.position;
         self.ensure_cursor_visible();
     }
 
@@ -154,18 +176,18 @@ impl App {
         // Update scrollbar state
         let visible_cols = self.visible_cols();
         let visible_lines = self.visible_lines();
-        self.scrollbar_state.update(
-            self.buffer.line_count().max(1),
+        self.view.scrollbar_state.update(
+            self.editor.buffer.line_count().max(1),
             visible_lines,
-            self.scroll_y,
-            self.buffer.max_line_width(),
+            self.view.scroll_y,
+            self.editor.buffer.max_line_width(),
             visible_cols,
-            self.scroll_x,
+            self.view.scroll_x,
         );
     }
 
     fn visible_cols(&self) -> usize {
-        (if self.scrollbar_state.vertical_visible {
+        (if self.view.scrollbar_state.vertical_visible {
             EDITOR_TILES_X
         } else {
             SCREEN_TILES_X
@@ -173,7 +195,7 @@ impl App {
     }
 
     fn visible_lines(&self) -> usize {
-        (if self.scrollbar_state.horizontal_visible {
+        (if self.view.scrollbar_state.horizontal_visible {
             EDITOR_TILES_Y
         } else {
             SCREEN_TILES_Y
@@ -193,10 +215,10 @@ impl App {
                         return;
                     }
                     operations::insert_char(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                         c,
                     );
                     self.is_modified = true;
@@ -204,7 +226,7 @@ impl App {
                 }
                 EditorAction::InsertNewline => {
                     // If in replace mode with an active match, replace and find next
-                    if self.is_replacing && self.current_match_pos.is_some() {
+                    if self.search.is_replacing && self.search.match_pos.is_some() {
                         self.replace_and_find_next();
                         return;
                     }
@@ -214,10 +236,10 @@ impl App {
                         return;
                     }
                     operations::insert_char(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                         '\n',
                     );
                     self.is_modified = true;
@@ -226,65 +248,65 @@ impl App {
 
                 // Cursor movement
                 EditorAction::MoveLeft => {
-                    self.cursor.move_left(&self.buffer);
+                    self.editor.cursor.move_left(&self.editor.buffer);
                     self.after_cursor_move();
                 }
                 EditorAction::MoveRight => {
-                    self.cursor.move_right(&self.buffer);
+                    self.editor.cursor.move_right(&self.editor.buffer);
                     self.after_cursor_move();
                 }
                 EditorAction::MoveUp => {
-                    self.cursor.move_up(&self.buffer);
+                    self.editor.cursor.move_up(&self.editor.buffer);
                     self.after_cursor_move();
                 }
                 EditorAction::MoveDown => {
-                    self.cursor.move_down(&self.buffer);
+                    self.editor.cursor.move_down(&self.editor.buffer);
                     self.after_cursor_move();
                 }
                 EditorAction::MoveWordLeft => {
-                    self.cursor.move_word_left(&self.buffer);
+                    self.editor.cursor.move_word_left(&self.editor.buffer);
                     self.after_cursor_move();
                 }
                 EditorAction::MoveWordRight => {
-                    self.cursor.move_word_right(&self.buffer);
+                    self.editor.cursor.move_word_right(&self.editor.buffer);
                     self.after_cursor_move();
                 }
                 EditorAction::MoveToLineStart => {
-                    self.cursor.move_to_line_start();
+                    self.editor.cursor.move_to_line_start();
                     self.after_cursor_move();
                 }
                 EditorAction::MoveToLineEnd => {
-                    self.cursor.move_to_line_end(&self.buffer);
+                    self.editor.cursor.move_to_line_end(&self.editor.buffer);
                     self.after_cursor_move();
                 }
 
                 // Selection
                 EditorAction::SelectLeft => {
                     self.start_selection();
-                    self.cursor.move_left(&self.buffer);
+                    self.editor.cursor.move_left(&self.editor.buffer);
                     self.after_selection_move();
                 }
                 EditorAction::SelectRight => {
                     self.start_selection();
-                    self.cursor.move_right(&self.buffer);
+                    self.editor.cursor.move_right(&self.editor.buffer);
                     self.after_selection_move();
                 }
                 EditorAction::SelectUp => {
                     self.start_selection();
-                    self.cursor.move_up(&self.buffer);
+                    self.editor.cursor.move_up(&self.editor.buffer);
                     self.after_selection_move();
                 }
                 EditorAction::SelectDown => {
                     self.start_selection();
-                    self.cursor.move_down(&self.buffer);
+                    self.editor.cursor.move_down(&self.editor.buffer);
                     self.after_selection_move();
                 }
                 EditorAction::SelectAll => {
-                    self.selection.anchor = Some(CursorPosition::new(0, 0));
-                    let last_line = self.buffer.line_count().saturating_sub(1);
-                    let last_col = self.buffer.line_len(last_line);
-                    self.cursor.set_position(last_line, last_col);
-                    self.selection.cursor = self.cursor.position;
+                    self.editor.selection.anchor = Some(CursorPosition::new(0, 0));
+                    let last_line = self.editor.buffer.line_count().saturating_sub(1);
+                    let last_col = self.editor.buffer.line_len(last_line);
+                    self.editor.cursor.set_position(last_line, last_col);
+                    self.editor.selection.cursor = self.editor.cursor.position;
                 }
 
                 // Editing
@@ -293,10 +315,10 @@ impl App {
                         return;
                     }
                     operations::delete_before(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                     );
                     self.is_modified = true;
                     self.ensure_cursor_visible();
@@ -306,10 +328,10 @@ impl App {
                         return;
                     }
                     operations::delete_at(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                     );
                     self.is_modified = true;
                 }
@@ -318,10 +340,10 @@ impl App {
                         return;
                     }
                     operations::swap_line_up(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                     );
                     self.is_modified = true;
                     self.ensure_cursor_visible();
@@ -331,10 +353,10 @@ impl App {
                         return;
                     }
                     operations::swap_line_down(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                     );
                     self.is_modified = true;
                     self.ensure_cursor_visible();
@@ -346,10 +368,10 @@ impl App {
                         return;
                     }
                     let (text, clipboard_ok) = operations::cut_selection(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                         &mut self.clipboard,
                     );
                     if text.is_some() {
@@ -361,8 +383,8 @@ impl App {
                 }
                 EditorAction::Copy => {
                     let (text, clipboard_ok) = operations::copy_selection(
-                        &self.buffer,
-                        &self.selection,
+                        &self.editor.buffer,
+                        &self.editor.selection,
                         &mut self.clipboard,
                     );
                     if text.is_some() && !clipboard_ok && self.clipboard.is_some() {
@@ -374,10 +396,10 @@ impl App {
                         return;
                     }
                     operations::paste(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                         &mut self.clipboard,
                     );
                     self.is_modified = true;
@@ -390,10 +412,10 @@ impl App {
                         return;
                     }
                     operations::undo(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                     );
                     self.ensure_cursor_visible();
                 }
@@ -402,41 +424,43 @@ impl App {
                         return;
                     }
                     operations::redo(
-                        &mut self.buffer,
-                        &mut self.cursor,
-                        &mut self.selection,
-                        &mut self.history,
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
                     );
                     self.ensure_cursor_visible();
                 }
 
                 // Scrolling
                 EditorAction::ScrollUp => {
-                    if self.scroll_y > 0 {
-                        self.scroll_y -= 1;
+                    if self.view.scroll_y > 0 {
+                        self.view.scroll_y -= 1;
                     }
                 }
                 EditorAction::ScrollDown => {
                     let max_scroll = self
+                        .editor
                         .buffer
                         .line_count()
                         .saturating_sub(self.visible_lines());
-                    if self.scroll_y < max_scroll {
-                        self.scroll_y += 1;
+                    if self.view.scroll_y < max_scroll {
+                        self.view.scroll_y += 1;
                     }
                 }
                 EditorAction::ScrollLeft => {
-                    if self.scroll_x > 0 {
-                        self.scroll_x -= 1;
+                    if self.view.scroll_x > 0 {
+                        self.view.scroll_x -= 1;
                     }
                 }
                 EditorAction::ScrollRight => {
                     let max_scroll = self
+                        .editor
                         .buffer
                         .max_line_width()
                         .saturating_sub(self.visible_cols());
-                    if self.scroll_x < max_scroll {
-                        self.scroll_x += 1;
+                    if self.view.scroll_x < max_scroll {
+                        self.view.scroll_x += 1;
                     }
                 }
 
@@ -451,7 +475,7 @@ impl App {
                 }
                 EditorAction::Open => {
                     if self.is_modified {
-                        self.pending_open_file = true;
+                        self.pending_action = PendingAction::OpenFile;
                         self.mode = AppMode::CloseConfirm;
                         self.confirm_dialog.show("Save changes?");
                     } else {
@@ -476,24 +500,24 @@ impl App {
                 }
 
                 EditorAction::Find => {
-                    self.is_replacing = false;
+                    self.search.is_replacing = false;
                     self.mode = AppMode::FindDialog;
                     self.input_dialog.show("Find:");
                 }
                 EditorAction::Replace => {
-                    self.is_replacing = true;
+                    self.search.is_replacing = true;
                     self.mode = AppMode::FindDialog;
                     self.input_dialog.show("Find:");
                 }
 
                 EditorAction::DialogCancel => {
                     // Escape pressed - clear search mode if active
-                    if !self.search_query.is_empty() {
-                        self.search_query.clear();
-                        self.replace_text.clear();
-                        self.current_match_pos = None;
-                        self.is_replacing = false;
-                        self.selection.clear();
+                    if !self.search.query.is_empty() {
+                        self.search.query.clear();
+                        self.search.replace_text.clear();
+                        self.search.match_pos = None;
+                        self.search.is_replacing = false;
+                        self.editor.selection.clear();
                     }
                 }
 
@@ -517,7 +541,7 @@ impl App {
                     self.current_filename = Some(filename);
                     if self.save_current_file() {
                         // Check if we have a pending action after saving
-                        if self.pending_new_file || self.pending_open_file {
+                        if self.pending_action != PendingAction::None {
                             self.after_close_confirm_action();
                             return;
                         }
@@ -527,8 +551,7 @@ impl App {
                     }
                 }
                 DialogResult::Reject | DialogResult::Cancel => {
-                    self.pending_new_file = false;
-                    self.pending_open_file = false;
+                    self.pending_action = PendingAction::None;
                 }
             }
             self.mode = AppMode::Editing;
@@ -599,8 +622,7 @@ impl App {
                 }
                 DialogResult::Cancel => {
                     // User pressed Escape - cancel the prompt, go back to editing
-                    self.pending_new_file = false;
-                    self.pending_open_file = false;
+                    self.pending_action = PendingAction::None;
                 }
             }
             self.mode = AppMode::Editing;
@@ -608,10 +630,10 @@ impl App {
     }
 
     fn after_close_confirm_action(&mut self) {
-        if self.pending_open_file {
-            self.pending_open_file = false;
-            self.pending_new_file = false;
-            match filesystem::list_files() {
+        let action = self.pending_action;
+        self.pending_action = PendingAction::None;
+        match action {
+            PendingAction::OpenFile => match filesystem::list_files() {
                 Ok(files) => {
                     self.mode = AppMode::OpenPicker;
                     self.file_picker.show(files);
@@ -619,10 +641,10 @@ impl App {
                 Err(_) => {
                     self.show_message("Error: Cannot list files");
                 }
+            },
+            _ => {
+                self.create_new_file();
             }
-        } else {
-            self.pending_new_file = false;
-            self.create_new_file();
         }
     }
 
@@ -630,8 +652,8 @@ impl App {
         if let Some(result) = self.input_dialog.update() {
             match result {
                 DialogResult::Confirm(query) => {
-                    self.search_query = query;
-                    if self.is_replacing {
+                    self.search.query = query;
+                    if self.search.is_replacing {
                         // Move to replace dialog to get replacement text
                         self.mode = AppMode::ReplaceDialog;
                         self.input_dialog.show("Replace with:");
@@ -652,7 +674,7 @@ impl App {
         if let Some(result) = self.input_dialog.update() {
             match result {
                 DialogResult::Confirm(replacement) => {
-                    self.replace_text = replacement;
+                    self.search.replace_text = replacement;
                     self.mode = AppMode::Editing;
                     // Find first match
                     self.find_next();
@@ -676,16 +698,16 @@ impl App {
     }
 
     fn find_next(&mut self) {
-        if self.search_query.is_empty() {
+        if self.search.query.is_empty() {
             return;
         }
 
-        let text = self.buffer.to_string();
-        let query = &self.search_query;
+        let text = self.editor.buffer.to_string();
+        let query = &self.search.query;
 
         // Start searching from current cursor position
-        let cursor_idx = self.cursor.char_index(&self.buffer);
-        let search_start = if self.current_match_pos == Some(cursor_idx) {
+        let cursor_idx = self.editor.cursor.char_index(&self.editor.buffer);
+        let search_start = if self.search.match_pos == Some(cursor_idx) {
             // If we're at a match, search from after it
             cursor_idx + query.len()
         } else {
@@ -706,66 +728,61 @@ impl App {
         }
 
         // No match found
-        self.current_match_pos = None;
+        self.search.match_pos = None;
     }
 
     fn select_match(&mut self, char_idx: usize, len: usize) {
-        self.current_match_pos = Some(char_idx);
+        self.search.match_pos = Some(char_idx);
 
         // Move cursor to start of match
-        let (line, col) = self.buffer.char_to_line_col(char_idx);
-        self.cursor.set_position(line, col);
+        let (line, col) = self.editor.buffer.char_to_line_col(char_idx);
+        self.editor.cursor.set_position(line, col);
 
         // Select the match
-        self.selection.start(self.cursor.position);
+        self.editor.selection.start(self.editor.cursor.position);
         let end_idx = char_idx + len;
-        let (end_line, end_col) = self.buffer.char_to_line_col(end_idx);
-        self.selection.cursor = CursorPosition {
+        let (end_line, end_col) = self.editor.buffer.char_to_line_col(end_idx);
+        self.editor.selection.cursor = CursorPosition {
             line: end_line,
             col: end_col,
         };
 
         self.ensure_cursor_visible();
-
-        // If in replace mode and Enter is pressed, replace and find next
-        if self.is_replacing {
-            self.try_replace_current();
-        }
-    }
-
-    fn try_replace_current(&mut self) {
-        // This is called after finding a match in replace mode
-        // The actual replacement happens when Enter is pressed again
-        // For now, just highlight the match - replacement happens on next Enter
     }
 
     fn replace_and_find_next(&mut self) {
-        let Some(match_pos) = self.current_match_pos else {
+        let Some(match_pos) = self.search.match_pos else {
             return;
         };
-        if self.search_query.is_empty() {
+        if self.search.query.is_empty() {
             return;
         }
 
-        let query_len = self.search_query.len();
+        let query_len = self.search.query.len();
 
         // Save for undo
-        self.history.push(&self.buffer, self.cursor.position);
+        self.editor
+            .history
+            .push(&self.editor.buffer, self.editor.cursor.position);
 
         // Delete the matched text
-        self.buffer.delete_range(match_pos, match_pos + query_len);
+        self.editor
+            .buffer
+            .delete_range(match_pos, match_pos + query_len);
 
         // Insert replacement
-        self.buffer.insert(match_pos, &self.replace_text);
+        self.editor
+            .buffer
+            .insert(match_pos, &self.search.replace_text);
 
         // Update cursor position
-        let new_pos = match_pos + self.replace_text.len();
-        let (line, col) = self.buffer.char_to_line_col(new_pos);
-        self.cursor.set_position(line, col);
-        self.selection.clear();
+        let new_pos = match_pos + self.search.replace_text.len();
+        let (line, col) = self.editor.buffer.char_to_line_col(new_pos);
+        self.editor.cursor.set_position(line, col);
+        self.editor.selection.clear();
 
         self.is_modified = true;
-        self.current_match_pos = None;
+        self.search.match_pos = None;
 
         // Find next match
         self.find_next();
@@ -776,23 +793,23 @@ impl App {
         let visible_lines = self.visible_lines();
 
         // Vertical scrolling
-        if self.cursor.line() < self.scroll_y {
-            self.scroll_y = self.cursor.line();
-        } else if self.cursor.line() >= self.scroll_y + visible_lines {
-            self.scroll_y = self.cursor.line() - visible_lines + 1;
+        if self.editor.cursor.line() < self.view.scroll_y {
+            self.view.scroll_y = self.editor.cursor.line();
+        } else if self.editor.cursor.line() >= self.view.scroll_y + visible_lines {
+            self.view.scroll_y = self.editor.cursor.line() - visible_lines + 1;
         }
 
         // Horizontal scrolling
-        if self.cursor.col() < self.scroll_x {
-            self.scroll_x = self.cursor.col();
-        } else if self.cursor.col() >= self.scroll_x + visible_cols {
-            self.scroll_x = self.cursor.col() - visible_cols + 1;
+        if self.editor.cursor.col() < self.view.scroll_x {
+            self.view.scroll_x = self.editor.cursor.col();
+        } else if self.editor.cursor.col() >= self.view.scroll_x + visible_cols {
+            self.view.scroll_x = self.editor.cursor.col() - visible_cols + 1;
         }
     }
 
     fn save_current_file(&mut self) -> bool {
         if let Some(ref filename) = self.current_filename {
-            let content = self.buffer.to_string();
+            let content = self.editor.buffer.to_string();
             match filesystem::write_file(filename, &content) {
                 Ok(()) => {
                     self.is_modified = false;
@@ -808,17 +825,21 @@ impl App {
         }
     }
 
+    fn reset_editor(&mut self, buffer: TextBuffer, filename: Option<String>) {
+        self.editor.buffer = buffer;
+        self.editor.cursor = Cursor::new();
+        self.editor.selection = Selection::new();
+        self.editor.history.clear();
+        self.view.scroll_x = 0;
+        self.view.scroll_y = 0;
+        self.current_filename = filename;
+        self.is_modified = false;
+    }
+
     fn open_file(&mut self, filename: &str) {
         match filesystem::read_file(filename) {
             Ok(content) => {
-                self.buffer = TextBuffer::from_str(&content);
-                self.cursor = Cursor::new();
-                self.selection = Selection::new();
-                self.history.clear();
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                self.current_filename = Some(filename.to_string());
-                self.is_modified = false;
+                self.reset_editor(TextBuffer::from_str(&content), Some(filename.to_string()));
             }
             Err(_) => {
                 self.show_message("Error: Could not open file");
@@ -827,14 +848,7 @@ impl App {
     }
 
     fn create_new_file(&mut self) {
-        self.buffer = TextBuffer::new();
-        self.cursor = Cursor::new();
-        self.selection = Selection::new();
-        self.history.clear();
-        self.scroll_x = 0;
-        self.scroll_y = 0;
-        self.current_filename = None;
-        self.is_modified = false;
+        self.reset_editor(TextBuffer::new(), None);
     }
 
     pub fn draw(&self) {
@@ -860,7 +874,7 @@ impl App {
             AppMode::Message => self.message_dialog.draw_scaled(&helpers),
             AppMode::Editing => {
                 // Draw search hint if we have an active search
-                if !self.search_query.is_empty() {
+                if !self.search.query.is_empty() {
                     self.draw_search_hint();
                 }
             }
@@ -869,7 +883,7 @@ impl App {
 
     fn draw_search_hint(&self) {
         // Draw hint at bottom of screen for active search
-        let hint = if self.is_replacing {
+        let hint = if self.search.is_replacing {
             "Enter:Replace+Next  Esc:Done"
         } else {
             "Enter:Find Next  Esc:Done"
@@ -878,7 +892,7 @@ impl App {
         let hint_y = (SCREEN_HEIGHT - TILE_HEIGHT * 2) as f32;
 
         // Draw background
-        self.draw_scaled_rect(
+        draw_scaled_rect(
             0.0,
             hint_y - 2.0,
             SCREEN_WIDTH as f32,
@@ -895,11 +909,6 @@ impl App {
                 COLOR_GRAY,
             );
         }
-    }
-
-    fn draw_scaled_rect(&self, x: f32, y: f32, w: f32, h: f32, color: Color) {
-        let scale = SCALE as f32;
-        draw_rectangle(x * scale, y * scale, w * scale, h * scale, color);
     }
 
     fn draw_scaled_char(&self, c: char, x: f32, y: f32, color: Color) {
@@ -920,20 +929,23 @@ impl App {
 
         // Draw each visible line
         for screen_line in 0..visible_lines {
-            let buffer_line = self.scroll_y + screen_line;
-            if buffer_line >= self.buffer.line_count() {
+            let buffer_line = self.view.scroll_y + screen_line;
+            if buffer_line >= self.editor.buffer.line_count() {
                 break;
             }
 
-            let line_text = self.buffer.get_line(buffer_line);
+            let line_text = self.editor.buffer.get_line(buffer_line);
             let y = (screen_line * TILE_HEIGHT as usize) as f32;
 
             // Get selection range for this line if any
-            let selection_range = self.selection.get_line_selection(buffer_line, &self.buffer);
+            let selection_range = self
+                .editor
+                .selection
+                .get_line_selection(buffer_line, &self.editor.buffer);
 
             // Draw each visible character
             for screen_col in 0..visible_cols {
-                let buffer_col = self.scroll_x + screen_col;
+                let buffer_col = self.view.scroll_x + screen_col;
                 let x = (screen_col * TILE_WIDTH as usize) as f32;
 
                 let c = line_text.chars().nth(buffer_col).unwrap_or(' ');
@@ -945,7 +957,7 @@ impl App {
 
                 if is_selected {
                     // Draw selection background
-                    self.draw_scaled_rect(x, y, TILE_WIDTH as f32, TILE_HEIGHT as f32, COLOR_WHITE);
+                    draw_scaled_rect(x, y, TILE_WIDTH as f32, TILE_HEIGHT as f32, COLOR_WHITE);
                     // Draw character in inverted colors
                     self.draw_scaled_char(c, x, y, COLOR_BLACK);
                 } else if c != ' ' {
@@ -957,20 +969,20 @@ impl App {
 
         // Draw cursor (only in editing mode and when visible)
         if self.mode == AppMode::Editing && self.cursor_visible {
-            let cursor_screen_line = self.cursor.line().saturating_sub(self.scroll_y);
-            let cursor_screen_col = self.cursor.col().saturating_sub(self.scroll_x);
+            let cursor_screen_line = self.editor.cursor.line().saturating_sub(self.view.scroll_y);
+            let cursor_screen_col = self.editor.cursor.col().saturating_sub(self.view.scroll_x);
 
             // Only draw if cursor is in visible area
-            if self.cursor.line() >= self.scroll_y
-                && self.cursor.line() < self.scroll_y + visible_lines
-                && self.cursor.col() >= self.scroll_x
-                && self.cursor.col() < self.scroll_x + visible_cols
+            if self.editor.cursor.line() >= self.view.scroll_y
+                && self.editor.cursor.line() < self.view.scroll_y + visible_lines
+                && self.editor.cursor.col() >= self.view.scroll_x
+                && self.editor.cursor.col() < self.view.scroll_x + visible_cols
             {
                 let cursor_x = (cursor_screen_col * TILE_WIDTH as usize) as f32;
                 let cursor_y = (cursor_screen_line * TILE_HEIGHT as usize) as f32;
 
                 // Draw cursor as a block (slightly larger to cover text shadow)
-                self.draw_scaled_rect(
+                draw_scaled_rect(
                     cursor_x,
                     cursor_y,
                     TILE_WIDTH as f32 + 1.0,
@@ -979,15 +991,18 @@ impl App {
                 );
 
                 // Draw character under cursor in inverted colors
-                let line_text = self.buffer.get_line(self.cursor.line());
-                let c = line_text.chars().nth(self.cursor.col()).unwrap_or(' ');
+                let line_text = self.editor.buffer.get_line(self.editor.cursor.line());
+                let c = line_text
+                    .chars()
+                    .nth(self.editor.cursor.col())
+                    .unwrap_or(' ');
                 self.draw_scaled_char(c, cursor_x, cursor_y, COLOR_BLACK);
             }
         }
     }
 
     fn draw_scrollbars_scaled(&self) {
-        let state = &self.scrollbar_state;
+        let state = &self.view.scrollbar_state;
         let track_color = Color::new(0.3, 0.3, 0.3, 1.0);
         let handle_color = COLOR_WHITE;
 
@@ -1001,7 +1016,7 @@ impl App {
                 SCREEN_HEIGHT
             } as f32;
 
-            self.draw_scaled_rect(
+            draw_scaled_rect(
                 track_x,
                 track_y,
                 SCROLLBAR_WIDTH as f32,
@@ -1011,7 +1026,7 @@ impl App {
 
             let handle_height = (track_height * state.vertical_size).max(TILE_HEIGHT as f32);
             let handle_y = track_y + (track_height - handle_height) * state.vertical_position;
-            self.draw_scaled_rect(
+            draw_scaled_rect(
                 track_x,
                 handle_y,
                 SCROLLBAR_WIDTH as f32,
@@ -1030,7 +1045,7 @@ impl App {
                 SCREEN_WIDTH
             } as f32;
 
-            self.draw_scaled_rect(
+            draw_scaled_rect(
                 track_x,
                 track_y,
                 track_width,
@@ -1040,7 +1055,7 @@ impl App {
 
             let handle_width = (track_width * state.horizontal_size).max(TILE_WIDTH as f32);
             let handle_x = track_x + (track_width - handle_width) * state.horizontal_position;
-            self.draw_scaled_rect(
+            draw_scaled_rect(
                 handle_x,
                 track_y,
                 handle_width,
@@ -1053,7 +1068,7 @@ impl App {
         if state.vertical_visible && state.horizontal_visible {
             let corner_x = (SCREEN_WIDTH - SCROLLBAR_WIDTH) as f32;
             let corner_y = (SCREEN_HEIGHT - SCROLLBAR_WIDTH) as f32;
-            self.draw_scaled_rect(
+            draw_scaled_rect(
                 corner_x,
                 corner_y,
                 SCROLLBAR_WIDTH as f32,
@@ -1062,4 +1077,9 @@ impl App {
             );
         }
     }
+}
+
+fn draw_scaled_rect(x: f32, y: f32, w: f32, h: f32, color: Color) {
+    let scale = SCALE as f32;
+    draw_rectangle(x * scale, y * scale, w * scale, h * scale, color);
 }

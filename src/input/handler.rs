@@ -1,7 +1,9 @@
 use macroquad::prelude::*;
 use std::sync::Mutex;
 
-use crate::input::keybindings::*;
+use crate::input::keybindings::{
+    is_alt_pressed, is_modifier_pressed, is_shift_pressed, EditorAction,
+};
 
 /// Key repeat timing constants
 const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
@@ -92,77 +94,82 @@ fn should_key_fire(key: KeyCode) -> bool {
     true
 }
 
+// Cmd/Ctrl + key bindings (no shift, no alt)
+const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::S, EditorAction::Save),
+    (KeyCode::O, EditorAction::Open),
+    (KeyCode::N, EditorAction::New),
+    (KeyCode::Z, EditorAction::Undo),
+    (KeyCode::Y, EditorAction::Redo),
+    (KeyCode::X, EditorAction::Cut),
+    (KeyCode::C, EditorAction::Copy),
+    (KeyCode::V, EditorAction::Paste),
+    (KeyCode::A, EditorAction::SelectAll),
+    (KeyCode::F, EditorAction::Find),
+    (KeyCode::R, EditorAction::Replace),
+    (KeyCode::Up, EditorAction::ScrollUp),
+    (KeyCode::Down, EditorAction::ScrollDown),
+    (KeyCode::Left, EditorAction::ScrollLeft),
+    (KeyCode::Right, EditorAction::ScrollRight),
+];
+
+// Alt/Option + key bindings (no modifier)
+const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::Left, EditorAction::MoveWordLeft),
+    (KeyCode::Right, EditorAction::MoveWordRight),
+    (KeyCode::Up, EditorAction::SwapLineUp),
+    (KeyCode::Down, EditorAction::SwapLineDown),
+];
+
+// Shift + key bindings (with key repeat)
+const SHIFT_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::Left, EditorAction::SelectLeft),
+    (KeyCode::Right, EditorAction::SelectRight),
+    (KeyCode::Up, EditorAction::SelectUp),
+    (KeyCode::Down, EditorAction::SelectDown),
+];
+
+// No-modifier bindings (with key repeat)
+const PLAIN_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::Left, EditorAction::MoveLeft),
+    (KeyCode::Right, EditorAction::MoveRight),
+    (KeyCode::Up, EditorAction::MoveUp),
+    (KeyCode::Down, EditorAction::MoveDown),
+    (KeyCode::Home, EditorAction::MoveToLineStart),
+    (KeyCode::End, EditorAction::MoveToLineEnd),
+    (KeyCode::Backspace, EditorAction::Backspace),
+    (KeyCode::Delete, EditorAction::Delete),
+];
+
+fn check_pressed(bindings: &[(KeyCode, EditorAction)]) -> Option<EditorAction> {
+    for &(key, action) in bindings {
+        if is_key_pressed(key) {
+            drain_char_queue();
+            return Some(action);
+        }
+    }
+    None
+}
+
+fn check_repeating(bindings: &[(KeyCode, EditorAction)]) -> Option<EditorAction> {
+    for &(key, action) in bindings {
+        if should_key_fire(key) {
+            drain_char_queue();
+            return Some(action);
+        }
+    }
+    None
+}
+
 /// Process keyboard input and return the corresponding action
 pub fn get_editor_action() -> Option<EditorAction> {
     let modifier = is_modifier_pressed();
     let shift = is_shift_pressed();
     let alt = is_alt_pressed();
 
-    // Check for special key combinations first
-
-    // File operations (Cmd/Ctrl + key)
     if modifier && !shift && !alt {
-        if is_key_pressed(KeyCode::S) {
-            drain_char_queue();
-            return Some(EditorAction::Save);
-        }
-        if is_key_pressed(KeyCode::O) {
-            drain_char_queue();
-            return Some(EditorAction::Open);
-        }
-        if is_key_pressed(KeyCode::N) {
-            drain_char_queue();
-            return Some(EditorAction::New);
-        }
-        if is_key_pressed(KeyCode::Z) {
-            drain_char_queue();
-            return Some(EditorAction::Undo);
-        }
-        if is_key_pressed(KeyCode::Y) {
-            drain_char_queue();
-            return Some(EditorAction::Redo);
-        }
-        if is_key_pressed(KeyCode::X) {
-            drain_char_queue();
-            return Some(EditorAction::Cut);
-        }
-        if is_key_pressed(KeyCode::C) {
-            drain_char_queue();
-            return Some(EditorAction::Copy);
-        }
-        if is_key_pressed(KeyCode::V) {
-            drain_char_queue();
-            return Some(EditorAction::Paste);
-        }
-        if is_key_pressed(KeyCode::A) {
-            drain_char_queue();
-            return Some(EditorAction::SelectAll);
-        }
-        if is_key_pressed(KeyCode::F) {
-            drain_char_queue();
-            return Some(EditorAction::Find);
-        }
-        if is_key_pressed(KeyCode::R) {
-            drain_char_queue();
-            return Some(EditorAction::Replace);
-        }
-
-        // Scrolling with Cmd/Ctrl + Arrow
-        if is_key_pressed(KeyCode::Up) {
-            drain_char_queue();
-            return Some(EditorAction::ScrollUp);
-        }
-        if is_key_pressed(KeyCode::Down) {
-            drain_char_queue();
-            return Some(EditorAction::ScrollDown);
-        }
-        if is_key_pressed(KeyCode::Left) {
-            drain_char_queue();
-            return Some(EditorAction::ScrollLeft);
-        }
-        if is_key_pressed(KeyCode::Right) {
-            drain_char_queue();
-            return Some(EditorAction::ScrollRight);
+        if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
+            return Some(action);
         }
     }
 
@@ -172,79 +179,21 @@ pub fn get_editor_action() -> Option<EditorAction> {
         return Some(EditorAction::Redo);
     }
 
-    // Option/Alt + Arrow for word navigation and line swapping
     if alt && !modifier {
-        if is_key_pressed(KeyCode::Left) {
-            drain_char_queue();
-            return Some(EditorAction::MoveWordLeft);
-        }
-        if is_key_pressed(KeyCode::Right) {
-            drain_char_queue();
-            return Some(EditorAction::MoveWordRight);
-        }
-        if is_key_pressed(KeyCode::Up) {
-            drain_char_queue();
-            return Some(EditorAction::SwapLineUp);
-        }
-        if is_key_pressed(KeyCode::Down) {
-            drain_char_queue();
-            return Some(EditorAction::SwapLineDown);
+        if let Some(action) = check_pressed(ALT_BINDINGS) {
+            return Some(action);
         }
     }
 
-    // Shift + Arrow for selection (with key repeat)
     if shift && !modifier && !alt {
-        if should_key_fire(KeyCode::Left) {
-            drain_char_queue();
-            return Some(EditorAction::SelectLeft);
-        }
-        if should_key_fire(KeyCode::Right) {
-            drain_char_queue();
-            return Some(EditorAction::SelectRight);
-        }
-        if should_key_fire(KeyCode::Up) {
-            drain_char_queue();
-            return Some(EditorAction::SelectUp);
-        }
-        if should_key_fire(KeyCode::Down) {
-            drain_char_queue();
-            return Some(EditorAction::SelectDown);
+        if let Some(action) = check_repeating(SHIFT_BINDINGS) {
+            return Some(action);
         }
     }
 
-    // Basic navigation (no modifiers, with key repeat)
     if !modifier && !alt && !shift {
-        if should_key_fire(KeyCode::Left) {
-            drain_char_queue();
-            return Some(EditorAction::MoveLeft);
-        }
-        if should_key_fire(KeyCode::Right) {
-            drain_char_queue();
-            return Some(EditorAction::MoveRight);
-        }
-        if should_key_fire(KeyCode::Up) {
-            drain_char_queue();
-            return Some(EditorAction::MoveUp);
-        }
-        if should_key_fire(KeyCode::Down) {
-            drain_char_queue();
-            return Some(EditorAction::MoveDown);
-        }
-        if should_key_fire(KeyCode::Home) {
-            drain_char_queue();
-            return Some(EditorAction::MoveToLineStart);
-        }
-        if should_key_fire(KeyCode::End) {
-            drain_char_queue();
-            return Some(EditorAction::MoveToLineEnd);
-        }
-        if should_key_fire(KeyCode::Backspace) {
-            drain_char_queue();
-            return Some(EditorAction::Backspace);
-        }
-        if should_key_fire(KeyCode::Delete) {
-            drain_char_queue();
-            return Some(EditorAction::Delete);
+        if let Some(action) = check_repeating(PLAIN_BINDINGS) {
+            return Some(action);
         }
         if should_key_fire(KeyCode::Enter) || should_key_fire(KeyCode::KpEnter) {
             drain_char_queue();
@@ -256,24 +205,15 @@ pub fn get_editor_action() -> Option<EditorAction> {
         }
     }
 
-    // Tab key (no modifiers)
-    if !modifier && !alt && is_key_pressed(KeyCode::Tab) {
-        drain_char_queue();
-        // Insert 4 spaces for tab
-        return None; // We'll handle tab separately
-    }
-
     // Text input - check for typed characters
     // Skip if any navigation key is held (to prevent OS key repeat from inserting chars)
     if !modifier && !is_navigation_key_held() {
         if let Some(c) = get_char_pressed() {
-            // Filter out control characters except what we handle
             if c >= ' ' && c != '\x7f' {
                 return Some(EditorAction::InsertChar(c));
             }
         }
     } else {
-        // Drain any characters generated while navigation keys are held
         drain_char_queue();
     }
 

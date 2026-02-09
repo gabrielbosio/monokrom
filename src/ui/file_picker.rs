@@ -1,6 +1,8 @@
 use macroquad::prelude::*;
 
-use crate::config::*;
+use crate::config::{
+    COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_HEIGHT, TILE_WIDTH,
+};
 use crate::input::{get_file_picker_action, EditorAction};
 use crate::render::DrawHelpers;
 

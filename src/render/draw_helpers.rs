@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
 use super::font::BitmapFont;
-use crate::config::*;
+use crate::config::TILE_WIDTH;
 
 /// Helper struct for drawing UI elements with scaling
 pub struct DrawHelpers<'a> {
