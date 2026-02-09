@@ -107,6 +107,10 @@ const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::A, EditorAction::SelectAll),
     (KeyCode::F, EditorAction::Find),
     (KeyCode::R, EditorAction::Replace),
+];
+
+// Cmd/Ctrl + arrow bindings with key repeat support
+const MODIFIER_REPEAT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Up, EditorAction::ScrollUp),
     (KeyCode::Down, EditorAction::ScrollDown),
     (KeyCode::Left, EditorAction::ScrollLeft),
@@ -171,6 +175,9 @@ pub fn get_editor_action() -> Option<EditorAction> {
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
             return Some(action);
         }
+        if let Some(action) = check_repeating(MODIFIER_REPEAT_BINDINGS) {
+            return Some(action);
+        }
     }
 
     // Shift + Cmd + Z for Redo (alternative)
@@ -207,14 +214,14 @@ pub fn get_editor_action() -> Option<EditorAction> {
 
     // Text input - check for typed characters
     // Skip if any navigation key is held (to prevent OS key repeat from inserting chars)
-    if !modifier && !is_navigation_key_held() {
+    if modifier {
+        drain_char_queue();
+    } else if !is_navigation_key_held() {
         if let Some(c) = get_char_pressed() {
             if c >= ' ' && c != '\x7f' {
                 return Some(EditorAction::InsertChar(c));
             }
         }
-    } else {
-        drain_char_queue();
     }
 
     None
