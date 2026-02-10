@@ -8,18 +8,25 @@ use crate::input::keybindings::{
 /// Key repeat timing constants
 const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
 const KEY_REPEAT_RATE: f32 = 0.03; // Time between repeats
+/// macOS can lose key-up events for keys pressed during Cmd combos,
+/// leaving is_key_down stuck true. Stop modifier repeats after this limit.
+const MAX_MODIFIER_REPEAT: f32 = 3.0;
 
 /// State for key repeat tracking
 struct KeyRepeatState {
     last_key: Option<KeyCode>,
     time_held: f32,
     is_repeating: bool,
+    with_modifier: bool,
+    total_time: f32,
 }
 
 static KEY_REPEAT: Mutex<KeyRepeatState> = Mutex::new(KeyRepeatState {
     last_key: None,
     time_held: 0.0,
     is_repeating: false,
+    with_modifier: false,
+    total_time: 0.0,
 });
 
 /// Drain all pending characters from the input queue
@@ -27,26 +34,8 @@ fn drain_char_queue() {
     while get_char_pressed().is_some() {}
 }
 
-/// Check if any navigation or control key is being held down
-fn is_navigation_key_held() -> bool {
-    is_key_down(KeyCode::Left)
-        || is_key_down(KeyCode::Right)
-        || is_key_down(KeyCode::Up)
-        || is_key_down(KeyCode::Down)
-        || is_key_down(KeyCode::Home)
-        || is_key_down(KeyCode::End)
-        || is_key_down(KeyCode::PageUp)
-        || is_key_down(KeyCode::PageDown)
-        || is_key_down(KeyCode::Backspace)
-        || is_key_down(KeyCode::Delete)
-        || is_key_down(KeyCode::Escape)
-        || is_key_down(KeyCode::Tab)
-        || is_key_down(KeyCode::Enter)
-        || is_key_down(KeyCode::KpEnter)
-}
-
 /// Check if a key should fire (either just pressed or repeating)
-fn should_key_fire(key: KeyCode) -> bool {
+fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     let mut state = match KEY_REPEAT.lock() {
         Ok(s) => s,
         Err(_) => return is_key_pressed(key),
@@ -56,7 +45,9 @@ fn should_key_fire(key: KeyCode) -> bool {
     if is_key_pressed(key) {
         state.last_key = Some(key);
         state.time_held = 0.0;
+        state.total_time = 0.0;
         state.is_repeating = false;
+        state.with_modifier = with_modifier;
         return true;
     }
 
@@ -65,6 +56,7 @@ fn should_key_fire(key: KeyCode) -> bool {
         if state.last_key == Some(key) {
             state.last_key = None;
             state.time_held = 0.0;
+            state.total_time = 0.0;
             state.is_repeating = false;
         }
         return false;
@@ -75,8 +67,27 @@ fn should_key_fire(key: KeyCode) -> bool {
         return false;
     }
 
-    // Update timing
-    state.time_held += get_frame_time();
+    // Modifier context changed (e.g. released Cmd while arrow still held) - reset
+    if state.with_modifier != with_modifier {
+        state.last_key = None;
+        state.time_held = 0.0;
+        state.total_time = 0.0;
+        state.is_repeating = false;
+        return false;
+    }
+
+    let dt = get_frame_time();
+    state.time_held += dt;
+    state.total_time += dt;
+
+    // Safety: stop modifier repeats after a limit (macOS stuck key workaround)
+    if state.with_modifier && state.total_time > MAX_MODIFIER_REPEAT {
+        state.last_key = None;
+        state.time_held = 0.0;
+        state.total_time = 0.0;
+        state.is_repeating = false;
+        return false;
+    }
 
     // Check threshold
     let threshold = if state.is_repeating {
@@ -109,7 +120,7 @@ const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::R, EditorAction::Replace),
 ];
 
-// Cmd/Ctrl + arrow bindings with key repeat support
+// Cmd/Ctrl + arrow bindings with key repeat (capped by MAX_MODIFIER_REPEAT)
 const MODIFIER_REPEAT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Up, EditorAction::ScrollUp),
     (KeyCode::Down, EditorAction::ScrollDown),
@@ -155,9 +166,12 @@ fn check_pressed(bindings: &[(KeyCode, EditorAction)]) -> Option<EditorAction> {
     None
 }
 
-fn check_repeating(bindings: &[(KeyCode, EditorAction)]) -> Option<EditorAction> {
+fn check_repeating(
+    bindings: &[(KeyCode, EditorAction)],
+    with_modifier: bool,
+) -> Option<EditorAction> {
     for &(key, action) in bindings {
-        if should_key_fire(key) {
+        if should_key_fire(key, with_modifier) {
             drain_char_queue();
             return Some(action);
         }
@@ -175,7 +189,7 @@ pub fn get_editor_action() -> Option<EditorAction> {
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
             return Some(action);
         }
-        if let Some(action) = check_repeating(MODIFIER_REPEAT_BINDINGS) {
+        if let Some(action) = check_repeating(MODIFIER_REPEAT_BINDINGS, true) {
             return Some(action);
         }
     }
@@ -193,16 +207,16 @@ pub fn get_editor_action() -> Option<EditorAction> {
     }
 
     if shift && !modifier && !alt {
-        if let Some(action) = check_repeating(SHIFT_BINDINGS) {
+        if let Some(action) = check_repeating(SHIFT_BINDINGS, false) {
             return Some(action);
         }
     }
 
     if !modifier && !alt && !shift {
-        if let Some(action) = check_repeating(PLAIN_BINDINGS) {
+        if let Some(action) = check_repeating(PLAIN_BINDINGS, false) {
             return Some(action);
         }
-        if should_key_fire(KeyCode::Enter) || should_key_fire(KeyCode::KpEnter) {
+        if should_key_fire(KeyCode::Enter, false) || should_key_fire(KeyCode::KpEnter, false) {
             drain_char_queue();
             return Some(EditorAction::InsertNewline);
         }
@@ -213,14 +227,13 @@ pub fn get_editor_action() -> Option<EditorAction> {
     }
 
     // Text input - check for typed characters
-    // Skip if any navigation key is held (to prevent OS key repeat from inserting chars)
-    if modifier {
-        drain_char_queue();
-    } else if !is_navigation_key_held() {
-        if let Some(c) = get_char_pressed() {
-            if c >= ' ' && c != '\x7f' {
-                return Some(EditorAction::InsertChar(c));
-            }
+    // No modifier/nav-key gate here: bound combos already returned above
+    // (draining chars), and unbound Cmd+key doesn't generate chars on macOS.
+    // Gating on is_key_down is unsafe because macOS can lose key-up events
+    // for keys pressed during Cmd combos, leaving is_key_down stuck true.
+    if let Some(c) = get_char_pressed() {
+        if (' '..='~').contains(&c) {
+            return Some(EditorAction::InsertChar(c));
         }
     }
 
