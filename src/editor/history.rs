@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::editor::buffer::TextBuffer;
 use crate::editor::cursor::CursorPosition;
 
@@ -11,9 +13,9 @@ pub struct HistoryEntry {
 
 pub struct History {
     /// Undo stack (past states)
-    undo_stack: Vec<HistoryEntry>,
+    undo_stack: VecDeque<HistoryEntry>,
     /// Redo stack (future states after undo)
-    redo_stack: Vec<HistoryEntry>,
+    redo_stack: VecDeque<HistoryEntry>,
 }
 
 impl Default for History {
@@ -25,8 +27,8 @@ impl Default for History {
 impl History {
     pub fn new() -> Self {
         Self {
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
+            undo_stack: VecDeque::new(),
+            redo_stack: VecDeque::new(),
         }
     }
 
@@ -35,14 +37,14 @@ impl History {
         // Clear redo stack when new changes are made
         self.redo_stack.clear();
 
-        self.undo_stack.push(HistoryEntry {
+        self.undo_stack.push_back(HistoryEntry {
             buffer: buffer.snapshot(),
             cursor,
         });
 
         // Limit history size
         if self.undo_stack.len() > MAX_HISTORY_SIZE {
-            self.undo_stack.remove(0);
+            self.undo_stack.pop_front();
         }
     }
 
@@ -52,10 +54,10 @@ impl History {
         current_buffer: &TextBuffer,
         current_cursor: CursorPosition,
     ) -> Option<HistoryEntry> {
-        let entry = self.undo_stack.pop()?;
+        let entry = self.undo_stack.pop_back()?;
 
         // Save current state to redo stack
-        self.redo_stack.push(HistoryEntry {
+        self.redo_stack.push_back(HistoryEntry {
             buffer: current_buffer.snapshot(),
             cursor: current_cursor,
         });
@@ -69,10 +71,10 @@ impl History {
         current_buffer: &TextBuffer,
         current_cursor: CursorPosition,
     ) -> Option<HistoryEntry> {
-        let entry = self.redo_stack.pop()?;
+        let entry = self.redo_stack.pop_back()?;
 
         // Save current state to undo stack
-        self.undo_stack.push(HistoryEntry {
+        self.undo_stack.push_back(HistoryEntry {
             buffer: current_buffer.snapshot(),
             cursor: current_cursor,
         });

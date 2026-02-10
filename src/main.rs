@@ -9,7 +9,7 @@ mod ui;
 use macroquad::prelude::*;
 
 use app::App;
-use config::*;
+use config::{WINDOW_HEIGHT, WINDOW_WIDTH};
 
 fn window_conf() -> Conf {
     Conf {

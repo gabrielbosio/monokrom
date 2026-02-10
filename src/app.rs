@@ -848,14 +848,13 @@ impl App {
         // Clear with gray background
         clear_background(COLOR_GRAY);
 
+        let helpers = DrawHelpers::new(&self.font, SCALE as f32);
+
         // Draw editor content (scaled)
-        self.draw_editor();
+        self.draw_editor(&helpers);
 
         // Draw scrollbars (scaled)
-        self.draw_scrollbars_scaled();
-
-        // Create draw helpers for dialogs
-        let helpers = DrawHelpers::new(&self.font, SCALE as f32);
+        self.draw_scrollbars_scaled(&helpers);
 
         // Draw dialogs (scaled)
         match self.mode {
@@ -868,13 +867,13 @@ impl App {
             AppMode::Editing => {
                 // Draw search hint if we have an active search
                 if !self.search.query.is_empty() {
-                    self.draw_search_hint();
+                    self.draw_search_hint(&helpers);
                 }
             }
         }
     }
 
-    fn draw_search_hint(&self) {
+    fn draw_search_hint(&self, helpers: &DrawHelpers) {
         // Draw hint at bottom of screen for active search
         let hint = if self.search.is_replacing {
             "Enter:Replace+Next  Esc:Done"
@@ -885,7 +884,7 @@ impl App {
         let hint_y = (SCREEN_HEIGHT - TILE_HEIGHT * 2) as f32;
 
         // Draw background
-        draw_scaled_rect(
+        helpers.draw_rect(
             0.0,
             hint_y - 2.0,
             SCREEN_WIDTH as f32,
@@ -894,7 +893,7 @@ impl App {
         );
 
         for (i, c) in hint.chars().enumerate() {
-            self.draw_scaled_char_with_shadow(
+            helpers.draw_char_with_shadow(
                 c,
                 hint_x + (i as f32 * TILE_WIDTH as f32),
                 hint_y,
@@ -904,19 +903,7 @@ impl App {
         }
     }
 
-    fn draw_scaled_char(&self, c: char, x: f32, y: f32, color: Color) {
-        let scale = SCALE as f32;
-        self.font
-            .draw_char_scaled(c, x * scale, y * scale, scale, color);
-    }
-
-    fn draw_scaled_char_with_shadow(&self, c: char, x: f32, y: f32, fg: Color, shadow: Color) {
-        let scale = SCALE as f32;
-        self.font
-            .draw_char_with_shadow_scaled(c, x * scale, y * scale, scale, fg, shadow);
-    }
-
-    fn draw_editor(&self) {
+    fn draw_editor(&self, helpers: &DrawHelpers) {
         let visible_cols = self.visible_cols();
         let visible_lines = self.visible_lines();
 
@@ -950,12 +937,12 @@ impl App {
 
                 if is_selected {
                     // Draw selection background
-                    draw_scaled_rect(x, y, TILE_WIDTH as f32, TILE_HEIGHT as f32, COLOR_WHITE);
+                    helpers.draw_rect(x, y, TILE_WIDTH as f32, TILE_HEIGHT as f32, COLOR_WHITE);
                     // Draw character in inverted colors
-                    self.draw_scaled_char(c, x, y, COLOR_BLACK);
+                    helpers.draw_char(c, x, y, COLOR_BLACK);
                 } else if c != ' ' {
                     // Draw character with shadow
-                    self.draw_scaled_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
+                    helpers.draw_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
                 }
             }
         }
@@ -975,7 +962,7 @@ impl App {
                 let cursor_y = (cursor_screen_line * TILE_HEIGHT as usize) as f32;
 
                 // Draw cursor as a block (slightly larger to cover text shadow)
-                draw_scaled_rect(
+                helpers.draw_rect(
                     cursor_x,
                     cursor_y,
                     TILE_WIDTH as f32 + 1.0,
@@ -989,12 +976,12 @@ impl App {
                     .chars()
                     .nth(self.editor.cursor.col())
                     .unwrap_or(' ');
-                self.draw_scaled_char(c, cursor_x, cursor_y, COLOR_BLACK);
+                helpers.draw_char(c, cursor_x, cursor_y, COLOR_BLACK);
             }
         }
     }
 
-    fn draw_scrollbars_scaled(&self) {
+    fn draw_scrollbars_scaled(&self, helpers: &DrawHelpers) {
         let state = &self.view.scrollbar_state;
         let track_color = Color::new(0.3, 0.3, 0.3, 1.0);
         let handle_color = COLOR_WHITE;
@@ -1009,7 +996,7 @@ impl App {
                 SCREEN_HEIGHT
             } as f32;
 
-            draw_scaled_rect(
+            helpers.draw_rect(
                 track_x,
                 track_y,
                 SCROLLBAR_WIDTH as f32,
@@ -1019,7 +1006,7 @@ impl App {
 
             let handle_height = (track_height * state.vertical_size).max(TILE_HEIGHT as f32);
             let handle_y = track_y + (track_height - handle_height) * state.vertical_position;
-            draw_scaled_rect(
+            helpers.draw_rect(
                 track_x,
                 handle_y,
                 SCROLLBAR_WIDTH as f32,
@@ -1038,7 +1025,7 @@ impl App {
                 SCREEN_WIDTH
             } as f32;
 
-            draw_scaled_rect(
+            helpers.draw_rect(
                 track_x,
                 track_y,
                 track_width,
@@ -1048,7 +1035,7 @@ impl App {
 
             let handle_width = (track_width * state.horizontal_size).max(TILE_WIDTH as f32);
             let handle_x = track_x + (track_width - handle_width) * state.horizontal_position;
-            draw_scaled_rect(
+            helpers.draw_rect(
                 handle_x,
                 track_y,
                 handle_width,
@@ -1061,7 +1048,7 @@ impl App {
         if state.vertical_visible && state.horizontal_visible {
             let corner_x = (SCREEN_WIDTH - SCROLLBAR_WIDTH) as f32;
             let corner_y = (SCREEN_HEIGHT - SCROLLBAR_WIDTH) as f32;
-            draw_scaled_rect(
+            helpers.draw_rect(
                 corner_x,
                 corner_y,
                 SCROLLBAR_WIDTH as f32,
@@ -1070,9 +1057,4 @@ impl App {
             );
         }
     }
-}
-
-fn draw_scaled_rect(x: f32, y: f32, w: f32, h: f32, color: Color) {
-    let scale = SCALE as f32;
-    draw_rectangle(x * scale, y * scale, w * scale, h * scale, color);
 }

@@ -252,7 +252,7 @@ pub fn get_dialog_action() -> Option<EditorAction> {
     // For text input in dialogs
     if !is_modifier_pressed() {
         if let Some(c) = get_char_pressed() {
-            if c >= ' ' && c != '\x7f' {
+            if (' '..='~').contains(&c) {
                 return Some(EditorAction::InsertChar(c));
             }
         }
