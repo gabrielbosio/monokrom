@@ -77,7 +77,7 @@ pub struct App {
     pending_action: PendingAction,
 
     // Clipboard
-    clipboard: Option<arboard::Clipboard>,
+    clipboard: operations::Clipboard,
 
     // Cursor blink
     cursor_blink_timer: f64,
@@ -90,7 +90,10 @@ pub struct App {
 impl App {
     pub async fn new() -> Self {
         let font = BitmapFont::new().await;
+        #[cfg(not(target_arch = "wasm32"))]
         let clipboard = arboard::Clipboard::new().ok();
+        #[cfg(target_arch = "wasm32")]
+        let clipboard: operations::Clipboard = None;
 
         Self {
             editor: EditorState {
@@ -585,8 +588,33 @@ impl App {
                         }
                     }
                 }
+                #[cfg(target_arch = "wasm32")]
+                FilePickerResult::Export(filename) => {
+                    if let Ok(content) = filesystem::read_file(&filename) {
+                        filesystem::web_io::download(&filename, &content);
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                FilePickerResult::Import => {
+                    filesystem::web_io::request_upload();
+                }
                 FilePickerResult::Cancel => {
                     self.mode = AppMode::Editing;
+                }
+            }
+        }
+
+        // Poll for pending file uploads (WASM only)
+        #[cfg(target_arch = "wasm32")]
+        if self.mode == AppMode::OpenPicker {
+            if let Some((name, content)) = filesystem::web_io::take_pending_upload() {
+                if filesystem::is_valid_filename(&name) {
+                    let _ = filesystem::write_file(&name, &content);
+                    if let Ok(files) = filesystem::list_files() {
+                        let new_index = files.iter().position(|f| f == &name).unwrap_or(0);
+                        self.file_picker.show(files);
+                        self.file_picker.selected_index = new_index;
+                    }
                 }
             }
         }
@@ -637,6 +665,7 @@ impl App {
             },
             _ => {
                 self.create_new_file();
+                self.mode = AppMode::Editing;
             }
         }
     }

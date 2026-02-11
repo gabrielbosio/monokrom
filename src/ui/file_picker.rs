@@ -15,6 +15,12 @@ pub enum FilePickerResult {
     Duplicate(String),
     /// User confirmed deletion of a file
     Delete(String),
+    /// User wants to export (download) a file
+    #[cfg(target_arch = "wasm32")]
+    Export(String),
+    /// User wants to import (upload) a file
+    #[cfg(target_arch = "wasm32")]
+    Import,
     /// User cancelled
     Cancel,
 }
@@ -123,6 +129,15 @@ impl FilePicker {
                 EditorAction::DeleteFile => {
                     // Enter delete confirmation mode
                     self.mode = FilePickerMode::ConfirmDelete;
+                }
+                #[cfg(target_arch = "wasm32")]
+                EditorAction::Export => {
+                    let filename = self.files[self.selected_index].clone();
+                    return Some(FilePickerResult::Export(filename));
+                }
+                #[cfg(target_arch = "wasm32")]
+                EditorAction::Import => {
+                    return Some(FilePickerResult::Import);
                 }
                 _ => {}
             }
@@ -240,6 +255,7 @@ impl FilePicker {
             );
         } else {
             let hint1_y = hint_y - TILE_HEIGHT as f32;
+            #[cfg(not(target_arch = "wasm32"))]
             helpers.draw_text_with_shadow(
                 "Enter:Open ^D:Copy ^Del:Del",
                 hint_x,
@@ -247,7 +263,24 @@ impl FilePicker {
                 COLOR_GRAY,
                 COLOR_BLACK,
             );
+            #[cfg(target_arch = "wasm32")]
+            helpers.draw_text_with_shadow(
+                "Enter:Open ^D:Copy ^Del:Del",
+                hint_x,
+                hint1_y,
+                COLOR_GRAY,
+                COLOR_BLACK,
+            );
+            #[cfg(not(target_arch = "wasm32"))]
             helpers.draw_text_with_shadow("Esc:Cancel", hint_x, hint_y, COLOR_GRAY, COLOR_BLACK);
+            #[cfg(target_arch = "wasm32")]
+            helpers.draw_text_with_shadow(
+                "^E:Exp ^I:Imp Esc:Cancel",
+                hint_x,
+                hint_y,
+                COLOR_GRAY,
+                COLOR_BLACK,
+            );
         }
     }
 }

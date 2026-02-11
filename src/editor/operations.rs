@@ -3,6 +3,12 @@ use crate::editor::cursor::Cursor;
 use crate::editor::history::History;
 use crate::editor::selection::Selection;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub type Clipboard = Option<arboard::Clipboard>;
+
+#[cfg(target_arch = "wasm32")]
+pub type Clipboard = Option<String>;
+
 /// Insert a character at the cursor position
 pub fn insert_char(
     buffer: &mut TextBuffer,
@@ -199,16 +205,22 @@ pub fn swap_line_down(
 pub fn copy_selection(
     buffer: &TextBuffer,
     selection: &Selection,
-    clipboard: &mut Option<arboard::Clipboard>,
+    clipboard: &mut Clipboard,
 ) -> (Option<String>, bool) {
     let text = match selection.get_text(buffer) {
         Some(t) => t,
         None => return (None, true), // No selection is not an error
     };
+    #[cfg(not(target_arch = "wasm32"))]
     let clipboard_ok = if let Some(cb) = clipboard.as_mut() {
         cb.set_text(&text).is_ok()
     } else {
-        false // No clipboard available
+        false
+    };
+    #[cfg(target_arch = "wasm32")]
+    let clipboard_ok = {
+        *clipboard = Some(text.clone());
+        true
     };
     (Some(text), clipboard_ok)
 }
@@ -220,7 +232,7 @@ pub fn cut_selection(
     cursor: &mut Cursor,
     selection: &mut Selection,
     history: &mut History,
-    clipboard: &mut Option<arboard::Clipboard>,
+    clipboard: &mut Clipboard,
 ) -> (Option<String>, bool) {
     let text = match selection.get_text(buffer) {
         Some(t) => t,
@@ -228,10 +240,16 @@ pub fn cut_selection(
     };
 
     // Copy to clipboard
+    #[cfg(not(target_arch = "wasm32"))]
     let clipboard_ok = if let Some(cb) = clipboard.as_mut() {
         cb.set_text(&text).is_ok()
     } else {
-        false // No clipboard available
+        false
+    };
+    #[cfg(target_arch = "wasm32")]
+    let clipboard_ok = {
+        *clipboard = Some(text.clone());
+        true
     };
 
     // Delete the selection
@@ -254,9 +272,12 @@ pub fn paste(
     cursor: &mut Cursor,
     selection: &mut Selection,
     history: &mut History,
-    clipboard: &mut Option<arboard::Clipboard>,
+    clipboard: &mut Clipboard,
 ) {
+    #[cfg(not(target_arch = "wasm32"))]
     let text = clipboard.as_mut().and_then(|cb| cb.get_text().ok());
+    #[cfg(target_arch = "wasm32")]
+    let text = clipboard.clone();
     if let Some(text) = text {
         if text.is_empty() {
             return;
@@ -513,7 +534,7 @@ mod tests {
         let mut selection = Selection::new();
         selection.start(CursorPosition::new(0, 0));
         selection.cursor = CursorPosition::new(0, 5);
-        let mut clipboard: Option<arboard::Clipboard> = None;
+        let mut clipboard: Clipboard = None;
 
         let (text, clipboard_ok) = copy_selection(&buffer, &selection, &mut clipboard);
 
@@ -525,7 +546,7 @@ mod tests {
     fn test_copy_selection_no_selection() {
         let buffer = TextBuffer::from_str("hello");
         let selection = Selection::new();
-        let mut clipboard: Option<arboard::Clipboard> = None;
+        let mut clipboard: Clipboard = None;
 
         let (text, clipboard_ok) = copy_selection(&buffer, &selection, &mut clipboard);
 
@@ -542,7 +563,7 @@ mod tests {
         selection.start(CursorPosition::new(0, 0));
         selection.cursor = CursorPosition::new(0, 6);
         cursor.set_position(0, 6);
-        let mut clipboard: Option<arboard::Clipboard> = None;
+        let mut clipboard: Clipboard = None;
 
         let (text, clipboard_ok) = cut_selection(
             &mut buffer,

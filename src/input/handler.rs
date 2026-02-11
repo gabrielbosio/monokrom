@@ -106,9 +106,11 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
 }
 
 // Cmd/Ctrl + key bindings (no shift, no alt)
+// New file: Cmd+N on native, Cmd+W on WASM (Cmd+N opens a browser window)
 const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::S, EditorAction::Save),
     (KeyCode::O, EditorAction::Open),
+    #[cfg(not(target_arch = "wasm32"))]
     (KeyCode::N, EditorAction::New),
     (KeyCode::Z, EditorAction::Undo),
     (KeyCode::Y, EditorAction::Redo),
@@ -134,6 +136,8 @@ const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Right, EditorAction::MoveWordRight),
     (KeyCode::Up, EditorAction::SwapLineUp),
     (KeyCode::Down, EditorAction::SwapLineDown),
+    #[cfg(target_arch = "wasm32")]
+    (KeyCode::N, EditorAction::New),
 ];
 
 // Shift + key bindings (with key repeat)
@@ -275,6 +279,15 @@ pub fn get_file_picker_action() -> Option<EditorAction> {
         }
         if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
             return Some(EditorAction::DeleteFile);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if is_key_pressed(KeyCode::E) {
+                return Some(EditorAction::Export);
+            }
+            if is_key_pressed(KeyCode::I) {
+                return Some(EditorAction::Import);
+            }
         }
     }
 

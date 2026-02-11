@@ -11,7 +11,6 @@ pub fn get_working_directory() -> PathBuf {
         let fs_dir = std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("fs");
-        // Create directory if it doesn't exist
         if !fs_dir.exists() {
             if let Err(e) = fs::create_dir_all(&fs_dir) {
                 eprintln!("Warning: Could not create directory {:?}: {}", fs_dir, e);
@@ -24,7 +23,6 @@ pub fn get_working_directory() -> PathBuf {
     {
         if let Some(base_dirs) = directories::BaseDirs::new() {
             let monokrom_dir = base_dirs.home_dir().join(".monokrom");
-            // Create directory if it doesn't exist
             if !monokrom_dir.exists() {
                 if let Err(e) = fs::create_dir_all(&monokrom_dir) {
                     eprintln!(
@@ -52,7 +50,6 @@ pub fn list_files() -> io::Result<Vec<String>> {
             if path.is_file() {
                 if let Some(filename) = path.file_name() {
                     if let Some(name) = filename.to_str() {
-                        // Skip hidden files
                         if !name.starts_with('.') {
                             files.push(name.to_string());
                         }
@@ -76,36 +73,12 @@ pub fn read_file(filename: &str) -> io::Result<String> {
 pub fn write_file(filename: &str, content: &str) -> io::Result<()> {
     let dir = get_working_directory();
 
-    // Ensure directory exists
     if !dir.exists() {
         fs::create_dir_all(&dir)?;
     }
 
     let path = dir.join(filename);
     fs::write(path, content)
-}
-
-/// Validate filename (no path separators, not empty, reasonable length)
-pub fn is_valid_filename(filename: &str) -> bool {
-    if filename.is_empty() {
-        return false;
-    }
-
-    if filename.len() > 255 {
-        return false;
-    }
-
-    // No path separators
-    if filename.contains('/') || filename.contains('\\') {
-        return false;
-    }
-
-    // No special names
-    if filename == "." || filename == ".." {
-        return false;
-    }
-
-    true
 }
 
 /// Delete a file from the working directory
@@ -116,30 +89,19 @@ pub fn delete_file(filename: &str) -> io::Result<()> {
 
 /// Duplicate a file in the working directory
 /// Returns the name of the new file
-/// Naming scheme: original -> original0, original0 -> original1, etc.
 pub fn duplicate_file(filename: &str) -> io::Result<String> {
     let dir = get_working_directory();
     let source_path = dir.join(filename);
-
-    // Read source file content
     let content = fs::read_to_string(&source_path)?;
-
-    // Find the next available name
     let new_name = find_next_duplicate_name(filename);
     let dest_path = dir.join(&new_name);
-
-    // Write to new file
     fs::write(dest_path, content)?;
-
     Ok(new_name)
 }
 
 /// Find the next available name for a duplicate file
-/// my_file -> my_file0, my_file0 -> my_file1, etc.
 fn find_next_duplicate_name(filename: &str) -> String {
     let dir = get_working_directory();
-
-    // Start with index 0
     let mut index = 0;
     loop {
         let candidate = format!("{}{}", filename, index);
@@ -153,7 +115,7 @@ fn find_next_duplicate_name(filename: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::filesystem::storage::is_valid_filename;
 
     #[test]
     fn test_is_valid_filename_empty() {

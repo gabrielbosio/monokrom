@@ -54,6 +54,12 @@ pub enum EditorAction {
     DuplicateFile,
     DeleteFile,
 
+    // File export/import (WASM only)
+    #[cfg(target_arch = "wasm32")]
+    Export,
+    #[cfg(target_arch = "wasm32")]
+    Import,
+
     // Find and replace
     Find,
     Replace,
@@ -63,28 +69,36 @@ pub enum EditorAction {
     DialogCancel,
 }
 
-/// Check if Cmd (Super) key is pressed (for macOS)
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
 fn is_cmd_pressed() -> bool {
     is_key_down(KeyCode::LeftSuper) || is_key_down(KeyCode::RightSuper)
 }
 
-/// Check if Ctrl key is pressed
-#[cfg(not(target_os = "macos"))]
-pub fn is_ctrl_pressed() -> bool {
+#[cfg(any(not(target_os = "macos"), target_arch = "wasm32"))]
+fn is_ctrl_pressed() -> bool {
     is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl)
 }
 
-/// Check if modifier key (Cmd on macOS, Ctrl otherwise) is pressed
+/// Check if modifier key is pressed.
+/// Native macOS: Cmd. Native non-macOS: Ctrl.
+/// WASM: Cmd on macOS browsers, Ctrl otherwise (gl.js patched to map MetaLeft/MetaRight).
 pub fn is_modifier_pressed() -> bool {
-    // On macOS, we use Cmd (Super) as the modifier
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_arch = "wasm32"))]
     {
-        is_cmd_pressed()
+        #[cfg(target_os = "macos")]
+        {
+            is_cmd_pressed()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            is_ctrl_pressed()
+        }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_arch = "wasm32")]
     {
-        is_ctrl_pressed()
+        // gl.js maps MetaLeft/MetaRight to LeftSuper/RightSuper,
+        // so both Cmd and Ctrl work as modifiers in WASM.
+        is_cmd_pressed() || is_ctrl_pressed()
     }
 }
 
