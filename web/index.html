@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Monokrom</title>
     <style>
         html, body {
@@ -30,5 +31,116 @@
     <script src="quad-storage.js"></script>
     <script src="monokrom.js"></script>
     <script>load("monokrom.wasm");</script>
+    <script>
+    // Scale canvas to fit viewport without changing buffer size
+    (function() {
+        var canvas = document.getElementById('glcanvas');
+        function fit() {
+            var sx = window.innerWidth / 768;
+            var sy = window.innerHeight / 720;
+            var s = Math.min(sx, sy, 1);
+            canvas.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+        }
+        window.addEventListener('resize', fit);
+        fit();
+    })();
+
+    // Mobile support (virtual keyboard + arrow keys)
+    (function() {
+        if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return;
+
+        function sendKey(codeName, modifiers) {
+            if (!wasm_exports) return;
+            var code = into_sapp_keycode(codeName);
+            wasm_exports.key_down(code, modifiers || 0, false);
+            wasm_exports.key_up(code, modifiers || 0);
+        }
+
+        function sendChar(ch) {
+            if (!wasm_exports) return;
+            var code = into_sapp_keycode(codeForChar(ch));
+            wasm_exports.key_down(code, 0, false);
+            wasm_exports.key_press(ch.charCodeAt(0));
+            wasm_exports.key_up(code, 0);
+        }
+
+        function codeForChar(ch) {
+            var upper = ch.toUpperCase();
+            if (upper >= 'A' && upper <= 'Z') return 'Key' + upper;
+            if (ch >= '0' && ch <= '9') return 'Digit' + ch;
+            var map = {
+                ' ': 'Space', '.': 'Period', ',': 'Comma', '-': 'Minus',
+                '=': 'Equal', '/': 'Slash', ';': 'Semicolon', "'": 'Quote',
+                '[': 'BracketLeft', ']': 'BracketRight', '\\': 'Backslash',
+                '`': 'Backquote'
+            };
+            return map[ch] || 'Unidentified';
+        }
+
+        // Arrow key bar
+        var bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;background:rgba(0,0,0,0.8);z-index:20;touch-action:none;';
+        var keys = [
+            ['\u25C0', 'ArrowLeft'],
+            ['\u25B2', 'ArrowUp'],
+            ['\u25BC', 'ArrowDown'],
+            ['\u25B6', 'ArrowRight']
+        ];
+        keys.forEach(function(k) {
+            var btn = document.createElement('button');
+            btn.textContent = k[0];
+            btn.style.cssText = 'width:44px;height:28px;border:1px solid #888;border-radius:4px;background:#333;color:#fff;font-size:16px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;';
+            btn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                sendKey(k[1]);
+            });
+            bar.appendChild(btn);
+        });
+        document.body.appendChild(bar);
+
+        // Hidden textarea for keyboard input
+        var ta = document.createElement('textarea');
+        ta.id = 'mobile-input';
+        ta.autocapitalize = 'off';
+        ta.autocomplete = 'off';
+        ta.autocorrect = 'off';
+        ta.spellcheck = false;
+        ta.style.cssText = 'position:fixed;top:36px;left:0;width:100%;height:calc(100% - 36px);opacity:0;z-index:10;font-size:16px;resize:none;border:none;outline:none;padding:0;color:transparent;background:transparent;caret-color:transparent;';
+        document.body.appendChild(ta);
+
+        ta.value = ' ';
+        ta.selectionStart = 1;
+        ta.selectionEnd = 1;
+
+        function resetInput() {
+            ta.value = ' ';
+            ta.selectionStart = 1;
+            ta.selectionEnd = 1;
+        }
+
+        ta.addEventListener('beforeinput', function(e) {
+            if (e.inputType === 'deleteContentBackward') {
+                sendKey('Backspace');
+                e.preventDefault();
+                resetInput();
+            } else if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
+                sendKey('Enter');
+                wasm_exports && wasm_exports.key_press(13);
+                e.preventDefault();
+                resetInput();
+            } else if (e.inputType === 'insertText' && e.data) {
+                for (var i = 0; i < e.data.length; i++) {
+                    sendChar(e.data[i]);
+                }
+                e.preventDefault();
+                resetInput();
+            }
+        });
+
+        ta.addEventListener('input', function() {
+            if (ta.value !== ' ') resetInput();
+        });
+    })();
+    </script>
 </body>
 </html>
