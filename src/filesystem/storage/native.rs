@@ -12,9 +12,9 @@ pub fn get_working_directory() -> PathBuf {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("fs");
         if !fs_dir.exists() {
-            if let Err(e) = fs::create_dir_all(&fs_dir) {
-                eprintln!("Warning: Could not create directory {:?}: {}", fs_dir, e);
-            }
+            fs::create_dir_all(&fs_dir).unwrap_or_else(|e| {
+                panic!("Could not create working directory {:?}: {}", fs_dir, e)
+            });
         }
         fs_dir
     }
@@ -24,12 +24,12 @@ pub fn get_working_directory() -> PathBuf {
         if let Some(base_dirs) = directories::BaseDirs::new() {
             let monokrom_dir = base_dirs.home_dir().join(".monokrom");
             if !monokrom_dir.exists() {
-                if let Err(e) = fs::create_dir_all(&monokrom_dir) {
-                    eprintln!(
-                        "Warning: Could not create directory {:?}: {}",
+                fs::create_dir_all(&monokrom_dir).unwrap_or_else(|e| {
+                    panic!(
+                        "Could not create working directory {:?}: {}",
                         monokrom_dir, e
-                    );
-                }
+                    )
+                });
             }
             monokrom_dir
         } else {

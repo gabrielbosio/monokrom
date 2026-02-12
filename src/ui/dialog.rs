@@ -78,18 +78,7 @@ impl InputDialog {
         let dialog_x = (SCREEN_WIDTH as f32 - dialog_width) / 2.0;
         let dialog_y = (SCREEN_HEIGHT as f32 - dialog_height) / 2.0;
 
-        // Background
-        helpers.draw_rect(dialog_x, dialog_y, dialog_width, dialog_height, COLOR_BLACK);
-
-        // Border
-        helpers.draw_rect_lines(
-            dialog_x,
-            dialog_y,
-            dialog_width,
-            dialog_height,
-            2.0,
-            COLOR_WHITE,
-        );
+        helpers.draw_dialog_frame(dialog_x, dialog_y, dialog_width, dialog_height);
 
         // Title
         let title_x = dialog_x + TILE_WIDTH as f32;
@@ -202,18 +191,7 @@ impl ConfirmDialog {
         let dialog_x = (SCREEN_WIDTH as f32 - dialog_width) / 2.0;
         let dialog_y = (SCREEN_HEIGHT as f32 - dialog_height) / 2.0;
 
-        // Background
-        helpers.draw_rect(dialog_x, dialog_y, dialog_width, dialog_height, COLOR_BLACK);
-
-        // Border
-        helpers.draw_rect_lines(
-            dialog_x,
-            dialog_y,
-            dialog_width,
-            dialog_height,
-            2.0,
-            COLOR_WHITE,
-        );
+        helpers.draw_dialog_frame(dialog_x, dialog_y, dialog_width, dialog_height);
 
         // Message
         let msg_x = dialog_x + TILE_WIDTH as f32;
@@ -292,18 +270,7 @@ impl MessageDialog {
         let dialog_x = (SCREEN_WIDTH as f32 - dialog_width) / 2.0;
         let dialog_y = (SCREEN_HEIGHT as f32 - dialog_height) / 2.0;
 
-        // Background
-        helpers.draw_rect(dialog_x, dialog_y, dialog_width, dialog_height, COLOR_BLACK);
-
-        // Border
-        helpers.draw_rect_lines(
-            dialog_x,
-            dialog_y,
-            dialog_width,
-            dialog_height,
-            2.0,
-            COLOR_WHITE,
-        );
+        helpers.draw_dialog_frame(dialog_x, dialog_y, dialog_width, dialog_height);
 
         // Message
         let msg_x = dialog_x + TILE_WIDTH as f32;

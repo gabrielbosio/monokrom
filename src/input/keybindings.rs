@@ -81,25 +81,20 @@ fn is_ctrl_pressed() -> bool {
 
 /// Check if modifier key is pressed.
 /// Native macOS: Cmd. Native non-macOS: Ctrl.
-/// WASM: Cmd on macOS browsers, Ctrl otherwise (gl.js patched to map MetaLeft/MetaRight).
+/// WASM: Cmd or Ctrl (gl.js maps MetaLeft/MetaRight to LeftSuper/RightSuper).
+#[cfg(all(not(target_arch = "wasm32"), target_os = "macos"))]
 pub fn is_modifier_pressed() -> bool {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        #[cfg(target_os = "macos")]
-        {
-            is_cmd_pressed()
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            is_ctrl_pressed()
-        }
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        // gl.js maps MetaLeft/MetaRight to LeftSuper/RightSuper,
-        // so both Cmd and Ctrl work as modifiers in WASM.
-        is_cmd_pressed() || is_ctrl_pressed()
-    }
+    is_cmd_pressed()
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
+pub fn is_modifier_pressed() -> bool {
+    is_ctrl_pressed()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn is_modifier_pressed() -> bool {
+    is_cmd_pressed() || is_ctrl_pressed()
 }
 
 /// Check if Shift key is pressed

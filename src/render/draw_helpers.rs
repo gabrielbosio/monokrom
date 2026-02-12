@@ -62,6 +62,12 @@ impl<'a> DrawHelpers<'a> {
         }
     }
 
+    /// Draw a dialog frame (black fill + white border)
+    pub fn draw_dialog_frame(&self, x: f32, y: f32, w: f32, h: f32) {
+        self.draw_rect(x, y, w, h, crate::config::COLOR_BLACK);
+        self.draw_rect_lines(x, y, w, h, 2.0, crate::config::COLOR_WHITE);
+    }
+
     /// Draw a string of text without shadow
     pub fn draw_text(&self, text: &str, x: f32, y: f32, color: Color) {
         for (i, c) in text.chars().enumerate() {
