@@ -5,24 +5,42 @@
 var _mkr_macos = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
 document.addEventListener("keydown", function (e) {
-    var mod = _mkr_macos ? e.metaKey : e.ctrlKey;
-    if (mod) {
+    // Alt+key: block OS special char insertion for app shortcuts
+    if (e.altKey) {
         var k = e.key.toLowerCase();
-        // Block browser defaults for Cmd/Ctrl app shortcuts
-        if ("sozxyvcafreild".indexOf(k) !== -1) {
+        if ("sonzyxcvafrdi".indexOf(k) !== -1) {
             e.preventDefault();
         }
+        // Alt+arrows: block browser back/forward; Alt+Del/Bksp: block browser actions
         if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
             e.key === "ArrowLeft" || e.key === "ArrowRight" ||
             e.key === "Delete" || e.key === "Backspace") {
             e.preventDefault();
         }
     }
-    // Alt+N for new file — prevent browser/OS special character insertion
-    if (e.altKey && e.key.toLowerCase() === "n") {
-        e.preventDefault();
+    // Cmd/Ctrl+arrows: block browser scroll-to-top/bottom
+    var mod = _mkr_macos ? e.metaKey : e.ctrlKey;
+    if (mod) {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
+            e.key === "ArrowLeft" || e.key === "ArrowRight") {
+            e.preventDefault();
+        }
     }
 }, true);
+
+// When the browser steals focus (e.g. Cmd+S "Save Page" dialog), modifier
+// key-up events are lost, leaving miniquad's is_key_down stuck. Dispatch
+// synthetic keyups on the canvas so gl.js clears the key state.
+window.addEventListener("blur", function () {
+    var canvas = document.querySelector("canvas");
+    if (!canvas) return;
+    [["MetaLeft", "Meta"], ["MetaRight", "Meta"],
+     ["ControlLeft", "Control"], ["ControlRight", "Control"]].forEach(function (pair) {
+        canvas.dispatchEvent(new KeyboardEvent("keyup", {
+            code: pair[0], key: pair[1], bubbles: false
+        }));
+    });
+});
 
 // Monokrom miniquad plugin — platform detection + file export/import
 miniquad_add_plugin({

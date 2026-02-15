@@ -2,7 +2,8 @@ use macroquad::prelude::*;
 use std::sync::Mutex;
 
 use crate::input::keybindings::{
-    is_alt_pressed, is_modifier_pressed, is_shift_pressed, EditorAction,
+    is_alt_pressed, is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed,
+    EditorAction,
 };
 
 /// Key repeat timing constants
@@ -105,12 +106,10 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     true
 }
 
-// Cmd/Ctrl + key bindings (no shift, no alt)
-// New file: Cmd+N on native, Cmd+W on WASM (Cmd+N opens a browser window)
+// Shortcut + letter bindings: Cmd/Ctrl on native, Alt on WASM
 const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::S, EditorAction::Save),
     (KeyCode::O, EditorAction::Open),
-    #[cfg(not(target_arch = "wasm32"))]
     (KeyCode::N, EditorAction::New),
     (KeyCode::Z, EditorAction::Undo),
     (KeyCode::Y, EditorAction::Redo),
@@ -130,14 +129,12 @@ const MODIFIER_REPEAT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Right, EditorAction::ScrollRight),
 ];
 
-// Alt/Option + key bindings (no modifier)
+// Alt/Option + arrow bindings (no modifier)
 const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Left, EditorAction::MoveWordLeft),
     (KeyCode::Right, EditorAction::MoveWordRight),
     (KeyCode::Up, EditorAction::SwapLineUp),
     (KeyCode::Down, EditorAction::SwapLineDown),
-    #[cfg(target_arch = "wasm32")]
-    (KeyCode::N, EditorAction::New),
 ];
 
 // Shift + key bindings (with key repeat)
@@ -188,18 +185,33 @@ pub fn get_editor_action() -> Option<EditorAction> {
     let modifier = is_modifier_pressed();
     let shift = is_shift_pressed();
     let alt = is_alt_pressed();
+    let shortcut_mod = is_shortcut_modifier_pressed();
 
-    if modifier && !shift && !alt {
+    // Letter-key shortcuts: Alt on WASM, Cmd/Ctrl on native
+    #[cfg(not(target_arch = "wasm32"))]
+    let shortcut_only = shortcut_mod && !shift && !alt;
+    #[cfg(target_arch = "wasm32")]
+    let shortcut_only = shortcut_mod && !shift && !modifier;
+
+    if shortcut_only {
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
             return Some(action);
         }
+    }
+
+    // Arrow shortcuts with Cmd/Ctrl (all platforms, unchanged)
+    if modifier && !shift && !alt {
         if let Some(action) = check_repeating(MODIFIER_REPEAT_BINDINGS, true) {
             return Some(action);
         }
     }
 
-    // Shift + Cmd + Z for Redo (alternative)
-    if modifier && shift && !alt && is_key_pressed(KeyCode::Z) {
+    // Shift + shortcut + Z for Redo (alternative)
+    #[cfg(not(target_arch = "wasm32"))]
+    let redo_alt = shortcut_mod && shift && !alt && is_key_pressed(KeyCode::Z);
+    #[cfg(target_arch = "wasm32")]
+    let redo_alt = shortcut_mod && shift && !modifier && is_key_pressed(KeyCode::Z);
+    if redo_alt {
         drain_char_queue();
         return Some(EditorAction::Redo);
     }
@@ -270,10 +282,10 @@ pub fn get_dialog_action() -> Option<EditorAction> {
 
 /// Process keyboard input for file picker
 pub fn get_file_picker_action() -> Option<EditorAction> {
-    let modifier = is_modifier_pressed();
+    let shortcut_mod = is_shortcut_modifier_pressed();
 
-    // File operations with Cmd/Ctrl
-    if modifier {
+    // File operations: Alt on WASM, Cmd/Ctrl on native
+    if shortcut_mod {
         if is_key_pressed(KeyCode::D) {
             return Some(EditorAction::DuplicateFile);
         }

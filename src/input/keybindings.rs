@@ -106,3 +106,14 @@ pub fn is_shift_pressed() -> bool {
 pub fn is_alt_pressed() -> bool {
     is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt)
 }
+
+/// Shortcut modifier for letter-key combos: Alt on WASM, Cmd/Ctrl on native.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn is_shortcut_modifier_pressed() -> bool {
+    is_modifier_pressed()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn is_shortcut_modifier_pressed() -> bool {
+    is_alt_pressed()
+}
