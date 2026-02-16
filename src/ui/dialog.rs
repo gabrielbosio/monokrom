@@ -216,6 +216,7 @@ pub enum DialogResult {
 pub struct MessageDialog {
     pub message: String,
     pub visible: bool,
+    fresh: bool,
 }
 
 impl Default for MessageDialog {
@@ -229,12 +230,14 @@ impl MessageDialog {
         Self {
             message: String::new(),
             visible: false,
+            fresh: false,
         }
     }
 
     pub fn show(&mut self, message: &str) {
         self.message = message.to_string();
         self.visible = true;
+        self.fresh = true;
     }
 
     pub fn hide(&mut self) {
@@ -244,6 +247,13 @@ impl MessageDialog {
     /// Process input - dismiss on any key press
     pub fn update(&mut self) -> bool {
         if !self.visible {
+            return false;
+        }
+
+        // Skip the frame the dialog was shown (consume stale input)
+        if self.fresh {
+            self.fresh = false;
+            while get_char_pressed().is_some() {}
             return false;
         }
 

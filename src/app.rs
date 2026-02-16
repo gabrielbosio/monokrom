@@ -7,8 +7,9 @@ use crate::config::{
 };
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
-use crate::input::{get_editor_action, EditorAction};
+use crate::input::{get_editor_action, get_terminal_action, EditorAction};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
+use crate::terminal::{parse_command, TerminalCommand, TerminalState};
 use crate::ui::{
     ConfirmDialog, DialogResult, FilePicker, FilePickerResult, InputDialog, MessageDialog,
 };
@@ -43,6 +44,8 @@ struct SearchState {
 /// Application state modes
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppMode {
+    /// Terminal mode
+    Terminal,
     /// Normal editing mode
     Editing,
     /// Save dialog open
@@ -63,6 +66,7 @@ pub struct App {
     editor: EditorState,
     view: ViewState,
     search: SearchState,
+    terminal: TerminalState,
 
     // File state
     current_filename: Option<String>,
@@ -113,11 +117,18 @@ impl App {
                 match_pos: None,
                 is_replacing: false,
             },
+            terminal: {
+                let mut t = TerminalState::new();
+                t.push_output("monokrom");
+                t.push_output("type 'help' for commands");
+                t.push_output("");
+                t
+            },
 
             current_filename: None,
             is_modified: false,
 
-            mode: AppMode::Editing,
+            mode: AppMode::Terminal,
             input_dialog: InputDialog::new(),
             confirm_dialog: ConfirmDialog::new(),
             message_dialog: MessageDialog::new(),
@@ -167,6 +178,7 @@ impl App {
         }
 
         match self.mode {
+            AppMode::Terminal => self.update_terminal(),
             AppMode::Editing => self.update_editing(),
             AppMode::SaveDialog => self.update_save_dialog(),
             AppMode::OpenPicker => self.update_open_picker(),
@@ -253,6 +265,8 @@ impl App {
                         self.search.match_pos = None;
                         self.search.is_replacing = false;
                         self.editor.selection.clear();
+                    } else {
+                        self.mode = AppMode::Terminal;
                     }
                 }
                 _ => {}
@@ -483,7 +497,10 @@ impl App {
         match action {
             EditorAction::Save => {
                 if self.current_filename.is_some() {
-                    self.save_current_file();
+                    if self.save_current_file() {
+                        let name = self.current_filename.as_deref().unwrap_or("");
+                        self.show_message(&format!("Saved {name}"));
+                    }
                 } else {
                     self.mode = AppMode::SaveDialog;
                     self.input_dialog.show("Save as:");
@@ -540,13 +557,15 @@ impl App {
                         self.show_message("Error: Invalid filename");
                         return;
                     }
-                    self.current_filename = Some(filename);
+                    self.current_filename = Some(filename.clone());
                     if self.save_current_file() {
                         // Check if we have a pending action after saving
                         if self.pending_action != PendingAction::None {
                             self.after_close_confirm_action();
                             return;
                         }
+                        self.show_message(&format!("Saved {filename}"));
+                        return;
                     } else {
                         // Save failed, error message already shown
                         return;
@@ -879,11 +898,197 @@ impl App {
         self.reset_editor(TextBuffer::new(), None);
     }
 
+    fn update_terminal(&mut self) {
+        // Update cursor blink (reuse existing timer)
+        if let Some(action) = get_terminal_action() {
+            self.cursor_visible = true;
+            self.cursor_blink_timer = 0.0;
+
+            match action {
+                EditorAction::DialogConfirm => {
+                    let input = self.terminal.submit_input();
+                    self.terminal.push_output(&format!("> {input}"));
+                    if !input.is_empty() {
+                        self.execute_terminal_command(&input);
+                    }
+                }
+                EditorAction::DialogCancel => {
+                    self.mode = AppMode::Editing;
+                }
+                EditorAction::InsertChar(c) => self.terminal.insert_char(c),
+                EditorAction::Backspace => self.terminal.backspace(),
+                EditorAction::Delete => self.terminal.delete(),
+                EditorAction::MoveLeft => self.terminal.move_left(),
+                EditorAction::MoveRight => self.terminal.move_right(),
+                EditorAction::MoveToLineStart => self.terminal.move_to_start(),
+                EditorAction::MoveToLineEnd => self.terminal.move_to_end(),
+                EditorAction::MoveUp => self.terminal.recall_prev(),
+                EditorAction::MoveDown => self.terminal.recall_next(),
+                EditorAction::ScrollUp => self.terminal.scroll_up(),
+                EditorAction::ScrollDown => self.terminal.scroll_down(),
+                _ => {}
+            }
+        }
+    }
+
+    fn execute_terminal_command(&mut self, input: &str) {
+        match parse_command(input) {
+            TerminalCommand::Ls => match filesystem::list_files() {
+                Ok(files) => {
+                    if files.is_empty() {
+                        self.terminal.push_output("(no files)");
+                    } else {
+                        for f in &files {
+                            self.terminal.push_output(f);
+                        }
+                    }
+                }
+                Err(e) => self.terminal.push_output(&format!("error: {e}")),
+            },
+            TerminalCommand::New => {
+                self.create_new_file();
+                self.terminal.push_output("new file created");
+                self.mode = AppMode::Editing;
+            }
+            TerminalCommand::Save(name_arg) => {
+                let name = match name_arg {
+                    Some(n) => n,
+                    None => match self.current_filename.clone() {
+                        Some(n) => n,
+                        None => {
+                            self.terminal.push_output("save: missing filename");
+                            return;
+                        }
+                    },
+                };
+                if !filesystem::is_valid_filename(&name) {
+                    self.terminal.push_output("error: invalid filename");
+                    return;
+                }
+                match filesystem::write_file(&name, &self.editor.buffer.to_string()) {
+                    Ok(()) => {
+                        self.current_filename = Some(name.clone());
+                        self.is_modified = false;
+                        self.terminal.push_output(&format!("saved {name}"));
+                    }
+                    Err(e) => self.terminal.push_output(&format!("error: {e}")),
+                }
+            }
+            TerminalCommand::Open(name) => match filesystem::read_file(&name) {
+                Ok(content) => {
+                    let buffer = TextBuffer::from_str(&content);
+                    self.reset_editor(buffer, Some(name.clone()));
+                    self.terminal.push_output(&format!("opened {name}"));
+                    self.mode = AppMode::Editing;
+                }
+                Err(e) => self.terminal.push_output(&format!("error: {e}")),
+            },
+            TerminalCommand::Rm(name) => match filesystem::delete_file(&name) {
+                Ok(()) => self.terminal.push_output(&format!("removed {name}")),
+                Err(e) => self.terminal.push_output(&format!("error: {e}")),
+            },
+            TerminalCommand::Cp(src, dst) => {
+                if !filesystem::is_valid_filename(&dst) {
+                    self.terminal.push_output("error: invalid destination name");
+                    return;
+                }
+                match filesystem::read_file(&src) {
+                    Ok(content) => match filesystem::write_file(&dst, &content) {
+                        Ok(()) => self.terminal.push_output(&format!("copied {src} -> {dst}")),
+                        Err(e) => self.terminal.push_output(&format!("error: {e}")),
+                    },
+                    Err(e) => self.terminal.push_output(&format!("error: {e}")),
+                }
+            }
+            TerminalCommand::Run => {
+                self.terminal.push_output("run: not implemented yet");
+            }
+            TerminalCommand::Clear => {
+                self.terminal.clear();
+            }
+            TerminalCommand::Help => {
+                self.terminal.push_output("commands:");
+                self.terminal.push_output("  ls          list files");
+                self.terminal.push_output("  new         new file");
+                self.terminal.push_output("  save <name> save file");
+                self.terminal.push_output("  open <name> open file");
+                self.terminal.push_output("  rm <name>   remove file");
+                self.terminal.push_output("  cp <s> <d>  copy file");
+                self.terminal.push_output("  run         run program");
+                self.terminal.push_output("  clear       clear screen");
+                self.terminal.push_output("  help        show this");
+            }
+            TerminalCommand::Unknown(msg) => {
+                if !msg.is_empty() {
+                    self.terminal.push_output(&msg);
+                }
+            }
+        }
+    }
+
+    fn draw_terminal(&self, helpers: &DrawHelpers) {
+        let visible_lines = SCREEN_TILES_Y as usize - 1; // bottom row for input
+        let tw = TILE_WIDTH as f32;
+        let th = TILE_HEIGHT as f32;
+
+        // Draw output lines
+        for i in 0..visible_lines {
+            let line_idx = self.terminal.scroll_offset + i;
+            if line_idx >= self.terminal.output_lines.len() {
+                break;
+            }
+            let line = &self.terminal.output_lines[line_idx];
+            let y = (i as f32) * th;
+            for (j, c) in line.chars().enumerate() {
+                if j >= SCREEN_TILES_X as usize {
+                    break;
+                }
+                helpers.draw_char(c, j as f32 * tw, y, COLOR_WHITE);
+            }
+        }
+
+        // Draw input line at bottom
+        let input_y = (visible_lines as f32) * th;
+        helpers.draw_char('>', 0.0, input_y, COLOR_WHITE);
+        for (j, c) in self.terminal.input_line.chars().enumerate() {
+            let x = (j + 1) as f32 * tw;
+            if j + 1 >= SCREEN_TILES_X as usize {
+                break;
+            }
+            helpers.draw_char(c, x, input_y, COLOR_WHITE);
+        }
+
+        // Draw cursor
+        if self.cursor_visible {
+            let cursor_x = (self.terminal.cursor_pos + 1) as f32 * tw;
+            helpers.draw_rect(cursor_x, input_y, tw + 1.0, th + 1.0, COLOR_WHITE);
+            // Draw char under cursor in inverted color
+            let c = self
+                .terminal
+                .input_line
+                .chars()
+                .nth(self.terminal.cursor_pos)
+                .unwrap_or(' ');
+            if c != ' ' {
+                helpers.draw_char(c, cursor_x, input_y, COLOR_BLACK);
+            }
+        }
+    }
+
     pub fn draw(&self) {
-        // Clear with gray background
-        clear_background(COLOR_DARK_GRAY);
+        // Clear with background color
+        clear_background(if self.mode == AppMode::Terminal {
+            COLOR_BLACK
+        } else {
+            COLOR_DARK_GRAY
+        });
 
         let helpers = DrawHelpers::new(&self.font, SCALE as f32);
+
+        if self.mode == AppMode::Terminal {
+            self.draw_terminal(&helpers);
+            return;
+        }
 
         // Draw editor content (scaled)
         self.draw_editor(&helpers);
@@ -905,6 +1110,7 @@ impl App {
                     self.draw_search_hint(&helpers);
                 }
             }
+            AppMode::Terminal => unreachable!(),
         }
     }
 

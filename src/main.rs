@@ -4,6 +4,7 @@ mod editor;
 mod filesystem;
 mod input;
 mod render;
+mod terminal;
 mod ui;
 
 use macroquad::prelude::*;

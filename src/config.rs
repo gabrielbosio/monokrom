@@ -35,3 +35,6 @@ pub const SCROLLBAR_WIDTH: u32 = 4;
 // Editor area (accounting for potential scrollbars)
 pub const EDITOR_TILES_X: u32 = SCREEN_TILES_X - 1; // 39 tiles for text, 1 for scrollbar
 pub const EDITOR_TILES_Y: u32 = SCREEN_TILES_Y - 1; // 23 tiles for text, 1 for scrollbar
+
+// Terminal
+pub const TERMINAL_MAX_SCROLLBACK: usize = 200;

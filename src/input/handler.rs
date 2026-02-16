@@ -292,6 +292,65 @@ pub fn get_dialog_action() -> Option<EditorAction> {
     None
 }
 
+/// Process keyboard input for terminal
+pub fn get_terminal_action() -> Option<EditorAction> {
+    if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
+        return Some(EditorAction::DialogConfirm);
+    }
+    if is_key_pressed(KeyCode::Escape) {
+        return Some(EditorAction::DialogCancel);
+    }
+
+    let modifier = is_modifier_pressed();
+
+    // Modifier + Up/Down for scrollback
+    if modifier {
+        if is_key_pressed(KeyCode::Up) {
+            return Some(EditorAction::ScrollUp);
+        }
+        if is_key_pressed(KeyCode::Down) {
+            return Some(EditorAction::ScrollDown);
+        }
+    }
+
+    if !modifier {
+        // Up/Down for command history
+        if is_key_pressed(KeyCode::Up) {
+            return Some(EditorAction::MoveUp);
+        }
+        if is_key_pressed(KeyCode::Down) {
+            return Some(EditorAction::MoveDown);
+        }
+
+        if is_key_pressed(KeyCode::Left) {
+            return Some(EditorAction::MoveLeft);
+        }
+        if is_key_pressed(KeyCode::Right) {
+            return Some(EditorAction::MoveRight);
+        }
+        if is_key_pressed(KeyCode::Home) {
+            return Some(EditorAction::MoveToLineStart);
+        }
+        if is_key_pressed(KeyCode::End) {
+            return Some(EditorAction::MoveToLineEnd);
+        }
+        if is_key_pressed(KeyCode::Backspace) {
+            return Some(EditorAction::Backspace);
+        }
+        if is_key_pressed(KeyCode::Delete) {
+            return Some(EditorAction::Delete);
+        }
+
+        if let Some(c) = get_char_pressed() {
+            if (' '..='~').contains(&c) {
+                return Some(EditorAction::InsertChar(c));
+            }
+        }
+    }
+
+    None
+}
+
 /// Process keyboard input for file picker
 pub fn get_file_picker_action() -> Option<EditorAction> {
     let shortcut_mod = is_shortcut_modifier_pressed();
