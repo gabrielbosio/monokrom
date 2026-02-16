@@ -312,6 +312,9 @@ impl App {
                     &mut self.editor.selection,
                     &mut self.editor.history,
                 );
+                if self.is_mkr_file() {
+                    self.smart_indent();
+                }
                 self.is_modified = true;
                 self.ensure_cursor_visible();
             }
@@ -899,6 +902,35 @@ impl App {
 
         // Find next match
         self.find_next();
+    }
+
+    fn is_mkr_file(&self) -> bool {
+        self.current_filename
+            .as_ref()
+            .is_some_and(|f| f.ends_with(".mkr"))
+    }
+
+    /// After insert_newline, add extra indent if the previous line opens a block
+    fn smart_indent(&mut self) {
+        let cur_line = self.editor.cursor.line();
+        if cur_line == 0 {
+            return;
+        }
+        let prev = self.editor.buffer.get_line(cur_line - 1);
+        let trimmed = prev.trim();
+        let opens_block = trimmed.ends_with(')')
+            || trimmed.ends_with("then")
+            || trimmed == "else"
+            || trimmed.starts_with("while ")
+            || trimmed.starts_with("for ")
+            || trimmed.starts_with("struct ");
+        if opens_block {
+            let idx = self.editor.cursor.char_index(&self.editor.buffer);
+            self.editor.buffer.insert(idx, "  ");
+            self.editor
+                .cursor
+                .set_position(cur_line, self.editor.cursor.col() + 2);
+        }
     }
 
     fn ensure_cursor_visible(&mut self) {
