@@ -306,12 +306,11 @@ impl App {
                     self.find_next();
                     return;
                 }
-                operations::insert_char(
+                operations::insert_newline(
                     &mut self.editor.buffer,
                     &mut self.editor.cursor,
                     &mut self.editor.selection,
                     &mut self.editor.history,
-                    '\n',
                 );
                 self.is_modified = true;
                 self.ensure_cursor_visible();
@@ -1099,6 +1098,11 @@ impl App {
                 self.terminal.push_output("  lex         tokenize buffer");
                 self.terminal.push_output("  clear       clear screen");
                 self.terminal.push_output("  help        show this");
+                self.terminal.push_output("");
+                self.terminal.push_output("shortcuts:");
+                self.terminal.push_output("  cmd+up/down scroll output");
+                self.terminal.push_output("  tab         autocomplete");
+                self.terminal.push_output("  escape      back to editor");
             }
             TerminalCommand::Unknown(msg) => {
                 if !msg.is_empty() {

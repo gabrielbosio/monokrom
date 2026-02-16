@@ -42,6 +42,36 @@ pub fn insert_char(
     }
 }
 
+/// Insert a newline at the cursor position, preserving the current line's indentation
+pub fn insert_newline(
+    buffer: &mut TextBuffer,
+    cursor: &mut Cursor,
+    selection: &mut Selection,
+    history: &mut History,
+) {
+    history.push(buffer, cursor.position);
+
+    if let Some((start, end)) = selection.get_range(buffer) {
+        if start != end {
+            let (line, col) = buffer.char_to_line_col(start);
+            buffer.delete_range(start, end);
+            cursor.set_position(line, col);
+            selection.clear();
+        }
+    }
+
+    let indent: String = buffer
+        .get_line(cursor.line())
+        .chars()
+        .take_while(|c| *c == ' ')
+        .collect();
+
+    let char_idx = cursor.char_index(buffer);
+    let text = format!("\n{indent}");
+    buffer.insert(char_idx, &text);
+    cursor.set_position(cursor.line() + 1, indent.len());
+}
+
 /// Delete character before cursor (backspace)
 pub fn delete_before(
     buffer: &mut TextBuffer,
