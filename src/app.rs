@@ -910,7 +910,7 @@ impl App {
             .is_some_and(|f| f.ends_with(".mkr"))
     }
 
-    /// After insert_newline, add extra indent if the previous line opens a block
+    /// After insert_newline, adjust indent based on previous line content
     fn smart_indent(&mut self) {
         let cur_line = self.editor.cursor.line();
         if cur_line == 0 {
@@ -918,6 +918,16 @@ impl App {
         }
         let prev = self.editor.buffer.get_line(cur_line - 1);
         let trimmed = prev.trim();
+
+        if trimmed == "end" {
+            // Dedent the `end` line and the new line
+            self.dedent_line(cur_line - 1);
+            self.dedent_line(cur_line);
+            let col = self.editor.cursor.col().saturating_sub(2);
+            self.editor.cursor.set_position(cur_line, col);
+            return;
+        }
+
         let opens_block = trimmed.ends_with(')')
             || trimmed.ends_with("then")
             || trimmed == "else"
@@ -931,6 +941,18 @@ impl App {
                 .cursor
                 .set_position(cur_line, self.editor.cursor.col() + 2);
         }
+    }
+
+    /// Remove up to 2 leading spaces from a line
+    fn dedent_line(&mut self, line: usize) {
+        let content = self.editor.buffer.get_line(line);
+        let leading: usize = content.chars().take_while(|c| *c == ' ').count();
+        if leading == 0 {
+            return;
+        }
+        let remove = leading.min(2);
+        let start = self.editor.buffer.line_col_to_char(line, 0);
+        self.editor.buffer.delete_range(start, start + remove);
     }
 
     fn ensure_cursor_visible(&mut self) {
