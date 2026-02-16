@@ -1,9 +1,9 @@
 use macroquad::prelude::*;
 
 use crate::config::{
-    COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X, EDITOR_TILES_Y, SCALE,
-    SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH, TILE_HEIGHT,
-    TILE_WIDTH,
+    COLOR_BLACK, COLOR_DARK_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X, EDITOR_TILES_Y,
+    SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH,
+    TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
@@ -881,7 +881,7 @@ impl App {
 
     pub fn draw(&self) {
         // Clear with gray background
-        clear_background(COLOR_GRAY);
+        clear_background(COLOR_DARK_GRAY);
 
         let helpers = DrawHelpers::new(&self.font, SCALE as f32);
 
@@ -933,7 +933,7 @@ impl App {
                 hint_x + (i as f32 * TILE_WIDTH as f32),
                 hint_y,
                 COLOR_WHITE,
-                COLOR_GRAY,
+                COLOR_DARK_GRAY,
             );
         }
     }

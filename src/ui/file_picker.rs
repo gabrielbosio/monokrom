@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
 use crate::config::{
-    COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_HEIGHT, TILE_WIDTH,
+    COLOR_BLACK, COLOR_DARK_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::input::{get_file_picker_action, EditorAction};
 use crate::render::DrawHelpers;
@@ -187,12 +187,18 @@ impl FilePicker {
         // Title
         let title_x = picker_x + TILE_WIDTH as f32;
         let title_y = picker_y + TILE_HEIGHT as f32;
-        helpers.draw_text_with_shadow("Open File", title_x, title_y, COLOR_WHITE, COLOR_GRAY);
+        helpers.draw_text_with_shadow("Open File", title_x, title_y, COLOR_WHITE, COLOR_DARK_GRAY);
 
         if self.files.is_empty() {
             let msg_x = picker_x + TILE_WIDTH as f32;
             let msg_y = picker_y + (3 * TILE_HEIGHT) as f32;
-            helpers.draw_text_with_shadow("No files found", msg_x, msg_y, COLOR_GRAY, COLOR_BLACK);
+            helpers.draw_text_with_shadow(
+                "No files found",
+                msg_x,
+                msg_y,
+                COLOR_DARK_GRAY,
+                COLOR_BLACK,
+            );
             return;
         }
 
@@ -232,13 +238,13 @@ impl FilePicker {
         if self.scroll_offset > 0 {
             let ind_x = picker_x + picker_width - 2.0 * TILE_WIDTH as f32;
             let ind_y = list_y;
-            helpers.draw_char_with_shadow('^', ind_x, ind_y, COLOR_GRAY, COLOR_BLACK);
+            helpers.draw_char_with_shadow('^', ind_x, ind_y, COLOR_DARK_GRAY, COLOR_BLACK);
         }
 
         if visible_end < self.files.len() {
             let ind_x = picker_x + picker_width - 2.0 * TILE_WIDTH as f32;
             let ind_y = list_y + ((Self::VISIBLE_ITEMS - 1) as f32 * TILE_HEIGHT as f32);
-            helpers.draw_char_with_shadow('v', ind_x, ind_y, COLOR_GRAY, COLOR_BLACK);
+            helpers.draw_char_with_shadow('v', ind_x, ind_y, COLOR_DARK_GRAY, COLOR_BLACK);
         }
 
         // Instructions or delete confirmation
@@ -260,7 +266,7 @@ impl FilePicker {
                 "Enter:Open ^D:Copy ^Del:Del",
                 hint_x,
                 hint1_y,
-                COLOR_GRAY,
+                COLOR_DARK_GRAY,
                 COLOR_BLACK,
             );
             #[cfg(target_arch = "wasm32")]
@@ -268,17 +274,23 @@ impl FilePicker {
                 "Enter:Open ^D:Copy ^Del:Del",
                 hint_x,
                 hint1_y,
-                COLOR_GRAY,
+                COLOR_DARK_GRAY,
                 COLOR_BLACK,
             );
             #[cfg(not(target_arch = "wasm32"))]
-            helpers.draw_text_with_shadow("Esc:Cancel", hint_x, hint_y, COLOR_GRAY, COLOR_BLACK);
+            helpers.draw_text_with_shadow(
+                "Esc:Cancel",
+                hint_x,
+                hint_y,
+                COLOR_DARK_GRAY,
+                COLOR_BLACK,
+            );
             #[cfg(target_arch = "wasm32")]
             helpers.draw_text_with_shadow(
                 "^E:Exp ^I:Imp Esc:Cancel",
                 hint_x,
                 hint_y,
-                COLOR_GRAY,
+                COLOR_DARK_GRAY,
                 COLOR_BLACK,
             );
         }

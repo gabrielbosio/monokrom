@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
 use crate::config::{
-    COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_HEIGHT, TILE_WIDTH,
+    COLOR_BLACK, COLOR_DARK_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::input::{get_dialog_action, EditorAction};
 use crate::render::DrawHelpers;
@@ -83,7 +83,7 @@ impl InputDialog {
         // Title
         let title_x = dialog_x + TILE_WIDTH as f32;
         let title_y = dialog_y + TILE_HEIGHT as f32;
-        helpers.draw_text_with_shadow(&self.title, title_x, title_y, COLOR_WHITE, COLOR_GRAY);
+        helpers.draw_text_with_shadow(&self.title, title_x, title_y, COLOR_WHITE, COLOR_DARK_GRAY);
 
         // Input field background
         let input_x = dialog_x + TILE_WIDTH as f32;
@@ -94,7 +94,7 @@ impl InputDialog {
             input_y,
             input_width,
             TILE_HEIGHT as f32,
-            COLOR_GRAY,
+            COLOR_DARK_GRAY,
         );
 
         // Input text (truncate if too long)
@@ -196,12 +196,12 @@ impl ConfirmDialog {
         // Message
         let msg_x = dialog_x + TILE_WIDTH as f32;
         let msg_y = dialog_y + TILE_HEIGHT as f32;
-        helpers.draw_text_with_shadow(&self.message, msg_x, msg_y, COLOR_WHITE, COLOR_GRAY);
+        helpers.draw_text_with_shadow(&self.message, msg_x, msg_y, COLOR_WHITE, COLOR_DARK_GRAY);
 
         // Instructions
         let hint_x = dialog_x + TILE_WIDTH as f32;
         let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
-        helpers.draw_text_with_shadow("(y/n)", hint_x, hint_y, COLOR_GRAY, COLOR_BLACK);
+        helpers.draw_text_with_shadow("(y/n)", hint_x, hint_y, COLOR_DARK_GRAY, COLOR_BLACK);
     }
 }
 
@@ -275,11 +275,17 @@ impl MessageDialog {
         // Message
         let msg_x = dialog_x + TILE_WIDTH as f32;
         let msg_y = dialog_y + TILE_HEIGHT as f32;
-        helpers.draw_text_with_shadow(&self.message, msg_x, msg_y, COLOR_WHITE, COLOR_GRAY);
+        helpers.draw_text_with_shadow(&self.message, msg_x, msg_y, COLOR_WHITE, COLOR_DARK_GRAY);
 
         // Instructions
         let hint_x = dialog_x + TILE_WIDTH as f32;
         let hint_y = dialog_y + (2.5 * TILE_HEIGHT as f32);
-        helpers.draw_text_with_shadow("(press any key)", hint_x, hint_y, COLOR_GRAY, COLOR_BLACK);
+        helpers.draw_text_with_shadow(
+            "(press any key)",
+            hint_x,
+            hint_y,
+            COLOR_DARK_GRAY,
+            COLOR_BLACK,
+        );
     }
 }

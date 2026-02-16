@@ -19,13 +19,13 @@
         canvas {
             image-rendering: pixelated;
             image-rendering: crisp-edges;
-            width: 768px;
-            height: 720px;
+            width: 640px;
+            height: 576px;
         }
     </style>
 </head>
 <body>
-    <canvas id="glcanvas" tabindex="1" width="768" height="720"></canvas>
+    <canvas id="glcanvas" tabindex="1" width="640" height="576"></canvas>
     <script src="gl.js"></script>
     <script src="sapp_jsutils.js"></script>
     <script src="quad-storage.js"></script>
@@ -36,8 +36,8 @@
     (function() {
         var canvas = document.getElementById('glcanvas');
         function fit() {
-            var sx = window.innerWidth / 768;
-            var sy = window.innerHeight / 720;
+            var sx = window.innerWidth / 640;
+            var sy = window.innerHeight / 576;
             var s = Math.min(sx, sy, 1);
             canvas.style.transform = s < 1 ? 'scale(' + s + ')' : '';
         }
