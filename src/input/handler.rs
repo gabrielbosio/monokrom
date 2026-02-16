@@ -237,6 +237,10 @@ pub fn get_editor_action() -> Option<EditorAction> {
     }
 
     if shift && !modifier && !alt {
+        if is_key_pressed(KeyCode::Tab) {
+            drain_char_queue();
+            return Some(EditorAction::RemoveTab);
+        }
         if let Some(action) = check_repeating(SHIFT_BINDINGS, false) {
             return Some(action);
         }

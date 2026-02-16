@@ -120,6 +120,20 @@ pub fn delete_word_before(
     selection.clear();
 }
 
+/// Remove up to 2 leading spaces from the current line (Shift+Tab)
+pub fn dedent(buffer: &mut TextBuffer, cursor: &mut Cursor, history: &mut History) {
+    let line = buffer.get_line(cursor.line());
+    let leading: usize = line.chars().take_while(|c| *c == ' ').count();
+    if leading == 0 {
+        return;
+    }
+    let remove = leading.min(2);
+    history.push(buffer, cursor.position);
+    let line_start = buffer.line_col_to_char(cursor.line(), 0);
+    buffer.delete_range(line_start, line_start + remove);
+    cursor.set_position(cursor.line(), cursor.col().saturating_sub(remove));
+}
+
 /// Delete character at cursor (delete key)
 pub fn delete_at(
     buffer: &mut TextBuffer,

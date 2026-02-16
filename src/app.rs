@@ -248,6 +248,7 @@ impl App {
                 EditorAction::Backspace
                 | EditorAction::BackspaceWord
                 | EditorAction::Delete
+                | EditorAction::RemoveTab
                 | EditorAction::SwapLineUp
                 | EditorAction::SwapLineDown => self.handle_delete(action),
                 EditorAction::Cut | EditorAction::Copy | EditorAction::Paste => {
@@ -395,6 +396,11 @@ impl App {
                 &mut self.editor.buffer,
                 &mut self.editor.cursor,
                 &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::RemoveTab => operations::dedent(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
                 &mut self.editor.history,
             ),
             EditorAction::SwapLineUp => operations::swap_line_up(

@@ -31,6 +31,7 @@ pub enum EditorAction {
     BackspaceWord,
     Delete,
     InsertTab,
+    RemoveTab,
     SwapLineUp,
     SwapLineDown,
 
