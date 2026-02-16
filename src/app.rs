@@ -227,9 +227,9 @@ impl App {
             self.cursor_blink_timer = 0.0;
 
             match action {
-                EditorAction::InsertChar(_) | EditorAction::InsertNewline => {
-                    self.handle_text_input(action)
-                }
+                EditorAction::InsertChar(_)
+                | EditorAction::InsertNewline
+                | EditorAction::InsertTab => self.handle_text_input(action),
                 EditorAction::MoveLeft
                 | EditorAction::MoveRight
                 | EditorAction::MoveUp
@@ -246,6 +246,7 @@ impl App {
                 | EditorAction::SelectWordRight
                 | EditorAction::SelectAll => self.handle_selection(action),
                 EditorAction::Backspace
+                | EditorAction::BackspaceWord
                 | EditorAction::Delete
                 | EditorAction::SwapLineUp
                 | EditorAction::SwapLineDown => self.handle_delete(action),
@@ -314,6 +315,22 @@ impl App {
                 self.is_modified = true;
                 self.ensure_cursor_visible();
             }
+            EditorAction::InsertTab => {
+                if self.is_in_search_mode() {
+                    return;
+                }
+                for c in [' ', ' '] {
+                    operations::insert_char(
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
+                        c,
+                    );
+                }
+                self.is_modified = true;
+                self.ensure_cursor_visible();
+            }
             _ => {}
         }
     }
@@ -363,6 +380,12 @@ impl App {
         }
         match action {
             EditorAction::Backspace => operations::delete_before(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::BackspaceWord => operations::delete_word_before(
                 &mut self.editor.buffer,
                 &mut self.editor.cursor,
                 &mut self.editor.selection,

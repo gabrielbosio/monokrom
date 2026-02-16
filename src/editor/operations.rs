@@ -82,6 +82,44 @@ pub fn delete_before(
     selection.clear();
 }
 
+/// Delete word before cursor (Alt+Backspace)
+pub fn delete_word_before(
+    buffer: &mut TextBuffer,
+    cursor: &mut Cursor,
+    selection: &mut Selection,
+    history: &mut History,
+) {
+    // If there's a selection, delete it
+    if let Some((start, end)) = selection.get_range(buffer) {
+        if start != end {
+            history.push(buffer, cursor.position);
+            let (line, col) = buffer.char_to_line_col(start);
+            buffer.delete_range(start, end);
+            cursor.set_position(line, col);
+            selection.clear();
+            return;
+        }
+    }
+
+    if cursor.line() == 0 && cursor.col() == 0 {
+        return;
+    }
+
+    history.push(buffer, cursor.position);
+
+    let end_idx = cursor.char_index(buffer);
+    // Move cursor to word boundary (same logic as move_word_left)
+    cursor.move_word_left(buffer);
+    let start_idx = cursor.char_index(buffer);
+
+    if start_idx < end_idx {
+        buffer.delete_range(start_idx, end_idx);
+        let (line, col) = buffer.char_to_line_col(start_idx);
+        cursor.set_position(line, col);
+    }
+    selection.clear();
+}
+
 /// Delete character at cursor (delete key)
 pub fn delete_at(
     buffer: &mut TextBuffer,

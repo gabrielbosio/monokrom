@@ -136,6 +136,7 @@ const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Right, EditorAction::MoveWordRight),
     (KeyCode::Up, EditorAction::SwapLineUp),
     (KeyCode::Down, EditorAction::SwapLineDown),
+    (KeyCode::Backspace, EditorAction::BackspaceWord),
 ];
 
 // Shift + Alt bindings (select by word)
@@ -252,6 +253,10 @@ pub fn get_editor_action() -> Option<EditorAction> {
         if is_key_pressed(KeyCode::Escape) {
             drain_char_queue();
             return Some(EditorAction::DialogCancel);
+        }
+        if is_key_pressed(KeyCode::Tab) {
+            drain_char_queue();
+            return Some(EditorAction::InsertTab);
         }
     }
 
