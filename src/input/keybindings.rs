@@ -78,13 +78,14 @@ pub enum EditorAction {
 /// macOS loses key-up events when Cmd is released while the window is
 /// unfocused (e.g. after Cmd+Tab), leaving is_key_down stuck true.
 /// We track when the key was last freshly pressed and stop trusting
-/// is_key_down after a timeout.
+/// is_key_down after a short timeout. Arrow keys held alongside Cmd
+/// refresh the timer so Cmd+Arrow scroll keeps working.
 #[cfg(any(target_os = "macos", target_arch = "wasm32"))]
 fn is_cmd_pressed() -> bool {
     use std::sync::Mutex;
 
     static LAST_PRESS: Mutex<f64> = Mutex::new(0.0);
-    const TIMEOUT: f64 = 5.0;
+    const TIMEOUT: f64 = 0.5;
 
     if is_key_pressed(KeyCode::LeftSuper) || is_key_pressed(KeyCode::RightSuper) {
         if let Ok(mut t) = LAST_PRESS.lock() {
@@ -94,6 +95,17 @@ fn is_cmd_pressed() -> bool {
 
     if !is_key_down(KeyCode::LeftSuper) && !is_key_down(KeyCode::RightSuper) {
         return false;
+    }
+
+    // Keep timer alive during Cmd+Arrow combos (e.g. scroll)
+    if is_key_down(KeyCode::Up)
+        || is_key_down(KeyCode::Down)
+        || is_key_down(KeyCode::Left)
+        || is_key_down(KeyCode::Right)
+    {
+        if let Ok(mut t) = LAST_PRESS.lock() {
+            *t = get_time();
+        }
     }
 
     // Key appears held, check for stale state from lost key-up
