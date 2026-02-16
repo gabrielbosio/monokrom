@@ -7,6 +7,7 @@ pub struct TerminalState {
     pub command_history: Vec<String>,
     pub history_index: Option<usize>,
     pub scroll_offset: usize,
+    pub last_tab_input: Option<String>,
 }
 
 impl TerminalState {
@@ -18,6 +19,7 @@ impl TerminalState {
             command_history: Vec::new(),
             history_index: None,
             scroll_offset: 0,
+            last_tab_input: None,
         }
     }
 
@@ -42,6 +44,7 @@ impl TerminalState {
         self.input_line.clear();
         self.cursor_pos = 0;
         self.history_index = None;
+        self.last_tab_input = None;
         input
     }
 
@@ -57,6 +60,7 @@ impl TerminalState {
         self.history_index = Some(idx);
         self.input_line = self.command_history[idx].clone();
         self.cursor_pos = self.input_line.len();
+        self.last_tab_input = None;
     }
 
     pub fn recall_next(&mut self) {
@@ -73,23 +77,27 @@ impl TerminalState {
             self.input_line = self.command_history[idx].clone();
             self.cursor_pos = self.input_line.len();
         }
+        self.last_tab_input = None;
     }
 
     pub fn insert_char(&mut self, c: char) {
         self.input_line.insert(self.cursor_pos, c);
         self.cursor_pos += 1;
+        self.last_tab_input = None;
     }
 
     pub fn backspace(&mut self) {
         if self.cursor_pos > 0 {
             self.cursor_pos -= 1;
             self.input_line.remove(self.cursor_pos);
+            self.last_tab_input = None;
         }
     }
 
     pub fn delete(&mut self) {
         if self.cursor_pos < self.input_line.len() {
             self.input_line.remove(self.cursor_pos);
+            self.last_tab_input = None;
         }
     }
 

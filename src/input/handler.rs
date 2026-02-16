@@ -313,6 +313,11 @@ pub fn get_terminal_action() -> Option<EditorAction> {
         }
     }
 
+    if !modifier && is_key_pressed(KeyCode::Tab) {
+        drain_char_queue();
+        return Some(EditorAction::Autocomplete);
+    }
+
     if !modifier {
         // Up/Down for command history
         if is_key_pressed(KeyCode::Up) {

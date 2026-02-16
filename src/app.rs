@@ -9,7 +9,7 @@ use crate::editor::{operations, Cursor, CursorPosition, History, Selection, Text
 use crate::filesystem;
 use crate::input::{get_editor_action, get_terminal_action, EditorAction};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
-use crate::terminal::{parse_command, TerminalCommand, TerminalState};
+use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, COMMAND_NAMES};
 use crate::ui::{
     ConfirmDialog, DialogResult, FilePicker, FilePickerResult, InputDialog, MessageDialog,
 };
@@ -926,6 +926,7 @@ impl App {
                 EditorAction::MoveDown => self.terminal.recall_next(),
                 EditorAction::ScrollUp => self.terminal.scroll_up(),
                 EditorAction::ScrollDown => self.terminal.scroll_down(),
+                EditorAction::Autocomplete => self.handle_terminal_autocomplete(),
                 _ => {}
             }
         }
@@ -1021,6 +1022,44 @@ impl App {
             TerminalCommand::Unknown(msg) => {
                 if !msg.is_empty() {
                     self.terminal.push_output(&msg);
+                }
+            }
+        }
+    }
+
+    fn handle_terminal_autocomplete(&mut self) {
+        let input = &self.terminal.input_line;
+        let already_shown = self.terminal.last_tab_input.as_deref() == Some(input);
+        if input.contains(' ') {
+            // Complete filename argument
+            let space_pos = input.find(' ').unwrap();
+            let prefix = &input[space_pos + 1..];
+            let files = match filesystem::list_files() {
+                Ok(f) => f,
+                Err(_) => return,
+            };
+            let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
+            if let Some((common, matches)) = complete(prefix, &file_refs) {
+                let new_input = format!("{} {common}", &input[..space_pos]);
+                self.terminal.input_line = new_input;
+                self.terminal.cursor_pos = self.terminal.input_line.len();
+                self.terminal.last_tab_input = Some(self.terminal.input_line.clone());
+                if matches.len() > 1 && !already_shown {
+                    for m in &matches {
+                        self.terminal.push_output(m);
+                    }
+                }
+            }
+        } else {
+            // Complete command name
+            if let Some((common, matches)) = complete(input, COMMAND_NAMES) {
+                self.terminal.input_line = common;
+                self.terminal.cursor_pos = self.terminal.input_line.len();
+                self.terminal.last_tab_input = Some(self.terminal.input_line.clone());
+                if matches.len() > 1 && !already_shown {
+                    for m in &matches {
+                        self.terminal.push_output(m);
+                    }
                 }
             }
         }

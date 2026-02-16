@@ -1,3 +1,7 @@
+pub const COMMAND_NAMES: &[&str] = &[
+    "clear", "cp", "help", "ls", "new", "open", "rm", "run", "save",
+];
+
 pub enum TerminalCommand {
     Ls,
     New,
@@ -35,6 +39,32 @@ pub fn parse_command(input: &str) -> TerminalCommand {
         Some(other) => TerminalCommand::Unknown(format!("unknown command: {other}")),
         None => TerminalCommand::Unknown(String::new()),
     }
+}
+
+/// Returns (common_prefix, all_matches) for the given prefix among candidates.
+/// Returns None if no candidates match.
+pub fn complete(prefix: &str, candidates: &[&str]) -> Option<(String, Vec<String>)> {
+    let matches: Vec<String> = candidates
+        .iter()
+        .filter(|c| c.starts_with(prefix))
+        .map(|c| c.to_string())
+        .collect();
+    if matches.is_empty() {
+        return None;
+    }
+    let common = &matches[0];
+    let prefix_len = common
+        .chars()
+        .enumerate()
+        .take_while(|&(i, c)| matches.iter().all(|m| m.chars().nth(i) == Some(c)))
+        .count();
+    let common_prefix = common[..common
+        .chars()
+        .take(prefix_len)
+        .map(|c| c.len_utf8())
+        .sum::<usize>()]
+        .to_string();
+    Some((common_prefix, matches))
 }
 
 #[cfg(test)]
@@ -114,5 +144,45 @@ mod tests {
     #[test]
     fn parse_whitespace_trimmed() {
         assert!(matches!(parse_command("  ls  "), TerminalCommand::Ls));
+    }
+
+    #[test]
+    fn complete_single_match() {
+        let (prefix, matches) = complete("sa", COMMAND_NAMES).unwrap();
+        assert_eq!(prefix, "save");
+        assert_eq!(matches, vec!["save"]);
+    }
+
+    #[test]
+    fn complete_multiple_matches() {
+        let (prefix, matches) = complete("c", COMMAND_NAMES).unwrap();
+        assert_eq!(prefix, "c");
+        assert_eq!(matches, vec!["clear", "cp"]);
+    }
+
+    #[test]
+    fn complete_no_match() {
+        assert!(complete("z", COMMAND_NAMES).is_none());
+    }
+
+    #[test]
+    fn complete_empty_prefix() {
+        let (_, matches) = complete("", COMMAND_NAMES).unwrap();
+        assert_eq!(matches.len(), COMMAND_NAMES.len());
+    }
+
+    #[test]
+    fn complete_exact_match() {
+        let (prefix, matches) = complete("ls", COMMAND_NAMES).unwrap();
+        assert_eq!(prefix, "ls");
+        assert_eq!(matches, vec!["ls"]);
+    }
+
+    #[test]
+    fn complete_filenames() {
+        let files = &["game.mkr", "game2.mkr", "hello.mkr"];
+        let (prefix, matches) = complete("game", files).unwrap();
+        assert_eq!(prefix, "game");
+        assert_eq!(matches, vec!["game.mkr", "game2.mkr"]);
     }
 }

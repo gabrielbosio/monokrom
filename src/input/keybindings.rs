@@ -66,6 +66,9 @@ pub enum EditorAction {
     Find,
     Replace,
 
+    // Terminal
+    Autocomplete,
+
     // Dialog navigation
     DialogConfirm,
     DialogCancel,
