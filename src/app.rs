@@ -58,6 +58,8 @@ pub enum AppMode {
     FindDialog,
     /// Replace dialog open
     ReplaceDialog,
+    /// Go to line dialog
+    GoToLineDialog,
     /// Message dialog (error/info)
     Message,
 }
@@ -185,6 +187,7 @@ impl App {
             AppMode::CloseConfirm => self.update_close_confirm(),
             AppMode::FindDialog => self.update_find_dialog(),
             AppMode::ReplaceDialog => self.update_replace_dialog(),
+            AppMode::GoToLineDialog => self.update_goto_line_dialog(),
             AppMode::Message => self.update_message_dialog(),
         }
 
@@ -257,7 +260,8 @@ impl App {
                 | EditorAction::Open
                 | EditorAction::New
                 | EditorAction::Find
-                | EditorAction::Replace => self.handle_file_action(action),
+                | EditorAction::Replace
+                | EditorAction::GoToLine => self.handle_file_action(action),
                 EditorAction::DialogCancel => {
                     if !self.search.query.is_empty() {
                         self.search.query.clear();
@@ -541,6 +545,12 @@ impl App {
                 self.mode = AppMode::FindDialog;
                 self.input_dialog.show("Find:");
             }
+            EditorAction::GoToLine => {
+                let line = self.editor.cursor.line() + 1;
+                let col = self.editor.cursor.col() + 1;
+                self.mode = AppMode::GoToLineDialog;
+                self.input_dialog.show(&format!("Line ({line}:{col}):"));
+            }
             _ => {}
         }
     }
@@ -730,6 +740,33 @@ impl App {
                     self.mode = AppMode::Editing;
                 }
             }
+        }
+    }
+
+    fn update_goto_line_dialog(&mut self) {
+        if let Some(result) = self.input_dialog.update() {
+            match result {
+                DialogResult::Confirm(input) => {
+                    let input = input.trim();
+                    let (line_str, col_str) = input
+                        .split_once(':')
+                        .map(|(l, c)| (l, Some(c)))
+                        .unwrap_or((input, None));
+                    if let Ok(n) = line_str.parse::<usize>() {
+                        let line = n
+                            .saturating_sub(1)
+                            .min(self.editor.buffer.line_count().saturating_sub(1));
+                        let col = col_str
+                            .and_then(|s| s.parse::<usize>().ok())
+                            .map(|c| c.saturating_sub(1).min(self.editor.buffer.line_len(line)))
+                            .unwrap_or(0);
+                        self.editor.cursor.set_position(line, col);
+                        self.after_cursor_move();
+                    }
+                }
+                DialogResult::Reject | DialogResult::Cancel => {}
+            }
+            self.mode = AppMode::Editing;
         }
     }
 
@@ -1137,9 +1174,10 @@ impl App {
 
         // Draw dialogs (scaled)
         match self.mode {
-            AppMode::SaveDialog | AppMode::FindDialog | AppMode::ReplaceDialog => {
-                self.input_dialog.draw_scaled(&helpers)
-            }
+            AppMode::SaveDialog
+            | AppMode::FindDialog
+            | AppMode::ReplaceDialog
+            | AppMode::GoToLineDialog => self.input_dialog.draw_scaled(&helpers),
             AppMode::OpenPicker => self.file_picker.draw_scaled(&helpers),
             AppMode::CloseConfirm => self.confirm_dialog.draw_scaled(&helpers),
             AppMode::Message => self.message_dialog.draw_scaled(&helpers),

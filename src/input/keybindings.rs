@@ -65,6 +65,7 @@ pub enum EditorAction {
     // Find and replace
     Find,
     Replace,
+    GoToLine,
 
     // Terminal
     Autocomplete,

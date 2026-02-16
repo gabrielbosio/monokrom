@@ -119,6 +119,7 @@ const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::A, EditorAction::SelectAll),
     (KeyCode::F, EditorAction::Find),
     (KeyCode::R, EditorAction::Replace),
+    (KeyCode::L, EditorAction::GoToLine),
 ];
 
 // Cmd/Ctrl + arrow bindings with key repeat (capped by MAX_MODIFIER_REPEAT)
