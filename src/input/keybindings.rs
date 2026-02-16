@@ -22,6 +22,8 @@ pub enum EditorAction {
     SelectRight,
     SelectUp,
     SelectDown,
+    SelectWordLeft,
+    SelectWordRight,
     SelectAll,
 
     // Editing
@@ -69,9 +71,35 @@ pub enum EditorAction {
     DialogCancel,
 }
 
+/// macOS loses key-up events when Cmd is released while the window is
+/// unfocused (e.g. after Cmd+Tab), leaving is_key_down stuck true.
+/// We track when the key was last freshly pressed and stop trusting
+/// is_key_down after a timeout.
 #[cfg(any(target_os = "macos", target_arch = "wasm32"))]
 fn is_cmd_pressed() -> bool {
-    is_key_down(KeyCode::LeftSuper) || is_key_down(KeyCode::RightSuper)
+    use std::sync::Mutex;
+
+    static LAST_PRESS: Mutex<f64> = Mutex::new(0.0);
+    const TIMEOUT: f64 = 5.0;
+
+    if is_key_pressed(KeyCode::LeftSuper) || is_key_pressed(KeyCode::RightSuper) {
+        if let Ok(mut t) = LAST_PRESS.lock() {
+            *t = get_time();
+        }
+    }
+
+    if !is_key_down(KeyCode::LeftSuper) && !is_key_down(KeyCode::RightSuper) {
+        return false;
+    }
+
+    // Key appears held, check for stale state from lost key-up
+    if let Ok(t) = LAST_PRESS.lock() {
+        if get_time() - *t > TIMEOUT {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[cfg(any(not(target_os = "macos"), target_arch = "wasm32"))]

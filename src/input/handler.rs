@@ -137,6 +137,12 @@ const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Down, EditorAction::SwapLineDown),
 ];
 
+// Shift + Alt bindings (select by word)
+const SHIFT_ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::Left, EditorAction::SelectWordLeft),
+    (KeyCode::Right, EditorAction::SelectWordRight),
+];
+
 // Shift + key bindings (with key repeat)
 const SHIFT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Left, EditorAction::SelectLeft),
@@ -216,7 +222,13 @@ pub fn get_editor_action() -> Option<EditorAction> {
         return Some(EditorAction::Redo);
     }
 
-    if alt && !modifier {
+    if shift && alt && !modifier {
+        if let Some(action) = check_repeating(SHIFT_ALT_BINDINGS, false) {
+            return Some(action);
+        }
+    }
+
+    if alt && !modifier && !shift {
         if let Some(action) = check_pressed(ALT_BINDINGS) {
             return Some(action);
         }

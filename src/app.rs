@@ -226,6 +226,8 @@ impl App {
                 | EditorAction::SelectRight
                 | EditorAction::SelectUp
                 | EditorAction::SelectDown
+                | EditorAction::SelectWordLeft
+                | EditorAction::SelectWordRight
                 | EditorAction::SelectAll => self.handle_selection(action),
                 EditorAction::Backspace
                 | EditorAction::Delete
@@ -327,6 +329,10 @@ impl App {
             EditorAction::SelectRight => self.editor.cursor.move_right(&self.editor.buffer),
             EditorAction::SelectUp => self.editor.cursor.move_up(&self.editor.buffer),
             EditorAction::SelectDown => self.editor.cursor.move_down(&self.editor.buffer),
+            EditorAction::SelectWordLeft => self.editor.cursor.move_word_left(&self.editor.buffer),
+            EditorAction::SelectWordRight => {
+                self.editor.cursor.move_word_right(&self.editor.buffer)
+            }
             _ => return,
         }
         self.after_selection_move();
