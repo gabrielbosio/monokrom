@@ -928,9 +928,10 @@ impl App {
             return;
         }
 
-        let opens_block = trimmed.ends_with(')')
-            || trimmed.ends_with("then")
+        let opens_block = trimmed.ends_with("then")
             || trimmed == "else"
+            || trimmed.starts_with("fn ")
+            || trimmed.starts_with("if ")
             || trimmed.starts_with("while ")
             || trimmed.starts_with("for ")
             || trimmed.starts_with("struct ");
