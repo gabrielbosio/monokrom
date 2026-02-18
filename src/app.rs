@@ -2,13 +2,14 @@ use macroquad::prelude::*;
 
 use crate::compiler::lexer;
 use crate::config::{
-    COLOR_BLACK, COLOR_DARK_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X, EDITOR_TILES_Y,
-    SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH,
-    TILE_HEIGHT, TILE_WIDTH,
+    COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
+    EDITOR_TILES_Y, SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
+    SCROLLBAR_WIDTH, TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
 use crate::input::{get_editor_action, get_terminal_action, EditorAction};
+use crate::render::highlight::{self, CharStyle};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
 use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, COMMAND_NAMES};
 use crate::ui::{
@@ -92,6 +93,10 @@ pub struct App {
 
     // Rendering
     font: BitmapFont,
+
+    // Syntax highlighting
+    highlight_styles: Vec<CharStyle>,
+    highlight_valid: bool,
 }
 
 impl App {
@@ -144,6 +149,9 @@ impl App {
             cursor_visible: true,
 
             font,
+
+            highlight_styles: Vec::new(),
+            highlight_valid: false,
         }
     }
 
@@ -203,6 +211,13 @@ impl App {
             visible_cols,
             self.view.scroll_x,
         );
+
+        // Recompute syntax highlighting if needed
+        if !self.highlight_valid && self.is_mkr_file() {
+            let source = self.editor.buffer.to_string();
+            self.highlight_styles = highlight::highlight(&source);
+            self.highlight_valid = true;
+        }
     }
 
     fn visible_cols(&self) -> usize {
@@ -295,6 +310,7 @@ impl App {
                     c,
                 );
                 self.is_modified = true;
+                self.highlight_valid = false;
                 self.ensure_cursor_visible();
             }
             EditorAction::InsertNewline => {
@@ -316,6 +332,7 @@ impl App {
                     self.smart_indent();
                 }
                 self.is_modified = true;
+                self.highlight_valid = false;
                 self.ensure_cursor_visible();
             }
             EditorAction::InsertTab => {
@@ -332,6 +349,7 @@ impl App {
                     );
                 }
                 self.is_modified = true;
+                self.highlight_valid = false;
                 self.ensure_cursor_visible();
             }
             _ => {}
@@ -420,6 +438,7 @@ impl App {
             _ => return,
         }
         self.is_modified = true;
+        self.highlight_valid = false;
         self.ensure_cursor_visible();
     }
 
@@ -438,6 +457,7 @@ impl App {
                 );
                 if text.is_some() {
                     self.is_modified = true;
+                    self.highlight_valid = false;
                     if !clipboard_ok && self.clipboard.is_some() {
                         self.show_message("Warning: Clipboard error");
                     }
@@ -465,6 +485,7 @@ impl App {
                     &mut self.clipboard,
                 );
                 self.is_modified = true;
+                self.highlight_valid = false;
                 self.ensure_cursor_visible();
             }
             _ => {}
@@ -490,6 +511,7 @@ impl App {
             ),
             _ => return,
         }
+        self.highlight_valid = false;
         self.ensure_cursor_visible();
     }
 
@@ -898,6 +920,7 @@ impl App {
         self.editor.selection.clear();
 
         self.is_modified = true;
+        self.highlight_valid = false;
         self.search.match_pos = None;
 
         // Find next match
@@ -1002,6 +1025,7 @@ impl App {
         self.view.scroll_y = 0;
         self.current_filename = filename;
         self.is_modified = false;
+        self.highlight_valid = false;
     }
 
     fn open_file(&mut self, filename: &str) {
@@ -1327,6 +1351,7 @@ impl App {
     fn draw_editor(&self, helpers: &DrawHelpers) {
         let visible_cols = self.visible_cols();
         let visible_lines = self.visible_lines();
+        let is_mkr = self.is_mkr_file();
 
         // Draw each visible line
         for screen_line in 0..visible_lines {
@@ -1337,6 +1362,11 @@ impl App {
 
             let line_text = self.editor.buffer.get_line(buffer_line);
             let y = (screen_line * TILE_HEIGHT as usize) as f32;
+            let line_start_char = if is_mkr {
+                self.editor.buffer.line_col_to_char(buffer_line, 0)
+            } else {
+                0
+            };
 
             // Get selection range for this line if any
             let selection_range = self
@@ -1362,8 +1392,26 @@ impl App {
                     // Draw character in inverted colors
                     helpers.draw_char(c, x, y, COLOR_BLACK);
                 } else if c != ' ' {
-                    // Draw character with shadow
-                    helpers.draw_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
+                    if is_mkr {
+                        let char_idx = line_start_char + buffer_col;
+                        let style = self
+                            .highlight_styles
+                            .get(char_idx)
+                            .copied()
+                            .unwrap_or(CharStyle::Normal);
+                        if style == CharStyle::Comment {
+                            helpers.draw_char(c, x, y, COLOR_LIGHT_GRAY);
+                        } else {
+                            let fg = if style == CharStyle::Keyword {
+                                COLOR_WHITE
+                            } else {
+                                COLOR_LIGHT_GRAY
+                            };
+                            helpers.draw_char_with_shadow(c, x, y, fg, COLOR_BLACK);
+                        }
+                    } else {
+                        helpers.draw_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
+                    }
                 }
             }
         }
