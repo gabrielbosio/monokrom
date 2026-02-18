@@ -84,16 +84,26 @@ pub enum EditorAction {
 /// is_key_down after a short timeout. Arrow keys held alongside Cmd
 /// refresh the timer so Cmd+Arrow scroll keeps working.
 #[cfg(any(target_os = "macos", target_arch = "wasm32"))]
-fn is_cmd_pressed() -> bool {
-    use std::sync::Mutex;
+static CMD_LAST_PRESS: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
 
-    static LAST_PRESS: Mutex<f64> = Mutex::new(0.0);
+/// Refresh the Cmd timer. Call when a Cmd combo successfully fires
+/// so that repeated combos (e.g. hold Cmd, press Z Z Z) keep working.
+#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
+pub fn refresh_cmd_timer() {
+    if let Ok(mut t) = CMD_LAST_PRESS.lock() {
+        *t = get_time();
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_arch = "wasm32")))]
+pub fn refresh_cmd_timer() {}
+
+#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
+fn is_cmd_pressed() -> bool {
     const TIMEOUT: f64 = 0.5;
 
     if is_key_pressed(KeyCode::LeftSuper) || is_key_pressed(KeyCode::RightSuper) {
-        if let Ok(mut t) = LAST_PRESS.lock() {
-            *t = get_time();
-        }
+        refresh_cmd_timer();
     }
 
     if !is_key_down(KeyCode::LeftSuper) && !is_key_down(KeyCode::RightSuper) {
@@ -106,13 +116,11 @@ fn is_cmd_pressed() -> bool {
         || is_key_down(KeyCode::Left)
         || is_key_down(KeyCode::Right)
     {
-        if let Ok(mut t) = LAST_PRESS.lock() {
-            *t = get_time();
-        }
+        refresh_cmd_timer();
     }
 
     // Key appears held, check for stale state from lost key-up
-    if let Ok(t) = LAST_PRESS.lock() {
+    if let Ok(t) = CMD_LAST_PRESS.lock() {
         if get_time() - *t > TIMEOUT {
             return false;
         }

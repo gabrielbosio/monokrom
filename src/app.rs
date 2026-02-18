@@ -943,12 +943,21 @@ impl App {
         let trimmed = prev.trim();
 
         if trimmed == "end" {
-            // Dedent the `end` line and the new line
+            if self.should_dedent(cur_line - 1) {
+                self.dedent_line(cur_line - 1);
+                self.dedent_line(cur_line);
+                let col = self.editor.cursor.col().saturating_sub(2);
+                self.editor.cursor.set_position(cur_line, col);
+            }
+            return;
+        }
+
+        // Dedent else line if needed, then fall through to add body indent
+        if trimmed == "else" && self.should_dedent(cur_line - 1) {
             self.dedent_line(cur_line - 1);
             self.dedent_line(cur_line);
             let col = self.editor.cursor.col().saturating_sub(2);
             self.editor.cursor.set_position(cur_line, col);
-            return;
         }
 
         let opens_block = trimmed.ends_with("then")
@@ -965,6 +974,25 @@ impl App {
                 .cursor
                 .set_position(cur_line, self.editor.cursor.col() + 2);
         }
+    }
+
+    /// Check if a line should be dedented: true when its indent >= the line above
+    fn should_dedent(&self, line: usize) -> bool {
+        let indent = self.leading_spaces(line);
+        if line > 0 {
+            indent >= self.leading_spaces(line - 1)
+        } else {
+            indent > 0
+        }
+    }
+
+    fn leading_spaces(&self, line: usize) -> usize {
+        self.editor
+            .buffer
+            .get_line(line)
+            .chars()
+            .take_while(|c| *c == ' ')
+            .count()
     }
 
     /// Remove up to 2 leading spaces from a line

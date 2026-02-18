@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use crate::input::keybindings::{
     is_alt_pressed, is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed,
-    EditorAction,
+    refresh_cmd_timer, EditorAction,
 };
 
 /// Key repeat timing constants
@@ -203,6 +203,7 @@ pub fn get_editor_action() -> Option<EditorAction> {
 
     if shortcut_only {
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
+            refresh_cmd_timer();
             return Some(action);
         }
     }
@@ -221,6 +222,7 @@ pub fn get_editor_action() -> Option<EditorAction> {
     let redo_alt = shortcut_mod && shift && !modifier && is_key_pressed(KeyCode::Z);
     if redo_alt {
         drain_char_queue();
+        refresh_cmd_timer();
         return Some(EditorAction::Redo);
     }
 
@@ -231,7 +233,7 @@ pub fn get_editor_action() -> Option<EditorAction> {
     }
 
     if alt && !modifier && !shift {
-        if let Some(action) = check_pressed(ALT_BINDINGS) {
+        if let Some(action) = check_repeating(ALT_BINDINGS, false) {
             return Some(action);
         }
     }
