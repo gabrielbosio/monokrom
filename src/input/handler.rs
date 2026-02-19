@@ -9,9 +9,6 @@ use crate::input::keybindings::{
 /// Key repeat timing constants
 const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
 const KEY_REPEAT_RATE: f32 = 0.03; // Time between repeats
-/// macOS can lose key-up events for keys pressed during Cmd combos,
-/// leaving is_key_down stuck true. Stop modifier+arrow repeats after this limit.
-const MAX_MODIFIER_REPEAT: f32 = 3.0;
 
 /// State for key repeat tracking
 struct KeyRepeatState {
@@ -19,7 +16,6 @@ struct KeyRepeatState {
     time_held: f32,
     is_repeating: bool,
     with_modifier: bool,
-    total_time: f32,
 }
 
 static KEY_REPEAT: Mutex<KeyRepeatState> = Mutex::new(KeyRepeatState {
@@ -27,7 +23,6 @@ static KEY_REPEAT: Mutex<KeyRepeatState> = Mutex::new(KeyRepeatState {
     time_held: 0.0,
     is_repeating: false,
     with_modifier: false,
-    total_time: 0.0,
 });
 
 /// Drain all pending characters from the input queue
@@ -46,7 +41,6 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     if is_key_pressed(key) {
         state.last_key = Some(key);
         state.time_held = 0.0;
-        state.total_time = 0.0;
         state.is_repeating = false;
         state.with_modifier = with_modifier;
         return true;
@@ -57,7 +51,6 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
         if state.last_key == Some(key) {
             state.last_key = None;
             state.time_held = 0.0;
-            state.total_time = 0.0;
             state.is_repeating = false;
         }
         return false;
@@ -68,27 +61,16 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
         return false;
     }
 
-    // Modifier context changed (e.g. released Cmd while arrow still held) - reset
+    // Modifier context changed (e.g. released Ctrl while arrow still held) - reset
     if state.with_modifier != with_modifier {
         state.last_key = None;
         state.time_held = 0.0;
-        state.total_time = 0.0;
         state.is_repeating = false;
         return false;
     }
 
     let dt = get_frame_time();
     state.time_held += dt;
-    state.total_time += dt;
-
-    // Safety: stop modifier repeats after a limit (macOS stuck key workaround)
-    if state.with_modifier && state.total_time > MAX_MODIFIER_REPEAT {
-        state.last_key = None;
-        state.time_held = 0.0;
-        state.total_time = 0.0;
-        state.is_repeating = false;
-        return false;
-    }
 
     // Check threshold
     let threshold = if state.is_repeating {
@@ -106,9 +88,8 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     true
 }
 
-// Shortcut + letter bindings: Cmd/Ctrl on native, Alt on WASM.
-// Uses is_key_pressed (not is_key_down) so release is detected reliably.
-// OS key repeat provides hold-to-repeat if the OS supports it.
+// Ctrl + letter bindings: uses is_key_pressed (OS key repeat handles hold).
+// On WASM, these are triggered by Alt instead (see is_shortcut_modifier_pressed).
 const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::S, EditorAction::Save),
     (KeyCode::O, EditorAction::Open),
@@ -124,15 +105,7 @@ const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::L, EditorAction::GoToLine),
 ];
 
-// Cmd/Ctrl + arrow bindings with key repeat (capped by MAX_MODIFIER_REPEAT)
-const MODIFIER_REPEAT_BINDINGS: &[(KeyCode, EditorAction)] = &[
-    (KeyCode::Up, EditorAction::ScrollUp),
-    (KeyCode::Down, EditorAction::ScrollDown),
-    (KeyCode::Left, EditorAction::ScrollLeft),
-    (KeyCode::Right, EditorAction::ScrollRight),
-];
-
-// Alt/Option + arrow bindings (no modifier)
+// Alt/Option + arrow bindings (with key repeat)
 const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Left, EditorAction::MoveWordLeft),
     (KeyCode::Right, EditorAction::MoveWordRight),
@@ -163,6 +136,8 @@ const PLAIN_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Down, EditorAction::MoveDown),
     (KeyCode::Home, EditorAction::MoveToLineStart),
     (KeyCode::End, EditorAction::MoveToLineEnd),
+    (KeyCode::PageUp, EditorAction::ScrollUp),
+    (KeyCode::PageDown, EditorAction::ScrollDown),
     (KeyCode::Backspace, EditorAction::Backspace),
     (KeyCode::Delete, EditorAction::Delete),
 ];
@@ -197,26 +172,7 @@ pub fn get_editor_action() -> Option<EditorAction> {
     let alt = is_alt_pressed();
     let shortcut_mod = is_shortcut_modifier_pressed();
 
-    // A fresh modifier press clears stale modifier-combo repeat state.
-    // macOS can lose key-up events for keys pressed during Cmd combos,
-    // leaving is_key_down stuck true. Re-pressing the modifier without
-    // the letter key would otherwise resume a stale repeat.
-    let fresh_mod = is_key_pressed(KeyCode::LeftSuper)
-        || is_key_pressed(KeyCode::RightSuper)
-        || is_key_pressed(KeyCode::LeftControl)
-        || is_key_pressed(KeyCode::RightControl);
-    if fresh_mod {
-        if let Ok(mut state) = KEY_REPEAT.lock() {
-            if state.with_modifier {
-                state.last_key = None;
-                state.time_held = 0.0;
-                state.total_time = 0.0;
-                state.is_repeating = false;
-            }
-        }
-    }
-
-    // Letter-key shortcuts: Alt on WASM, Cmd/Ctrl on native
+    // Letter-key shortcuts: Alt on WASM, Ctrl on native
     #[cfg(not(target_arch = "wasm32"))]
     let shortcut_only = shortcut_mod && !shift && !alt;
     #[cfg(target_arch = "wasm32")]
@@ -225,13 +181,6 @@ pub fn get_editor_action() -> Option<EditorAction> {
     if shortcut_only {
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
             refresh_cmd_timer();
-            return Some(action);
-        }
-    }
-
-    // Arrow shortcuts with Cmd/Ctrl (all platforms, unchanged)
-    if modifier && !shift && !alt {
-        if let Some(action) = check_repeating(MODIFIER_REPEAT_BINDINGS, true) {
             return Some(action);
         }
     }
@@ -288,10 +237,6 @@ pub fn get_editor_action() -> Option<EditorAction> {
     }
 
     // Text input - check for typed characters
-    // No modifier/nav-key gate here: bound combos already returned above
-    // (draining chars), and unbound Cmd+key doesn't generate chars on macOS.
-    // Gating on is_key_down is unsafe because macOS can lose key-up events
-    // for keys pressed during Cmd combos, leaving is_key_down stuck true.
     if let Some(c) = get_char_pressed() {
         if (' '..='~').contains(&c) {
             return Some(EditorAction::InsertChar(c));
@@ -336,14 +281,12 @@ pub fn get_terminal_action() -> Option<EditorAction> {
 
     let modifier = is_modifier_pressed();
 
-    // Modifier + Up/Down for scrollback
-    if modifier {
-        if is_key_pressed(KeyCode::Up) {
-            return Some(EditorAction::ScrollUp);
-        }
-        if is_key_pressed(KeyCode::Down) {
-            return Some(EditorAction::ScrollDown);
-        }
+    // PageUp/PageDown for scrollback (with hold-to-repeat)
+    if should_key_fire(KeyCode::PageUp, false) {
+        return Some(EditorAction::ScrollUp);
+    }
+    if should_key_fire(KeyCode::PageDown, false) {
+        return Some(EditorAction::ScrollDown);
     }
 
     if !modifier && is_key_pressed(KeyCode::Tab) {
@@ -393,7 +336,7 @@ pub fn get_terminal_action() -> Option<EditorAction> {
 pub fn get_file_picker_action() -> Option<EditorAction> {
     let shortcut_mod = is_shortcut_modifier_pressed();
 
-    // File operations: Alt on WASM, Cmd/Ctrl on native
+    // File operations: Alt on WASM, Ctrl on native
     if shortcut_mod {
         if is_key_pressed(KeyCode::D) {
             return Some(EditorAction::DuplicateFile);

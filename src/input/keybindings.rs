@@ -47,8 +47,6 @@ pub enum EditorAction {
     // Scrolling
     ScrollUp,
     ScrollDown,
-    ScrollLeft,
-    ScrollRight,
 
     // File operations
     Save,
@@ -78,27 +76,22 @@ pub enum EditorAction {
     DialogCancel,
 }
 
-/// macOS loses key-up events when Cmd is released while the window is
-/// unfocused (e.g. after Cmd+Tab), leaving is_key_down stuck true.
-/// We track when the key was last freshly pressed and stop trusting
-/// is_key_down after a short timeout. Arrow keys held alongside Cmd
-/// refresh the timer so Cmd+Arrow scroll keeps working.
-#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
+// --- WASM Cmd timer (browser needs Cmd detection with timeout) ---
+
+#[cfg(target_arch = "wasm32")]
 static CMD_LAST_PRESS: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
 
-/// Refresh the Cmd timer. Call when a Cmd combo successfully fires
-/// so that repeated combos (e.g. hold Cmd, press Z Z Z) keep working.
-#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 pub fn refresh_cmd_timer() {
     if let Ok(mut t) = CMD_LAST_PRESS.lock() {
         *t = get_time();
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn refresh_cmd_timer() {}
 
-#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 fn is_cmd_pressed() -> bool {
     const TIMEOUT: f64 = 5.0;
 
@@ -110,7 +103,6 @@ fn is_cmd_pressed() -> bool {
         return false;
     }
 
-    // Keep timer alive during Cmd+Arrow combos (e.g. scroll)
     if is_key_down(KeyCode::Up)
         || is_key_down(KeyCode::Down)
         || is_key_down(KeyCode::Left)
@@ -119,7 +111,6 @@ fn is_cmd_pressed() -> bool {
         refresh_cmd_timer();
     }
 
-    // Key appears held, check for stale state from lost key-up
     if let Ok(t) = CMD_LAST_PRESS.lock() {
         if get_time() - *t > TIMEOUT {
             return false;
@@ -129,20 +120,15 @@ fn is_cmd_pressed() -> bool {
     true
 }
 
-#[cfg(any(not(target_os = "macos"), target_arch = "wasm32"))]
+// --- Modifier detection ---
+
 fn is_ctrl_pressed() -> bool {
     is_key_down(KeyCode::LeftControl) || is_key_down(KeyCode::RightControl)
 }
 
 /// Check if modifier key is pressed.
-/// Native macOS: Cmd. Native non-macOS: Ctrl.
-/// WASM: Cmd or Ctrl (gl.js maps MetaLeft/MetaRight to LeftSuper/RightSuper).
-#[cfg(all(not(target_arch = "wasm32"), target_os = "macos"))]
-pub fn is_modifier_pressed() -> bool {
-    is_cmd_pressed()
-}
-
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
+/// Native: Ctrl. WASM: Cmd or Ctrl.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn is_modifier_pressed() -> bool {
     is_ctrl_pressed()
 }
@@ -162,7 +148,7 @@ pub fn is_alt_pressed() -> bool {
     is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt)
 }
 
-/// Shortcut modifier for letter-key combos: Alt on WASM, Cmd/Ctrl on native.
+/// Shortcut modifier for letter-key combos: Alt on WASM, Ctrl on native.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn is_shortcut_modifier_pressed() -> bool {
     is_modifier_pressed()

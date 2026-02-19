@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
 
-use crate::compiler::lexer;
+use crate::compiler::{self, lexer};
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
     EDITOR_TILES_Y, SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
@@ -270,10 +270,7 @@ impl App {
                     self.handle_clipboard(action)
                 }
                 EditorAction::Undo | EditorAction::Redo => self.handle_history(action),
-                EditorAction::ScrollUp
-                | EditorAction::ScrollDown
-                | EditorAction::ScrollLeft
-                | EditorAction::ScrollRight => self.handle_scroll(action),
+                EditorAction::ScrollUp | EditorAction::ScrollDown => self.handle_scroll(action),
                 EditorAction::Save
                 | EditorAction::Open
                 | EditorAction::New
@@ -530,21 +527,6 @@ impl App {
                     .saturating_sub(self.visible_lines());
                 if self.view.scroll_y < max {
                     self.view.scroll_y += 1;
-                }
-            }
-            EditorAction::ScrollLeft => {
-                if self.view.scroll_x > 0 {
-                    self.view.scroll_x -= 1;
-                }
-            }
-            EditorAction::ScrollRight => {
-                let max = self
-                    .editor
-                    .buffer
-                    .max_line_width()
-                    .saturating_sub(self.visible_cols());
-                if self.view.scroll_x < max {
-                    self.view.scroll_x += 1;
                 }
             }
             _ => {}
@@ -952,18 +934,20 @@ impl App {
             return;
         }
 
-        // Dedent else line if needed, then fall through to add body indent
-        if trimmed == "else" && self.should_dedent(cur_line - 1) {
+        // Dedent else/else-if line if needed, then fall through to add body indent
+        if (trimmed == "else" || trimmed.starts_with("else if "))
+            && self.should_dedent(cur_line - 1)
+        {
             self.dedent_line(cur_line - 1);
             self.dedent_line(cur_line);
             let col = self.editor.cursor.col().saturating_sub(2);
             self.editor.cursor.set_position(cur_line, col);
         }
 
-        let opens_block = trimmed.ends_with("then")
-            || trimmed == "else"
+        let opens_block = trimmed == "else"
             || trimmed.starts_with("fn ")
             || trimmed.starts_with("if ")
+            || trimmed.starts_with("else if ")
             || trimmed.starts_with("while ")
             || trimmed.starts_with("for ")
             || trimmed.starts_with("struct ");
@@ -1190,6 +1174,30 @@ impl App {
                         .push_output(&format!("{} tokens", tokens.len()));
                 }
             }
+            TerminalCommand::Parse => {
+                let source = self.editor.buffer.to_string();
+                if source.is_empty() {
+                    self.terminal.push_output("(empty buffer)");
+                } else {
+                    match compiler::parse(&source) {
+                        Ok(module) => {
+                            for item in &module.items {
+                                for line in format!("{:#?}", item).lines() {
+                                    let spaces = line.len() - line.trim_start().len();
+                                    let compact =
+                                        format!("{:w$}{}", "", line.trim_start(), w = spaces / 2);
+                                    self.terminal.push_output(&compact);
+                                }
+                            }
+                            self.terminal
+                                .push_output(&format!("{} items", module.items.len()));
+                        }
+                        Err(e) => {
+                            self.terminal.push_output(&format!("parse error: {e:?}"));
+                        }
+                    }
+                }
+            }
             TerminalCommand::Clear => {
                 self.terminal.clear();
             }
@@ -1203,11 +1211,12 @@ impl App {
                 self.terminal.push_output("  cp <s> <d>  copy file");
                 self.terminal.push_output("  run         run program");
                 self.terminal.push_output("  lex         tokenize buffer");
+                self.terminal.push_output("  parse       parse buffer AST");
                 self.terminal.push_output("  clear       clear screen");
                 self.terminal.push_output("  help        show this");
                 self.terminal.push_output("");
                 self.terminal.push_output("shortcuts:");
-                self.terminal.push_output("  cmd+up/down scroll output");
+                self.terminal.push_output("  pgup/pgdn   scroll output");
                 self.terminal.push_output("  tab         autocomplete");
                 self.terminal.push_output("  escape      back to editor");
             }
