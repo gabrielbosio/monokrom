@@ -1,0 +1,270 @@
+use crate::compiler::ast::*;
+use crate::compiler::lexer::{Token, LexicalError};
+
+grammar;
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+
+    enum Token {
+        "fn" => Token::Fn,
+        "if" => Token::If,
+        "else" => Token::Else,
+        "while" => Token::While,
+        "for" => Token::For,
+        "in" => Token::In,
+        "end" => Token::End,
+        "return" => Token::Return,
+        "struct" => Token::Struct,
+        "true" => Token::True,
+        "false" => Token::False,
+        "and" => Token::And,
+        "or" => Token::Or,
+        "not" => Token::Not,
+        "break" => Token::Break,
+        "continue" => Token::Continue,
+        "array" => Token::Array,
+        "of" => Token::Of,
+        "int" => Token::Int,
+        "fixed" => Token::Fixed,
+        "bool" => Token::Bool,
+        "str" => Token::Str,
+        "void" => Token::Void,
+        INT => Token::IntLit(<i16>),
+        FIXED => Token::FixedLit(<String>),
+        STRING => Token::StrLit(<String>),
+        IDENT => Token::Ident(<String>),
+        "==" => Token::Eq,
+        "!=" => Token::Neq,
+        "<=" => Token::Leq,
+        ">=" => Token::Geq,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "*" => Token::Star,
+        "/" => Token::Slash,
+        "%" => Token::Percent,
+        "=" => Token::Assign,
+        "<" => Token::Lt,
+        ">" => Token::Gt,
+        "(" => Token::LParen,
+        ")" => Token::RParen,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        "," => Token::Comma,
+        ":" => Token::Colon,
+        "..=" => Token::DotDotEq,
+        ".." => Token::DotDot,
+        "." => Token::Dot,
+        NL => Token::Newline,
+    }
+}
+
+// --- Helpers ---
+
+NL1: () = NL+ => ();
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        Some(e) => { v.push(e); v }
+        None => v,
+    }
+};
+
+// --- Top-level ---
+
+pub Module: Module = {
+    <items:(<TopLevel> NL1)*> <last:TopLevel?> => {
+        let mut items = items;
+        if let Some(l) = last {
+            items.push(l);
+        }
+        Module { items }
+    }
+};
+
+TopLevel: TopLevel = {
+    FuncDef => TopLevel::Function(<>),
+    StructDef => TopLevel::Struct(<>),
+    Stmt => TopLevel::Global(<>),
+};
+
+// --- Definitions ---
+
+FuncDef: FuncDef = {
+    "fn" <name:IDENT> "(" <params:Comma<Param>> ")" <ret:(":" <Type>)?> NL1 <body:Body> "end" => {
+        FuncDef { name, params, ret_type: ret, body }
+    }
+};
+
+Param: Param = {
+    <name:IDENT> ":" <ty:Type> => Param { name, ty }
+};
+
+StructDef: StructDef = {
+    "struct" <name:IDENT> NL1 <fields:(<FieldDef> NL1)*> "end" => {
+        StructDef { name, fields }
+    }
+};
+
+FieldDef: Field = {
+    <name:IDENT> ":" <ty:Type> => Field { name, ty }
+};
+
+Type: TypeExpr = {
+    "int" => TypeExpr::Int,
+    "fixed" => TypeExpr::Fixed,
+    "bool" => TypeExpr::Bool,
+    "str" => TypeExpr::Str,
+    "void" => TypeExpr::Void,
+    "array" "[" <size:INT> "]" "of" <ty:Type> => TypeExpr::Array(Box::new(ty), size),
+    <name:IDENT> => TypeExpr::Named(name),
+};
+
+// --- Statements ---
+
+Body: Vec<Stmt> = {
+    <stmts:(<Stmt> NL1)*> => stmts,
+};
+
+Stmt: Stmt = {
+    <target:PostfixExpr> "=" <value:Expr> => Stmt::Assign { target, value },
+    IfStmt,
+    WhileStmt,
+    ForStmt,
+    "return" <e:Expr?> => Stmt::Return(e),
+    "break" => Stmt::Break,
+    "continue" => Stmt::Continue,
+    <e:Expr> => Stmt::Expression(e),
+};
+
+IfStmt: Stmt = {
+    "if" <cond:Expr> NL1
+        <body:Body>
+        <else_ifs:("else" "if" <Expr> NL1 <Body>)*>
+        <else_body:("else" NL1 <Body>)?>
+    "end" => {
+        Stmt::If {
+            cond,
+            body,
+            else_ifs,
+            else_body: else_body.unwrap_or_default(),
+        }
+    }
+};
+
+WhileStmt: Stmt = {
+    "while" <cond:Expr> NL1
+        <body:Body>
+    "end" => {
+        Stmt::While { cond, body }
+    }
+};
+
+ForStmt: Stmt = {
+    "for" <index:IDENT> "," <elem:IDENT> "in" <iter:Expr> NL1
+        <body:Body>
+    "end" => {
+        Stmt::ForIn { index, elem, iter, body }
+    },
+    "for" <var:IDENT> "in" <start:Expr> ".." <end:Expr> NL1
+        <body:Body>
+    "end" => {
+        Stmt::ForRange { var, start, end, inclusive: false, body }
+    },
+    "for" <var:IDENT> "in" <start:Expr> "..=" <end:Expr> NL1
+        <body:Body>
+    "end" => {
+        Stmt::ForRange { var, start, end, inclusive: true, body }
+    },
+};
+
+// --- Expressions (tiered precedence, lowest to highest) ---
+
+Expr: Expr = OrExpr;
+
+OrExpr: Expr = {
+    <lhs:OrExpr> "or" <rhs:AndExpr> => Expr::BinOp {
+        op: BinOp::Or, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    AndExpr,
+};
+
+AndExpr: Expr = {
+    <lhs:AndExpr> "and" <rhs:CmpExpr> => Expr::BinOp {
+        op: BinOp::And, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    CmpExpr,
+};
+
+CmpExpr: Expr = {
+    <lhs:AddExpr> <op:CmpOp> <rhs:AddExpr> => Expr::BinOp {
+        op, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    AddExpr,
+};
+
+CmpOp: BinOp = {
+    "==" => BinOp::Eq,
+    "!=" => BinOp::Neq,
+    "<" => BinOp::Lt,
+    ">" => BinOp::Gt,
+    "<=" => BinOp::Leq,
+    ">=" => BinOp::Geq,
+};
+
+AddExpr: Expr = {
+    <lhs:AddExpr> "+" <rhs:MulExpr> => Expr::BinOp {
+        op: BinOp::Add, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    <lhs:AddExpr> "-" <rhs:MulExpr> => Expr::BinOp {
+        op: BinOp::Sub, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    MulExpr,
+};
+
+MulExpr: Expr = {
+    <lhs:MulExpr> "*" <rhs:UnaryExpr> => Expr::BinOp {
+        op: BinOp::Mul, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    <lhs:MulExpr> "/" <rhs:UnaryExpr> => Expr::BinOp {
+        op: BinOp::Div, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    <lhs:MulExpr> "%" <rhs:UnaryExpr> => Expr::BinOp {
+        op: BinOp::Mod, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    },
+    UnaryExpr,
+};
+
+UnaryExpr: Expr = {
+    "-" <e:UnaryExpr> => Expr::UnaryOp {
+        op: UnaryOp::Neg, expr: Box::new(e)
+    },
+    "not" <e:UnaryExpr> => Expr::UnaryOp {
+        op: UnaryOp::Not, expr: Box::new(e)
+    },
+    PostfixExpr,
+};
+
+PostfixExpr: Expr = {
+    <f:PostfixExpr> "(" <args:Comma<Expr>> ")" => Expr::Call {
+        func: Box::new(f), args
+    },
+    <e:PostfixExpr> "[" <i:Expr> "]" => Expr::Index {
+        expr: Box::new(e), index: Box::new(i)
+    },
+    <e:PostfixExpr> "." <field:IDENT> => Expr::FieldAccess {
+        expr: Box::new(e), field
+    },
+    AtomExpr,
+};
+
+AtomExpr: Expr = {
+    <n:INT> => Expr::IntLit(n),
+    <f:FIXED> => Expr::FixedLit(f),
+    "true" => Expr::BoolLit(true),
+    "false" => Expr::BoolLit(false),
+    <s:STRING> => Expr::StrLit(s),
+    <name:IDENT> => Expr::Ident(name),
+    "(" <Expr> ")",
+};

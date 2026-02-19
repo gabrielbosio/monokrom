@@ -8,6 +8,10 @@ description = "A fantasy console text editor"
 macroquad = "0.4"
 ropey = "1.6"
 logos = "0.14"
+lalrpop-util = "0.21"
+
+[build-dependencies]
+lalrpop = "0.21"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 arboard = "3.2"
