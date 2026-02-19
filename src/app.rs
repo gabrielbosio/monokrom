@@ -1431,9 +1431,9 @@ impl App {
                             helpers.draw_char(c, x, y, COLOR_LIGHT_GRAY);
                         } else {
                             let fg = if style == CharStyle::Keyword {
-                                COLOR_WHITE
-                            } else {
                                 COLOR_LIGHT_GRAY
+                            } else {
+                                COLOR_WHITE
                             };
                             helpers.draw_char_with_shadow(c, x, y, fg, COLOR_BLACK);
                         }
