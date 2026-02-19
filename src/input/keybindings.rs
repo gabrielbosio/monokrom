@@ -100,7 +100,7 @@ pub fn refresh_cmd_timer() {}
 
 #[cfg(any(target_os = "macos", target_arch = "wasm32"))]
 fn is_cmd_pressed() -> bool {
-    const TIMEOUT: f64 = 0.5;
+    const TIMEOUT: f64 = 5.0;
 
     if is_key_pressed(KeyCode::LeftSuper) || is_key_pressed(KeyCode::RightSuper) {
         refresh_cmd_timer();

@@ -10,7 +10,7 @@ use crate::input::keybindings::{
 const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
 const KEY_REPEAT_RATE: f32 = 0.03; // Time between repeats
 /// macOS can lose key-up events for keys pressed during Cmd combos,
-/// leaving is_key_down stuck true. Stop modifier repeats after this limit.
+/// leaving is_key_down stuck true. Stop modifier+arrow repeats after this limit.
 const MAX_MODIFIER_REPEAT: f32 = 3.0;
 
 /// State for key repeat tracking
@@ -106,7 +106,9 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     true
 }
 
-// Shortcut + letter bindings: Cmd/Ctrl on native, Alt on WASM
+// Shortcut + letter bindings: Cmd/Ctrl on native, Alt on WASM.
+// Uses is_key_pressed (not is_key_down) so release is detected reliably.
+// OS key repeat provides hold-to-repeat if the OS supports it.
 const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::S, EditorAction::Save),
     (KeyCode::O, EditorAction::Open),
@@ -194,6 +196,25 @@ pub fn get_editor_action() -> Option<EditorAction> {
     let shift = is_shift_pressed();
     let alt = is_alt_pressed();
     let shortcut_mod = is_shortcut_modifier_pressed();
+
+    // A fresh modifier press clears stale modifier-combo repeat state.
+    // macOS can lose key-up events for keys pressed during Cmd combos,
+    // leaving is_key_down stuck true. Re-pressing the modifier without
+    // the letter key would otherwise resume a stale repeat.
+    let fresh_mod = is_key_pressed(KeyCode::LeftSuper)
+        || is_key_pressed(KeyCode::RightSuper)
+        || is_key_pressed(KeyCode::LeftControl)
+        || is_key_pressed(KeyCode::RightControl);
+    if fresh_mod {
+        if let Ok(mut state) = KEY_REPEAT.lock() {
+            if state.with_modifier {
+                state.last_key = None;
+                state.time_held = 0.0;
+                state.total_time = 0.0;
+                state.is_repeating = false;
+            }
+        }
+    }
 
     // Letter-key shortcuts: Alt on WASM, Cmd/Ctrl on native
     #[cfg(not(target_arch = "wasm32"))]
