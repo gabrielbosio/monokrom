@@ -27,7 +27,6 @@ fn classify(token: &Token) -> CharStyle {
     match token {
         Token::Fn
         | Token::If
-        | Token::Then
         | Token::Else
         | Token::While
         | Token::For

@@ -9,8 +9,6 @@ pub enum Token {
     Fn,
     #[token("if")]
     If,
-    #[token("then")]
-    Then,
     #[token("else")]
     Else,
     #[token("while")]
@@ -143,11 +141,10 @@ mod tests {
     #[test]
     fn keywords() {
         assert_eq!(
-            tokens("fn if then else while for in end return"),
+            tokens("fn if else while for in end return"),
             vec![
                 Token::Fn,
                 Token::If,
-                Token::Then,
                 Token::Else,
                 Token::While,
                 Token::For,
