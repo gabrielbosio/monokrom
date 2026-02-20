@@ -1,7 +1,9 @@
 pub mod ast;
 pub mod error;
 pub mod hir;
+pub mod hir_to_lir;
 pub mod lexer;
+pub mod lir;
 pub mod type_check;
 
 lalrpop_util::lalrpop_mod!(
@@ -19,6 +21,10 @@ pub fn parse(
 
 pub fn lower(module: &ast::Module) -> Result<hir::HirModule, Vec<error::CompileError>> {
     type_check::lower_to_hir(module)
+}
+
+pub fn lower_lir(hir: &hir::HirModule) -> lir::LirModule {
+    hir_to_lir::lower_to_lir(hir)
 }
 
 #[cfg(test)]
