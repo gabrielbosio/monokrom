@@ -1206,8 +1206,9 @@ impl App {
                     match compiler::parse(&source) {
                         Ok(module) => match compiler::lower(&module) {
                             Ok(hir) => {
+                                self.terminal.push_output("ok");
                                 self.terminal.push_output(&format!(
-                                    "ok: {} structs, {} globals, {} functions, {} strings",
+                                    " {}S {}G {}F {}str",
                                     hir.structs.len(),
                                     hir.globals.len(),
                                     hir.functions.len(),
