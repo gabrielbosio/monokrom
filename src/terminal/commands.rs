@@ -1,5 +1,5 @@
 pub const COMMAND_NAMES: &[&str] = &[
-    "clear", "cp", "help", "lex", "ls", "new", "open", "parse", "rm", "run", "save",
+    "check", "clear", "cp", "help", "lex", "ls", "new", "open", "parse", "rm", "run", "save",
 ];
 
 pub enum TerminalCommand {
@@ -12,6 +12,7 @@ pub enum TerminalCommand {
     Run,
     Lex,
     Parse,
+    Check,
     Clear,
     Help,
     Unknown(String),
@@ -38,6 +39,7 @@ pub fn parse_command(input: &str) -> TerminalCommand {
         Some("run") => TerminalCommand::Run,
         Some("lex") => TerminalCommand::Lex,
         Some("parse") => TerminalCommand::Parse,
+        Some("check") => TerminalCommand::Check,
         Some("clear") => TerminalCommand::Clear,
         Some("help") => TerminalCommand::Help,
         Some(other) => TerminalCommand::Unknown(format!("unknown command: {other}")),
@@ -161,7 +163,7 @@ mod tests {
     fn complete_multiple_matches() {
         let (prefix, matches) = complete("c", COMMAND_NAMES).unwrap();
         assert_eq!(prefix, "c");
-        assert_eq!(matches, vec!["clear", "cp"]);
+        assert_eq!(matches, vec!["check", "clear", "cp"]);
     }
 
     #[test]

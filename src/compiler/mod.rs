@@ -1,5 +1,8 @@
 pub mod ast;
+pub mod error;
+pub mod hir;
 pub mod lexer;
+pub mod type_check;
 
 lalrpop_util::lalrpop_mod!(
     #[allow(clippy::all)]
@@ -12,6 +15,10 @@ pub fn parse(
 ) -> Result<ast::Module, lalrpop_util::ParseError<usize, lexer::Token, lexer::LexicalError>> {
     let lexer = lexer::LexerAdapter::new(source);
     grammar::ModuleParser::new().parse(lexer)
+}
+
+pub fn lower(module: &ast::Module) -> Result<hir::HirModule, Vec<error::CompileError>> {
+    type_check::lower_to_hir(module)
 }
 
 #[cfg(test)]

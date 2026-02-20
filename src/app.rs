@@ -1198,6 +1198,34 @@ impl App {
                     }
                 }
             }
+            TerminalCommand::Check => {
+                let source = self.editor.buffer.to_string();
+                if source.is_empty() {
+                    self.terminal.push_output("(empty buffer)");
+                } else {
+                    match compiler::parse(&source) {
+                        Ok(module) => match compiler::lower(&module) {
+                            Ok(hir) => {
+                                self.terminal.push_output(&format!(
+                                    "ok: {} structs, {} globals, {} functions, {} strings",
+                                    hir.structs.len(),
+                                    hir.globals.len(),
+                                    hir.functions.len(),
+                                    hir.string_pool.len()
+                                ));
+                            }
+                            Err(errors) => {
+                                for e in &errors {
+                                    self.terminal.push_output(&format!("error: {e}"));
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            self.terminal.push_output(&format!("parse error: {e:?}"));
+                        }
+                    }
+                }
+            }
             TerminalCommand::Clear => {
                 self.terminal.clear();
             }
@@ -1212,6 +1240,7 @@ impl App {
                 self.terminal.push_output("  run         run program");
                 self.terminal.push_output("  lex         tokenize buffer");
                 self.terminal.push_output("  parse       parse buffer AST");
+                self.terminal.push_output("  check       type-check buffer");
                 self.terminal.push_output("  clear       clear screen");
                 self.terminal.push_output("  help        show this");
                 self.terminal.push_output("");
