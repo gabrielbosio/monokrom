@@ -453,6 +453,19 @@ impl TypeCheckCtx {
                 }
             }
             ast::Stmt::Assign { target, value } => {
+                // Infer-declare: `y = 10` inside a function defines a new local
+                if let Expr::Ident(name) = target {
+                    if self.lookup_var(name).is_none() {
+                        let hir_value = self.check_expr(value);
+                        let ty = hir_value.ty.clone();
+                        self.define_local(name, ty.clone());
+                        return HirStmt::VarDecl {
+                            name: name.clone(),
+                            ty,
+                            value: Some(hir_value),
+                        };
+                    }
+                }
                 let hir_target = self.check_expr(target);
                 let hir_value = self.check_expr(value);
                 if hir_target.ty != hir_value.ty {
@@ -733,9 +746,7 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
             collect_locals(&body, &mut locals);
 
             // Check return type
-            if ret_type != HirType::Void {
-                check_returns(&body, &ret_type, &mut ctx);
-            }
+            check_returns(&body, &ret_type, &mut ctx);
 
             ctx.pop_scope();
             hir_functions.push(HirFunc {
@@ -791,11 +802,52 @@ fn collect_locals(stmts: &[HirStmt], locals: &mut Vec<(String, HirType)>) {
 
 fn check_returns(stmts: &[HirStmt], expected: &HirType, ctx: &mut TypeCheckCtx) {
     for stmt in stmts {
-        if let HirStmt::Return(Some(expr)) = stmt {
-            if expr.ty != *expected {
-                ctx.error(format!("return: expected {}, got {}", expected, expr.ty));
+        match stmt {
+            HirStmt::Return(Some(expr)) => {
+                if *expected == HirType::Void {
+                    ctx.error("void function cannot return a value".to_string());
+                } else if expr.ty != *expected {
+                    ctx.error(format!("return: expected {}, got {}", expected, expr.ty));
+                }
             }
+            HirStmt::Return(None) => {
+                if *expected != HirType::Void {
+                    ctx.error(format!("return: expected {}, got void", expected));
+                }
+            }
+            HirStmt::If {
+                body,
+                else_ifs,
+                else_body,
+                ..
+            } => {
+                check_returns(body, expected, ctx);
+                for (_, b) in else_ifs {
+                    check_returns(b, expected, ctx);
+                }
+                check_returns(else_body, expected, ctx);
+            }
+            HirStmt::While { body, .. }
+            | HirStmt::ForIn { body, .. }
+            | HirStmt::ForRange { body, .. } => {
+                check_returns(body, expected, ctx);
+            }
+            _ => {}
         }
+    }
+}
+
+pub fn type_size_standalone(ty: &HirType, structs: &[HirStruct]) -> u16 {
+    match ty {
+        HirType::Int | HirType::Fixed | HirType::Str => 2,
+        HirType::Bool => 1,
+        HirType::Void => 0,
+        HirType::Array(elem, count) => type_size_standalone(elem, structs) * (*count as u16),
+        HirType::Struct(name) => structs
+            .iter()
+            .find(|s| s.name == *name)
+            .map(|s| s.size)
+            .unwrap_or(0),
     }
 }
 
@@ -991,5 +1043,48 @@ mod tests {
         assert_eq!(parse_fixed("1.5"), 384);
         assert_eq!(parse_fixed("0.0"), 0);
         assert_eq!(parse_fixed("1.0"), 256);
+    }
+
+    #[test]
+    fn infer_local_from_assign() {
+        let hir = lower("fn f(): int\n  y = 10\n  return y\nend");
+        let f = &hir.functions[0];
+        assert_eq!(f.locals.len(), 1);
+        assert_eq!(f.locals[0].0, "y");
+        assert_eq!(f.locals[0].1, HirType::Int);
+    }
+
+    #[test]
+    fn infer_local_used_in_if() {
+        // The program from the bug report
+        let hir = lower(
+            "fn update(x: int): int\n  y = 10\n  if x > 0\n    y = y + x\n  else\n    y = y - x\n  end\n  return y\nend",
+        );
+        let f = &hir.functions[0];
+        assert!(f.locals.iter().any(|(n, t)| n == "y" && *t == HirType::Int));
+    }
+
+    #[test]
+    fn void_fn_return_value_error() {
+        let errs = lower_err("fn f()\n  return 1\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("void function cannot return a value")));
+    }
+
+    #[test]
+    fn void_fn_return_value_nested_error() {
+        let errs = lower_err("fn f(x: bool)\n  if x\n    return 1\n  end\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("void function cannot return a value")));
+    }
+
+    #[test]
+    fn non_void_fn_bare_return_error() {
+        let errs = lower_err("fn f(): int\n  return\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("return: expected int, got void")));
     }
 }
