@@ -747,6 +747,9 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
 
             // Check return type
             check_returns(&body, &ret_type, &mut ctx);
+            if ret_type != HirType::Void && !always_returns(&body) {
+                ctx.error(format!("{}: not all paths return a value", f.name));
+            }
 
             ctx.pop_scope();
             hir_functions.push(HirFunc {
@@ -835,6 +838,32 @@ fn check_returns(stmts: &[HirStmt], expected: &HirType, ctx: &mut TypeCheckCtx) 
             _ => {}
         }
     }
+}
+
+fn always_returns(stmts: &[HirStmt]) -> bool {
+    for stmt in stmts {
+        match stmt {
+            HirStmt::Return(_) => return true,
+            HirStmt::If {
+                body,
+                else_body,
+                else_ifs,
+                ..
+            } => {
+                if else_body.is_empty() {
+                    continue;
+                }
+                let then_returns = always_returns(body);
+                let else_returns = always_returns(else_body);
+                let else_ifs_return = else_ifs.iter().all(|(_, b)| always_returns(b));
+                if then_returns && else_returns && else_ifs_return {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 pub fn type_size_standalone(ty: &HirType, structs: &[HirStruct]) -> u16 {
@@ -1086,5 +1115,19 @@ mod tests {
         assert!(errs
             .iter()
             .any(|e| e.message.contains("return: expected int, got void")));
+    }
+
+    #[test]
+    fn missing_return_on_else_path() {
+        let errs = lower_err("fn f(x: int): int\n  if x > 100\n    return x\n  end\n  cls(0)\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("not all paths return")));
+    }
+
+    #[test]
+    fn all_paths_return_ok() {
+        let _hir =
+            lower("fn f(x: int): int\n  if x > 0\n    return x\n  else\n    return 0\n  end\nend");
     }
 }
