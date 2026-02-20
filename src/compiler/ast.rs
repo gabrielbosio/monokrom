@@ -49,6 +49,11 @@ pub enum TypeExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
+    VarDecl {
+        name: String,
+        ty: TypeExpr,
+        value: Option<Expr>,
+    },
     Assign {
         target: Expr,
         value: Expr,

@@ -342,4 +342,43 @@ mod tests {
             other => panic!("expected call, got {:?}", other),
         }
     }
+
+    #[test]
+    fn var_decl_with_value() {
+        let m = p("x: int = 5");
+        assert_eq!(
+            m.items,
+            vec![TopLevel::Global(Stmt::VarDecl {
+                name: "x".into(),
+                ty: TypeExpr::Int,
+                value: Some(Expr::IntLit(5)),
+            })]
+        );
+    }
+
+    #[test]
+    fn var_decl_without_value() {
+        let m = p("x: int");
+        assert_eq!(
+            m.items,
+            vec![TopLevel::Global(Stmt::VarDecl {
+                name: "x".into(),
+                ty: TypeExpr::Int,
+                value: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn var_decl_array_type() {
+        let m = p("enemies: array[40] of Enemy");
+        assert_eq!(
+            m.items,
+            vec![TopLevel::Global(Stmt::VarDecl {
+                name: "enemies".into(),
+                ty: TypeExpr::Array(Box::new(TypeExpr::Named("Enemy".into())), 40),
+                value: None,
+            })]
+        );
+    }
 }
