@@ -24,8 +24,18 @@ impl TerminalState {
     }
 
     pub fn push_output(&mut self, line: &str) {
-        self.output_lines.push(line.to_string());
-        if self.output_lines.len() > TERMINAL_MAX_SCROLLBACK {
+        let width = crate::config::SCREEN_TILES_X as usize;
+        if line.len() <= width {
+            self.output_lines.push(line.to_string());
+        } else {
+            let mut remaining = line;
+            while !remaining.is_empty() {
+                let end = remaining.len().min(width);
+                self.output_lines.push(remaining[..end].to_string());
+                remaining = &remaining[end..];
+            }
+        }
+        while self.output_lines.len() > TERMINAL_MAX_SCROLLBACK {
             self.output_lines.remove(0);
         }
         self.scroll_to_bottom();

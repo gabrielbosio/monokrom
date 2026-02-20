@@ -215,10 +215,10 @@ impl TypeCheckCtx {
 
         if is_logical {
             if lhs_hir.ty != HirType::Bool {
-                self.error(format!("expected bool for '{op:?}', got {:?}", lhs_hir.ty));
+                self.error(format!("expected bool, got {}", lhs_hir.ty));
             }
             if rhs_hir.ty != HirType::Bool {
-                self.error(format!("expected bool for '{op:?}', got {:?}", rhs_hir.ty));
+                self.error(format!("expected bool, got {}", rhs_hir.ty));
             }
             HirExpr {
                 kind: HirExprKind::BinOp {
@@ -230,10 +230,7 @@ impl TypeCheckCtx {
             }
         } else {
             if lhs_hir.ty != rhs_hir.ty {
-                self.error(format!(
-                    "type mismatch in '{op:?}': {:?} vs {:?}",
-                    lhs_hir.ty, rhs_hir.ty
-                ));
+                self.error(format!("type mismatch: {} vs {}", lhs_hir.ty, rhs_hir.ty));
             }
             let result_ty = if is_comparison {
                 HirType::Bool
@@ -256,7 +253,7 @@ impl TypeCheckCtx {
         match op {
             UnaryOp::Neg => {
                 if inner.ty != HirType::Int && inner.ty != HirType::Fixed {
-                    self.error(format!("cannot negate {:?}", inner.ty));
+                    self.error(format!("cannot negate {}", inner.ty));
                 }
                 let ty = inner.ty.clone();
                 HirExpr {
@@ -269,7 +266,7 @@ impl TypeCheckCtx {
             }
             UnaryOp::Not => {
                 if inner.ty != HirType::Bool {
-                    self.error(format!("'not' requires bool, got {:?}", inner.ty));
+                    self.error(format!("'not' requires bool, got {}", inner.ty));
                 }
                 HirExpr {
                     kind: HirExprKind::UnaryOp {
@@ -303,7 +300,7 @@ impl TypeCheckCtx {
                     if let Some(expected) = expected_params.get(i) {
                         if hir_arg.ty != *expected {
                             self.error(format!(
-                                "{name} arg {}: expected {:?}, got {:?}",
+                                "{name} arg {}: expected {}, got {}",
                                 i + 1,
                                 expected,
                                 hir_arg.ty
@@ -333,7 +330,7 @@ impl TypeCheckCtx {
                     if let Some(expected) = param_types.get(i) {
                         if hir_arg.ty != *expected {
                             self.error(format!(
-                                "{name} arg {}: expected {:?}, got {:?}",
+                                "{name} arg {}: expected {}, got {}",
                                 i + 1,
                                 expected,
                                 hir_arg.ty
@@ -378,12 +375,12 @@ impl TypeCheckCtx {
         let base = self.check_expr(expr);
         let idx = self.check_expr(index);
         if idx.ty != HirType::Int {
-            self.error(format!("array index must be int, got {:?}", idx.ty));
+            self.error(format!("index must be int, got {}", idx.ty));
         }
         let elem_ty = match &base.ty {
             HirType::Array(elem, _) => *elem.clone(),
             other => {
-                self.error(format!("cannot index into {:?}", other));
+                self.error(format!("cannot index into {}", other));
                 HirType::Void
             }
         };
@@ -401,7 +398,7 @@ impl TypeCheckCtx {
         let struct_name = match &base.ty {
             HirType::Struct(name) => name.clone(),
             other => {
-                self.error(format!("cannot access field on {:?}", other));
+                self.error(format!("cannot access field on {}", other));
                 return HirExpr {
                     kind: HirExprKind::FieldAccess {
                         expr: Box::new(base),
@@ -444,10 +441,7 @@ impl TypeCheckCtx {
                 let hir_value = value.as_ref().map(|v| {
                     let hv = self.check_expr(v);
                     if hv.ty != hir_ty {
-                        self.error(format!(
-                            "type mismatch: {name} declared as {:?}, got {:?}",
-                            hir_ty, hv.ty
-                        ));
+                        self.error(format!("{name}: expected {}, got {}", hir_ty, hv.ty));
                     }
                     hv
                 });
@@ -462,10 +456,7 @@ impl TypeCheckCtx {
                 let hir_target = self.check_expr(target);
                 let hir_value = self.check_expr(value);
                 if hir_target.ty != hir_value.ty {
-                    self.error(format!(
-                        "assignment type mismatch: {:?} vs {:?}",
-                        hir_target.ty, hir_value.ty
-                    ));
+                    self.error(format!("assign: {} vs {}", hir_target.ty, hir_value.ty));
                 }
                 HirStmt::Assign {
                     target: hir_target,
@@ -480,7 +471,7 @@ impl TypeCheckCtx {
             } => {
                 let hir_cond = self.check_expr(cond);
                 if hir_cond.ty != HirType::Bool {
-                    self.error(format!("if condition must be bool, got {:?}", hir_cond.ty));
+                    self.error(format!("if: expected bool, got {}", hir_cond.ty));
                 }
                 self.push_scope();
                 let hir_body = self.check_stmts(body);
@@ -490,7 +481,7 @@ impl TypeCheckCtx {
                     .map(|(c, b)| {
                         let hc = self.check_expr(c);
                         if hc.ty != HirType::Bool {
-                            self.error(format!("else-if condition must be bool, got {:?}", hc.ty));
+                            self.error(format!("else if: expected bool, got {}", hc.ty));
                         }
                         self.push_scope();
                         let hb = self.check_stmts(b);
@@ -511,10 +502,7 @@ impl TypeCheckCtx {
             ast::Stmt::While { cond, body } => {
                 let hir_cond = self.check_expr(cond);
                 if hir_cond.ty != HirType::Bool {
-                    self.error(format!(
-                        "while condition must be bool, got {:?}",
-                        hir_cond.ty
-                    ));
+                    self.error(format!("while: expected bool, got {}", hir_cond.ty));
                 }
                 self.push_scope();
                 let hir_body = self.check_stmts(body);
@@ -534,7 +522,7 @@ impl TypeCheckCtx {
                 let elem_ty = match &hir_iter.ty {
                     HirType::Array(elem, _) => *elem.clone(),
                     other => {
-                        self.error(format!("for-in requires array, got {:?}", other));
+                        self.error(format!("for-in: expected array, got {}", other));
                         HirType::Void
                     }
                 };
@@ -564,13 +552,10 @@ impl TypeCheckCtx {
                 let hir_start = self.check_expr(start);
                 let hir_end = self.check_expr(end);
                 if hir_start.ty != HirType::Int {
-                    self.error(format!(
-                        "for-range start must be int, got {:?}",
-                        hir_start.ty
-                    ));
+                    self.error(format!("for: start must be int, got {}", hir_start.ty));
                 }
                 if hir_end.ty != HirType::Int {
-                    self.error(format!("for-range end must be int, got {:?}", hir_end.ty));
+                    self.error(format!("for: end must be int, got {}", hir_end.ty));
                 }
                 self.push_scope();
                 self.define_local(var, HirType::Int);
@@ -608,10 +593,7 @@ impl TypeCheckCtx {
                 let hir_value = value.as_ref().map(|v| {
                     let hv = self.check_expr(v);
                     if hv.ty != hir_ty {
-                        self.error(format!(
-                            "type mismatch: {name} declared as {:?}, got {:?}",
-                            hir_ty, hv.ty
-                        ));
+                        self.error(format!("{name}: expected {}, got {}", hir_ty, hv.ty));
                     }
                     hv
                 });
@@ -811,10 +793,7 @@ fn check_returns(stmts: &[HirStmt], expected: &HirType, ctx: &mut TypeCheckCtx) 
     for stmt in stmts {
         if let HirStmt::Return(Some(expr)) = stmt {
             if expr.ty != *expected {
-                ctx.error(format!(
-                    "return type mismatch: expected {:?}, got {:?}",
-                    expected, expr.ty
-                ));
+                ctx.error(format!("return: expected {}, got {}", expected, expr.ty));
             }
         }
     }
@@ -877,7 +856,9 @@ mod tests {
     #[test]
     fn type_mismatch_error() {
         let errs = lower_err("x: int = true");
-        assert!(errs.iter().any(|e| e.message.contains("type mismatch")));
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("expected int, got bool")));
     }
 
     #[test]
@@ -889,7 +870,9 @@ mod tests {
     #[test]
     fn binop_mismatch() {
         let errs = lower_err("x: bool = true\ny: int = 1 + x");
-        assert!(errs.iter().any(|e| e.message.contains("type mismatch")));
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("type mismatch: int vs bool")));
     }
 
     #[test]
@@ -969,7 +952,7 @@ mod tests {
         let errs = lower_err("fn f(): int\n  return true\nend");
         assert!(errs
             .iter()
-            .any(|e| e.message.contains("return type mismatch")));
+            .any(|e| e.message.contains("return: expected int, got bool")));
     }
 
     #[test]

@@ -11,6 +11,20 @@ pub enum HirType {
     Struct(String),
 }
 
+impl std::fmt::Display for HirType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int => write!(f, "int"),
+            Self::Fixed => write!(f, "fixed"),
+            Self::Bool => write!(f, "bool"),
+            Self::Str => write!(f, "str"),
+            Self::Void => write!(f, "void"),
+            Self::Array(elem, size) => write!(f, "array[{size}] of {elem}"),
+            Self::Struct(name) => write!(f, "{name}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Intrinsic {
     Pset,
