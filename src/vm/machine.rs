@@ -865,4 +865,26 @@ mod tests {
         // main's locals start at index 0, slot 0 should have 30
         assert_eq!(vm.locals[0], 30);
     }
+
+    #[test]
+    fn nested_while_compiled() {
+        // Compile and run a nested while loop to verify outer variable increments
+        let src = "fn main()\n  x: int = 0\n  while x < 3\n    y: int = 0\n    while y < 3\n      pset(x, y, 3)\n      y = y + 1\n    end\n    x = x + 1\n  end\n  flip()\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc).unwrap();
+        let result = vm.run_until_flip().unwrap();
+        assert_eq!(result, VmResult::Flip);
+        // Should have 9 white pixels: (0,0)..(2,2)
+        for x in 0..3 {
+            for y in 0..3 {
+                assert_eq!(
+                    vm.framebuffer[y * 160 + x],
+                    3,
+                    "expected pixel at ({x},{y})"
+                );
+            }
+        }
+        // Pixel at (3,0) should NOT be set
+        assert_eq!(vm.framebuffer[0 * 160 + 3], 0);
+    }
 }

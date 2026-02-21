@@ -22,6 +22,9 @@ struct LowerCtx<'a> {
     // Track phi values for trivial-phi removal
     phi_values: HashMap<Value, (BlockId, String)>,
 
+    // Value replacements from trivial phi removal
+    replacements: HashMap<Value, Value>,
+
     // Loops
     loop_stack: Vec<(BlockId, BlockId)>,
 
@@ -46,6 +49,7 @@ impl<'a> LowerCtx<'a> {
             sealed: HashSet::new(),
             incomplete_phis: HashMap::new(),
             phi_values: HashMap::new(),
+            replacements: HashMap::new(),
             loop_stack: Vec::new(),
             compound_local_addrs: HashMap::new(),
             next_compound_addr: globals_size,
@@ -136,7 +140,20 @@ impl<'a> LowerCtx<'a> {
                 .iter()
                 .map(|&p| (p, self.read_variable(var, p)))
                 .collect();
-            self.add_phi_to_block(block, phi_val, operands)
+            let resolved = self.add_phi_to_block(block, phi_val, operands);
+            // If the phi was trivial, replace all stale references to the dead
+            // phi_val that were cached in intermediate blocks during operand
+            // collection.
+            if resolved != phi_val {
+                for defs in self.current_def.values_mut() {
+                    for v in defs.values_mut() {
+                        if *v == phi_val {
+                            *v = resolved;
+                        }
+                    }
+                }
+            }
+            resolved
         };
         self.write_variable(var, block, val);
         val
@@ -150,6 +167,7 @@ impl<'a> LowerCtx<'a> {
     ) -> Value {
         // Check if trivial
         if let Some(trivial) = self.try_remove_trivial_phi(phi_val, &operands) {
+            self.replacements.insert(phi_val, trivial);
             return trivial;
         }
         // Insert phi at the beginning of the block
@@ -194,9 +212,39 @@ impl<'a> LowerCtx<'a> {
             let resolved = self.add_phi_to_block(block, phi_val, operands);
             if resolved != phi_val {
                 self.write_variable(&var, block, resolved);
+                // Replace stale references to the dead phi_val that were
+                // cached in other blocks during operand collection or earlier
+                // reads before this block was sealed.
+                for defs in self.current_def.values_mut() {
+                    for v in defs.values_mut() {
+                        if *v == phi_val {
+                            *v = resolved;
+                        }
+                    }
+                }
             }
         }
         self.sealed.insert(block);
+    }
+
+    fn apply_replacements(&mut self) {
+        if self.replacements.is_empty() {
+            return;
+        }
+        let replacements = self.replacements.clone();
+        let resolve = |v: Value| -> Value {
+            let mut val = v;
+            while let Some(&r) = replacements.get(&val) {
+                val = r;
+            }
+            val
+        };
+        for block in &mut self.blocks {
+            for (_, inst) in &mut block.insts {
+                inst.replace_values(&resolve);
+            }
+            block.terminator.replace_values(&resolve);
+        }
     }
 
     // --- Type helpers ---
@@ -867,6 +915,8 @@ fn lower_function(module: &HirModule, func: &HirFunc, globals_size: u16) -> (Lir
     if !ctx.block_terminated {
         ctx.finish_block(Terminator::Return(None));
     }
+
+    ctx.apply_replacements();
 
     let compound_end = ctx.next_compound_addr;
 

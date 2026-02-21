@@ -21,6 +21,34 @@ pub enum LirInst {
     Phi(Vec<(BlockId, Value)>),
 }
 
+impl LirInst {
+    pub fn replace_values(&mut self, mut f: impl FnMut(Value) -> Value) {
+        match self {
+            LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => {}
+            LirInst::BinOp { lhs, rhs, .. } => {
+                *lhs = f(*lhs);
+                *rhs = f(*rhs);
+            }
+            LirInst::UnaryOp { val, .. } => *val = f(*val),
+            LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => {
+                for a in args {
+                    *a = f(*a);
+                }
+            }
+            LirInst::Load { addr, .. } => *addr = f(*addr),
+            LirInst::Store { addr, val, .. } => {
+                *addr = f(*addr);
+                *val = f(*val);
+            }
+            LirInst::Phi(operands) => {
+                for (_, v) in operands {
+                    *v = f(*v);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Terminator {
     Jump(BlockId),
@@ -30,6 +58,17 @@ pub enum Terminator {
         else_block: BlockId,
     },
     Return(Option<Value>),
+}
+
+impl Terminator {
+    pub fn replace_values(&mut self, mut f: impl FnMut(Value) -> Value) {
+        match self {
+            Terminator::Jump(_) => {}
+            Terminator::Branch { cond, .. } => *cond = f(*cond),
+            Terminator::Return(Some(v)) => *v = f(*v),
+            Terminator::Return(None) => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
