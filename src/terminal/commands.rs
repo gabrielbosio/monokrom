@@ -1,5 +1,5 @@
 pub const COMMAND_NAMES: &[&str] = &[
-    "check", "clear", "cp", "help", "lex", "ls", "new", "open", "parse", "rm", "run", "save",
+    "check", "clear", "cp", "dis", "help", "lex", "ls", "new", "open", "parse", "rm", "run", "save",
 ];
 
 pub enum TerminalCommand {
@@ -13,6 +13,7 @@ pub enum TerminalCommand {
     Lex,
     Parse,
     Check,
+    Dis,
     Clear,
     Help,
     Unknown(String),
@@ -40,6 +41,7 @@ pub fn parse_command(input: &str) -> TerminalCommand {
         Some("lex") => TerminalCommand::Lex,
         Some("parse") => TerminalCommand::Parse,
         Some("check") => TerminalCommand::Check,
+        Some("dis") => TerminalCommand::Dis,
         Some("clear") => TerminalCommand::Clear,
         Some("help") => TerminalCommand::Help,
         Some(other) => TerminalCommand::Unknown(format!("unknown command: {other}")),

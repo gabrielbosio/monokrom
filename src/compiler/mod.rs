@@ -1,4 +1,6 @@
 pub mod ast;
+pub mod bytecode;
+pub mod codegen;
 pub mod error;
 pub mod hir;
 pub mod hir_to_lir;
