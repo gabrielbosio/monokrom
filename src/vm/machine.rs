@@ -7,7 +7,7 @@ const MEMORY_SIZE: usize = 16384;
 const FB_WIDTH: usize = 160;
 const FB_HEIGHT: usize = 144;
 const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
-const CYCLE_LIMIT: u32 = 100_000;
+const CYCLE_LIMIT: u32 = 1_000_000;
 
 #[derive(Debug)]
 pub enum VmError {
