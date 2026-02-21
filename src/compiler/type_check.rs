@@ -69,6 +69,7 @@ impl TypeCheckCtx {
             ("flip", Flip, vec![], Void),
             ("tracen", Tracen, vec![Int], Void),
             ("traces", Traces, vec![Str], Void),
+            ("time", Time, vec![], Int),
         ];
         for (name, op, params, ret) in sigs {
             self.intrinsics

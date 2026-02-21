@@ -51,6 +51,7 @@ pub enum Intrinsic {
     Flip,
     Tracen,
     Traces,
+    Time,
 }
 
 #[derive(Debug, Clone, PartialEq)]

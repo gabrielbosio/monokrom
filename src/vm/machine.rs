@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::compiler::bytecode::*;
 use crate::render::font::FONT_DATA;
 
@@ -67,6 +69,7 @@ pub struct Vm {
     functions: Vec<FuncEntry>,
     pub halted: bool,
     pub trace_output: Vec<String>,
+    start_time: Instant,
 }
 
 impl Vm {
@@ -106,6 +109,7 @@ impl Vm {
             functions,
             halted: false,
             trace_output: Vec::new(),
+            start_time: Instant::now(),
         };
 
         // Push initial call frame for main (return_pc = usize::MAX means halt on return)
@@ -501,6 +505,10 @@ impl Vm {
                 if str_idx < self.string_pool.len() {
                     self.trace_output.push(self.string_pool[str_idx].clone());
                 }
+            }
+            OP_TIME => {
+                let secs = self.start_time.elapsed().as_secs() as i16;
+                self.push(secs)?;
             }
             OP_FLIP => {
                 self.prev_buttons = self.buttons;
