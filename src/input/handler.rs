@@ -88,21 +88,25 @@ fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     true
 }
 
-// Ctrl + letter bindings: uses is_key_pressed (OS key repeat handles hold).
+// Ctrl + letter bindings (single-fire, no repeat).
 // On WASM, these are triggered by Alt instead (see is_shortcut_modifier_pressed).
 const MODIFIER_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::S, EditorAction::Save),
     (KeyCode::O, EditorAction::Open),
     (KeyCode::N, EditorAction::New),
-    (KeyCode::Z, EditorAction::Undo),
-    (KeyCode::Y, EditorAction::Redo),
     (KeyCode::X, EditorAction::Cut),
     (KeyCode::C, EditorAction::Copy),
-    (KeyCode::V, EditorAction::Paste),
     (KeyCode::A, EditorAction::SelectAll),
     (KeyCode::F, EditorAction::Find),
     (KeyCode::R, EditorAction::Replace),
     (KeyCode::L, EditorAction::GoToLine),
+];
+
+// Ctrl + letter bindings (with key repeat for hold-to-repeat)
+const MODIFIER_REPEAT_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::Z, EditorAction::Undo),
+    (KeyCode::Y, EditorAction::Redo),
+    (KeyCode::V, EditorAction::Paste),
 ];
 
 // Alt/Option + arrow bindings (with key repeat)
@@ -179,6 +183,10 @@ pub fn get_editor_action() -> Option<EditorAction> {
     let shortcut_only = shortcut_mod && !shift && !modifier;
 
     if shortcut_only {
+        if let Some(action) = check_repeating(MODIFIER_REPEAT_BINDINGS, true) {
+            refresh_cmd_timer();
+            return Some(action);
+        }
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
             refresh_cmd_timer();
             return Some(action);
