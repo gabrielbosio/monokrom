@@ -70,6 +70,7 @@ pub struct Vm {
     pub halted: bool,
     pub trace_output: Vec<String>,
     start_time: Instant,
+    rng_state: u32,
 }
 
 impl Vm {
@@ -110,6 +111,11 @@ impl Vm {
             halted: false,
             trace_output: Vec::new(),
             start_time: Instant::now(),
+            rng_state: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u32)
+                .unwrap_or(0xDEAD)
+                | 1,
         };
 
         // Push initial call frame for main (return_pc = usize::MAX means halt on return)
@@ -509,6 +515,18 @@ impl Vm {
             OP_TIME => {
                 let secs = self.start_time.elapsed().as_secs() as i16;
                 self.push(secs)?;
+            }
+            OP_RND => {
+                let n = self.pop()?;
+                if n <= 0 {
+                    self.push(0)?;
+                } else {
+                    // xorshift32
+                    self.rng_state ^= self.rng_state << 13;
+                    self.rng_state ^= self.rng_state >> 17;
+                    self.rng_state ^= self.rng_state << 5;
+                    self.push((self.rng_state % n as u32) as i16)?;
+                }
             }
             OP_FLIP => {
                 self.prev_buttons = self.buttons;

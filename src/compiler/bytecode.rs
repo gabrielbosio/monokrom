@@ -63,6 +63,7 @@ pub const OP_PRINTN: u8 = 0x55;
 pub const OP_TRACEN: u8 = 0x56;
 pub const OP_TRACES: u8 = 0x57;
 pub const OP_TIME: u8 = 0x58;
+pub const OP_RND: u8 = 0x59;
 
 pub fn inst_size(op: u8) -> usize {
     match op {
@@ -100,6 +101,7 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Tracen => OP_TRACEN,
         Intrinsic::Traces => OP_TRACES,
         Intrinsic::Time => OP_TIME,
+        Intrinsic::Rnd => OP_RND,
     }
 }
 
@@ -117,6 +119,7 @@ pub fn intrinsic_has_return_value(op: Intrinsic) -> bool {
             | Intrinsic::Min
             | Intrinsic::Max
             | Intrinsic::Time
+            | Intrinsic::Rnd
     )
 }
 
@@ -180,12 +183,13 @@ pub fn op_name(b: u8) -> Option<&'static str> {
         OP_TRACEN => Some("Tracen"),
         OP_TRACES => Some("Traces"),
         OP_TIME => Some("Time"),
+        OP_RND => Some("Rnd"),
         _ => None,
     }
 }
 
 /// All valid opcode byte values.
-pub const ALL_OPCODES: [u8; 56] = [
+pub const ALL_OPCODES: [u8; 57] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -242,6 +246,7 @@ pub const ALL_OPCODES: [u8; 56] = [
     OP_TRACEN,
     OP_TRACES,
     OP_TIME,
+    OP_RND,
 ];
 
 #[derive(Debug)]
