@@ -1117,16 +1117,15 @@ impl App {
             None => return,
         };
 
+        if vm.halted {
+            return;
+        }
+
         vm.prev_buttons = vm.buttons;
         vm.buttons = sample_buttons();
 
         match vm.run_until_flip() {
-            Ok(crate::vm::VmResult::Flip) => {}
-            Ok(crate::vm::VmResult::Halted) => {
-                self.terminal.push_output("program halted");
-                self.run_state = None;
-                self.mode = AppMode::Terminal;
-            }
+            Ok(crate::vm::VmResult::Flip | crate::vm::VmResult::Halted) => {}
             Ok(crate::vm::VmResult::Continue) => {}
             Err(e) => {
                 self.terminal.push_output(&format!("runtime error: {e}"));
