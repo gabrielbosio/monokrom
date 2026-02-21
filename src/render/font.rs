@@ -3,7 +3,7 @@ use macroquad::prelude::*;
 // 4x6 bitmap font data for ASCII 32-127 (96 characters)
 // Each character is 6 bytes (one byte per row, top 4 bits = 4 pixel columns)
 // Bit 7 = leftmost pixel, bit 4 = rightmost pixel, bits 3-0 unused
-const FONT_DATA: [u8; 96 * 6] = [
+pub const FONT_DATA: [u8; 96 * 6] = [
     // Space (32)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ! (33)
     0x40, 0x40, 0x40, 0x00, 0x40, 0x00, // " (34)

@@ -8,6 +8,8 @@ mod input;
 mod render;
 mod terminal;
 mod ui;
+#[allow(dead_code)]
+mod vm;
 
 use macroquad::prelude::*;
 
