@@ -1,8 +1,6 @@
 use macroquad::prelude::*;
 
 use crate::compiler::bytecode::disassemble;
-use crate::compiler::codegen::generate;
-use crate::compiler::opt::optimize;
 use crate::compiler::{self, lexer};
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
@@ -1235,30 +1233,16 @@ impl App {
                 if source.is_empty() {
                     self.terminal.push_output("(empty buffer)");
                 } else {
-                    match compiler::parse(&source) {
-                        Ok(module) => match compiler::lower(&module) {
-                            Ok(hir) => {
-                                let mut lir = compiler::lower_lir(&hir);
-                                optimize(&mut lir);
-                                match generate(&lir) {
-                                    Ok(bc) => {
-                                        for line in disassemble(&bc) {
-                                            self.terminal.push_output(&line);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        self.terminal.push_output(&format!("error: {e}"));
-                                    }
-                                }
+                    match compiler::compile(&source) {
+                        Ok(bc) => {
+                            for line in disassemble(&bc) {
+                                self.terminal.push_output(&line);
                             }
-                            Err(errors) => {
-                                for e in &errors {
-                                    self.terminal.push_output(&format!("error: {e}"));
-                                }
+                        }
+                        Err(errors) => {
+                            for e in &errors {
+                                self.terminal.push_output(&format!("error: {e}"));
                             }
-                        },
-                        Err(e) => {
-                            self.terminal.push_output(&format!("parse error: {e:?}"));
                         }
                     }
                 }

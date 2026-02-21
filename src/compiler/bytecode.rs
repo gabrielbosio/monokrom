@@ -218,6 +218,7 @@ pub const ALL_OPCODES: [u8; 52] = [
     OP_FLIP,
 ];
 
+#[derive(Debug)]
 pub struct FuncInfo {
     pub name: String,
     pub code_offset: usize,
@@ -225,6 +226,7 @@ pub struct FuncInfo {
     pub n_locals: u8,
 }
 
+#[derive(Debug)]
 pub struct Bytecode {
     pub code: Vec<u8>,
     pub string_pool: Vec<String>,

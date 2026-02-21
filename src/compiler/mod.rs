@@ -30,6 +30,15 @@ pub fn lower_lir(hir: &hir::HirModule) -> lir::LirModule {
     hir_to_lir::lower_to_lir(hir)
 }
 
+pub fn compile(source: &str) -> Result<bytecode::Bytecode, Vec<String>> {
+    let ast = parse(source).map_err(|e| vec![format!("parse error: {e:?}")])?;
+    let hir =
+        lower(&ast).map_err(|errs| errs.iter().map(|e| format!("{e}")).collect::<Vec<_>>())?;
+    let mut lir = lower_lir(&hir);
+    opt::optimize(&mut lir);
+    codegen::generate(&lir).map_err(|e| vec![format!("{e}")])
+}
+
 #[cfg(test)]
 mod tests {
     use super::ast::*;
@@ -396,5 +405,24 @@ mod tests {
                 value: None,
             })]
         );
+    }
+
+    #[test]
+    fn compile_end_to_end() {
+        let bc = super::compile("fn main()\n  cls(0)\nend").unwrap();
+        assert!(bc.entry_point.is_some());
+        assert!(!bc.code.is_empty());
+    }
+
+    #[test]
+    fn compile_parse_error() {
+        let errs = super::compile("fn 123").unwrap_err();
+        assert!(errs[0].contains("parse error"));
+    }
+
+    #[test]
+    fn compile_type_error() {
+        let errs = super::compile("fn f(): int\nend").unwrap_err();
+        assert!(!errs.is_empty());
     }
 }
