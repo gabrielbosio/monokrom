@@ -46,12 +46,10 @@ pub enum VmResult {
 struct CallFrame {
     return_pc: usize,
     locals_base: usize,
-    n_locals: u8,
 }
 
 struct FuncEntry {
     code_offset: usize,
-    n_params: u8,
     n_locals: u8,
 }
 
@@ -79,7 +77,6 @@ impl Vm {
             .iter()
             .map(|f| FuncEntry {
                 code_offset: f.code_offset,
-                n_params: f.n_params,
                 n_locals: f.n_locals,
             })
             .collect();
@@ -113,7 +110,6 @@ impl Vm {
         vm.call_stack.push(CallFrame {
             return_pc: usize::MAX,
             locals_base: 0,
-            n_locals: n_locals as u8,
         });
 
         Ok(vm)
@@ -347,7 +343,6 @@ impl Vm {
                 self.call_stack.push(CallFrame {
                     return_pc: self.pc,
                     locals_base: new_base,
-                    n_locals,
                 });
 
                 self.pc = code_offset;

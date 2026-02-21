@@ -16,6 +16,7 @@ use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, C
 use crate::ui::{
     ConfirmDialog, DialogResult, FilePicker, FilePickerResult, InputDialog, MessageDialog,
 };
+use crate::vm::Vm;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum PendingAction {
@@ -65,6 +66,8 @@ pub enum AppMode {
     GoToLineDialog,
     /// Message dialog (error/info)
     Message,
+    /// Running a program
+    Running,
 }
 
 pub struct App {
@@ -98,6 +101,9 @@ pub struct App {
     // Syntax highlighting
     highlight_styles: Vec<CharStyle>,
     highlight_valid: bool,
+
+    // VM
+    run_state: Option<Vm>,
 }
 
 impl App {
@@ -153,6 +159,8 @@ impl App {
 
             highlight_styles: Vec::new(),
             highlight_valid: false,
+
+            run_state: None,
         }
     }
 
@@ -182,6 +190,11 @@ impl App {
     }
 
     pub fn update(&mut self) {
+        if self.mode == AppMode::Running {
+            self.update_running();
+            return;
+        }
+
         // Update cursor blink
         self.cursor_blink_timer += get_frame_time() as f64;
         if self.cursor_blink_timer >= CURSOR_BLINK_RATE {
@@ -199,6 +212,7 @@ impl App {
             AppMode::ReplaceDialog => self.update_replace_dialog(),
             AppMode::GoToLineDialog => self.update_goto_line_dialog(),
             AppMode::Message => self.update_message_dialog(),
+            AppMode::Running => unreachable!(),
         }
 
         // Update scrollbar state
@@ -1090,6 +1104,38 @@ impl App {
         }
     }
 
+    fn update_running(&mut self) {
+        if is_key_pressed(KeyCode::Escape) {
+            self.terminal.push_output("stopped");
+            self.run_state = None;
+            self.mode = AppMode::Terminal;
+            return;
+        }
+
+        let vm = match self.run_state.as_mut() {
+            Some(vm) => vm,
+            None => return,
+        };
+
+        vm.prev_buttons = vm.buttons;
+        vm.buttons = sample_buttons();
+
+        match vm.run_until_flip() {
+            Ok(crate::vm::VmResult::Flip) => {}
+            Ok(crate::vm::VmResult::Halted) => {
+                self.terminal.push_output("program halted");
+                self.run_state = None;
+                self.mode = AppMode::Terminal;
+            }
+            Ok(crate::vm::VmResult::Continue) => {}
+            Err(e) => {
+                self.terminal.push_output(&format!("runtime error: {e}"));
+                self.run_state = None;
+                self.mode = AppMode::Terminal;
+            }
+        }
+    }
+
     fn execute_terminal_command(&mut self, input: &str) {
         match parse_command(input) {
             TerminalCommand::Ls => match filesystem::list_files() {
@@ -1160,7 +1206,27 @@ impl App {
                 }
             }
             TerminalCommand::Run => {
-                self.terminal.push_output("run: not implemented yet");
+                let source = self.editor.buffer.to_string();
+                if source.is_empty() {
+                    self.terminal.push_output("(empty buffer)");
+                } else {
+                    match compiler::compile(&source) {
+                        Ok(bc) => match Vm::new(&bc) {
+                            Ok(vm) => {
+                                self.run_state = Some(vm);
+                                self.mode = AppMode::Running;
+                            }
+                            Err(e) => {
+                                self.terminal.push_output(&format!("error: {e}"));
+                            }
+                        },
+                        Err(errors) => {
+                            for e in &errors {
+                                self.terminal.push_output(&format!("error: {e}"));
+                            }
+                        }
+                    }
+                }
             }
             TerminalCommand::Lex => {
                 let source = self.editor.buffer.to_string();
@@ -1368,14 +1434,20 @@ impl App {
     }
 
     pub fn draw(&self) {
+        let helpers = DrawHelpers::new(&self.font, SCALE as f32);
+
+        if self.mode == AppMode::Running {
+            clear_background(COLOR_BLACK);
+            self.draw_running(&helpers);
+            return;
+        }
+
         // Clear with background color
         clear_background(if self.mode == AppMode::Terminal {
             COLOR_BLACK
         } else {
             COLOR_DARK_GRAY
         });
-
-        let helpers = DrawHelpers::new(&self.font, SCALE as f32);
 
         if self.mode == AppMode::Terminal {
             self.draw_terminal(&helpers);
@@ -1403,7 +1475,24 @@ impl App {
                     self.draw_search_hint(&helpers);
                 }
             }
-            AppMode::Terminal => unreachable!(),
+            AppMode::Terminal | AppMode::Running => unreachable!(),
+        }
+    }
+
+    fn draw_running(&self, helpers: &DrawHelpers) {
+        let vm = match self.run_state.as_ref() {
+            Some(vm) => vm,
+            None => return,
+        };
+        let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
+        for y in 0..144 {
+            for x in 0..160 {
+                let pixel = vm.framebuffer[y * 160 + x] as usize & 3;
+                let color = palette[pixel];
+                if pixel != 0 {
+                    helpers.draw_rect(x as f32, y as f32, 1.0, 1.0, color);
+                }
+            }
         }
     }
 
@@ -1615,4 +1704,33 @@ impl App {
             );
         }
     }
+}
+
+fn sample_buttons() -> u8 {
+    let mut b = 0u8;
+    if is_key_down(KeyCode::Left) {
+        b |= 1;
+    }
+    if is_key_down(KeyCode::Right) {
+        b |= 2;
+    }
+    if is_key_down(KeyCode::Up) {
+        b |= 4;
+    }
+    if is_key_down(KeyCode::Down) {
+        b |= 8;
+    }
+    if is_key_down(KeyCode::Z) {
+        b |= 16;
+    }
+    if is_key_down(KeyCode::X) {
+        b |= 32;
+    }
+    if is_key_down(KeyCode::Enter) {
+        b |= 64;
+    }
+    if is_key_down(KeyCode::RightShift) {
+        b |= 128;
+    }
+    b
 }
