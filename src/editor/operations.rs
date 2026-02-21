@@ -150,6 +150,82 @@ pub fn delete_word_before(
     selection.clear();
 }
 
+/// Indent all lines in a multi-line selection by 2 spaces
+pub fn indent_lines(
+    buffer: &mut TextBuffer,
+    cursor: &mut Cursor,
+    selection: &mut Selection,
+    history: &mut History,
+) {
+    let (start, end) = match selection.get_ordered_positions() {
+        Some(p) => p,
+        None => return,
+    };
+    history.push(buffer, cursor.position);
+    // Insert from last line to first so char indices stay valid
+    for line in (start.line..=end.line).rev() {
+        let idx = buffer.line_col_to_char(line, 0);
+        buffer.insert(idx, "  ");
+    }
+    // Adjust anchor and cursor cols
+    if let Some(ref mut anchor) = selection.anchor {
+        anchor.col += 2;
+    }
+    selection.cursor.col += 2;
+    cursor.set_position(cursor.line(), cursor.col() + 2);
+}
+
+/// Dedent all lines in a multi-line selection by up to 2 spaces
+pub fn dedent_lines(
+    buffer: &mut TextBuffer,
+    cursor: &mut Cursor,
+    selection: &mut Selection,
+    history: &mut History,
+) {
+    let (start, end) = match selection.get_ordered_positions() {
+        Some(p) => p,
+        None => return,
+    };
+    history.push(buffer, cursor.position);
+    // Track removals for anchor and cursor lines
+    let anchor_line = selection.anchor.map(|a| a.line);
+    let cursor_line = selection.cursor.line;
+    let mut anchor_removed = 0usize;
+    let mut cursor_removed = 0usize;
+    // Remove from last line to first so char indices stay valid
+    for line in (start.line..=end.line).rev() {
+        let content = buffer.get_line(line);
+        let leading: usize = content.chars().take_while(|c| *c == ' ').count();
+        if leading == 0 {
+            continue;
+        }
+        let remove = leading.min(2);
+        let line_start = buffer.line_col_to_char(line, 0);
+        buffer.delete_range(line_start, line_start + remove);
+        if Some(line) == anchor_line {
+            anchor_removed = remove;
+        }
+        if line == cursor_line {
+            cursor_removed = remove;
+        }
+    }
+    if let Some(ref mut anchor) = selection.anchor {
+        anchor.col = anchor.col.saturating_sub(anchor_removed);
+    }
+    selection.cursor.col = selection.cursor.col.saturating_sub(cursor_removed);
+    let editor_cursor_removed = if cursor.line() == cursor_line {
+        cursor_removed
+    } else if Some(cursor.line()) == anchor_line {
+        anchor_removed
+    } else {
+        0
+    };
+    cursor.set_position(
+        cursor.line(),
+        cursor.col().saturating_sub(editor_cursor_removed),
+    );
+}
+
 /// Remove up to 2 leading spaces from the current line (Shift+Tab)
 pub fn dedent(buffer: &mut TextBuffer, cursor: &mut Cursor, history: &mut History) {
     let line = buffer.get_line(cursor.line());
@@ -659,5 +735,79 @@ mod tests {
         assert!(!clipboard_ok); // No clipboard
         assert_eq!(buffer.to_string(), "world");
         assert!(!selection.is_active());
+    }
+
+    #[test]
+    fn test_indent_lines() {
+        let mut buffer = TextBuffer::from_str("aaa\nbbb\nccc");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        // Select lines 0-2
+        selection.start(CursorPosition::new(0, 1));
+        selection.cursor = CursorPosition::new(2, 1);
+        cursor.set_position(2, 1);
+
+        indent_lines(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "  aaa");
+        assert_eq!(buffer.get_line(1), "  bbb");
+        assert_eq!(buffer.get_line(2), "  ccc");
+        assert_eq!(cursor.col(), 3);
+    }
+
+    #[test]
+    fn test_dedent_lines() {
+        let mut buffer = TextBuffer::from_str("  aaa\n  bbb\n  ccc");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        selection.start(CursorPosition::new(0, 2));
+        selection.cursor = CursorPosition::new(2, 4);
+        cursor.set_position(2, 4);
+
+        dedent_lines(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "aaa");
+        assert_eq!(buffer.get_line(1), "bbb");
+        assert_eq!(buffer.get_line(2), "ccc");
+        assert_eq!(cursor.col(), 2);
+    }
+
+    #[test]
+    fn test_dedent_lines_partial() {
+        let mut buffer = TextBuffer::from_str(" aaa\n   bbb\nccc");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(2, 1);
+        cursor.set_position(2, 1);
+
+        dedent_lines(&mut buffer, &mut cursor, &mut selection, &mut history);
+
+        assert_eq!(buffer.get_line(0), "aaa"); // 1 space removed
+        assert_eq!(buffer.get_line(1), " bbb"); // 2 spaces removed
+        assert_eq!(buffer.get_line(2), "ccc"); // 0 removed
+        assert_eq!(cursor.col(), 1); // line 2 had 0 removed
+    }
+
+    #[test]
+    fn test_indent_lines_undo() {
+        let mut buffer = TextBuffer::from_str("aaa\nbbb\nccc");
+        let mut cursor = Cursor::new();
+        let mut selection = Selection::new();
+        let mut history = History::new();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(2, 0);
+        cursor.set_position(2, 0);
+
+        indent_lines(&mut buffer, &mut cursor, &mut selection, &mut history);
+        assert_eq!(buffer.get_line(0), "  aaa");
+
+        undo(&mut buffer, &mut cursor, &mut selection, &mut history);
+        assert_eq!(buffer.get_line(0), "aaa");
+        assert_eq!(buffer.get_line(1), "bbb");
+        assert_eq!(buffer.get_line(2), "ccc");
     }
 }

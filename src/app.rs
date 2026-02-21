@@ -351,14 +351,28 @@ impl App {
                 if self.is_in_search_mode() {
                     return;
                 }
-                for c in [' ', ' '] {
-                    operations::insert_char(
+                let multiline = self
+                    .editor
+                    .selection
+                    .get_ordered_positions()
+                    .is_some_and(|(s, e)| s.line != e.line);
+                if multiline {
+                    operations::indent_lines(
                         &mut self.editor.buffer,
                         &mut self.editor.cursor,
                         &mut self.editor.selection,
                         &mut self.editor.history,
-                        c,
                     );
+                } else {
+                    for c in [' ', ' '] {
+                        operations::insert_char(
+                            &mut self.editor.buffer,
+                            &mut self.editor.cursor,
+                            &mut self.editor.selection,
+                            &mut self.editor.history,
+                            c,
+                        );
+                    }
                 }
                 self.is_modified = true;
                 self.highlight_valid = false;
@@ -430,11 +444,27 @@ impl App {
                 &mut self.editor.selection,
                 &mut self.editor.history,
             ),
-            EditorAction::RemoveTab => operations::dedent(
-                &mut self.editor.buffer,
-                &mut self.editor.cursor,
-                &mut self.editor.history,
-            ),
+            EditorAction::RemoveTab => {
+                let multiline = self
+                    .editor
+                    .selection
+                    .get_ordered_positions()
+                    .is_some_and(|(s, e)| s.line != e.line);
+                if multiline {
+                    operations::dedent_lines(
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
+                    );
+                } else {
+                    operations::dedent(
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.history,
+                    );
+                }
+            }
             EditorAction::SwapLineUp => operations::swap_line_up(
                 &mut self.editor.buffer,
                 &mut self.editor.cursor,
