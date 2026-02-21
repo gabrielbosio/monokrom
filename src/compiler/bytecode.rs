@@ -60,6 +60,15 @@ pub const OP_MIN: u8 = 0x52;
 pub const OP_MAX: u8 = 0x53;
 pub const OP_FLIP: u8 = 0x54;
 
+pub fn inst_size(op: u8) -> usize {
+    match op {
+        PUSH_I8 | LOAD_LOCAL | STORE_LOCAL => 2,
+        PUSH_I16 | JUMP | JUMP_IF_FALSE => 3,
+        CALL => 4,
+        _ => 1,
+    }
+}
+
 pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
     match op {
         Intrinsic::Pset => OP_PSET,

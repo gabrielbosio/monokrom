@@ -7,6 +7,7 @@ pub mod hir_to_lir;
 pub mod lexer;
 pub mod lir;
 pub mod opt;
+pub mod peephole;
 pub mod type_check;
 
 lalrpop_util::lalrpop_mod!(
@@ -36,7 +37,9 @@ pub fn compile(source: &str) -> Result<bytecode::Bytecode, Vec<String>> {
         lower(&ast).map_err(|errs| errs.iter().map(|e| format!("{e}")).collect::<Vec<_>>())?;
     let mut lir = lower_lir(&hir);
     opt::optimize(&mut lir);
-    codegen::generate(&lir).map_err(|e| vec![format!("{e}")])
+    let mut bc = codegen::generate(&lir).map_err(|e| vec![format!("{e}")])?;
+    peephole::optimize(&mut bc);
+    Ok(bc)
 }
 
 #[cfg(test)]
