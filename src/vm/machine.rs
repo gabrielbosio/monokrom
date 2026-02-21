@@ -66,6 +66,7 @@ pub struct Vm {
     string_pool: Vec<String>,
     functions: Vec<FuncEntry>,
     pub halted: bool,
+    pub trace_output: Vec<String>,
 }
 
 impl Vm {
@@ -104,6 +105,7 @@ impl Vm {
             string_pool: bc.string_pool.clone(),
             functions,
             halted: false,
+            trace_output: Vec::new(),
         };
 
         // Push initial call frame for main (return_pc = usize::MAX means halt on return)
@@ -407,7 +409,7 @@ impl Vm {
                 self.pop()?;
                 self.pop()?;
             }
-            OP_PRINT => {
+            OP_PRINTS => {
                 let y = self.pop()?;
                 let x = self.pop()?;
                 let str_idx = self.pop()? as u16 as usize;
@@ -415,6 +417,12 @@ impl Vm {
                     let s = self.string_pool[str_idx].clone();
                     self.fb_print(&s, x as i32, y as i32);
                 }
+            }
+            OP_PRINTN => {
+                let y = self.pop()?;
+                let x = self.pop()?;
+                let val = self.pop()?;
+                self.fb_print(&format!("{val}"), x as i32, y as i32);
             }
             OP_BTN => {
                 let n = self.pop()? as u8;
@@ -483,6 +491,16 @@ impl Vm {
                 let b = self.pop()?;
                 let a = self.pop()?;
                 self.push(a.max(b))?;
+            }
+            OP_TRACEN => {
+                let val = self.pop()?;
+                self.trace_output.push(format!("{val}"));
+            }
+            OP_TRACES => {
+                let str_idx = self.pop()? as u16 as usize;
+                if str_idx < self.string_pool.len() {
+                    self.trace_output.push(self.string_pool[str_idx].clone());
+                }
             }
             OP_FLIP => {
                 self.prev_buttons = self.buttons;

@@ -52,7 +52,8 @@ impl TypeCheckCtx {
             ("rect", Rect, vec![Int, Int, Int, Int, Int], Void),
             ("circ", Circ, vec![Int, Int, Int, Int], Void),
             ("spr", Spr, vec![Int, Int, Int], Void),
-            ("print", Print, vec![Str, Int, Int], Void),
+            ("prints", Prints, vec![Str, Int, Int], Void),
+            ("printn", Printn, vec![Int, Int, Int], Void),
             ("btn", Btn, vec![Int], Bool),
             ("btnp", Btnp, vec![Int], Bool),
             ("sfx", Sfx, vec![Int], Void),
@@ -66,6 +67,8 @@ impl TypeCheckCtx {
             ("min", Min, vec![Int, Int], Int),
             ("max", Max, vec![Int, Int], Int),
             ("flip", Flip, vec![], Void),
+            ("tracen", Tracen, vec![Int], Void),
+            ("traces", Traces, vec![Str], Void),
         ];
         for (name, op, params, ret) in sigs {
             self.intrinsics

@@ -1155,7 +1155,11 @@ impl App {
         vm.buttons = sample_buttons();
 
         match vm.run_until_flip() {
-            Ok(crate::vm::VmResult::Flip | crate::vm::VmResult::Halted) => {}
+            Ok(crate::vm::VmResult::Flip | crate::vm::VmResult::Halted) => {
+                for line in vm.trace_output.drain(..) {
+                    self.terminal.push_output(&line);
+                }
+            }
             Ok(crate::vm::VmResult::Continue) => {}
             Err(e) => {
                 self.terminal.push_output(&format!("runtime error: {e}"));

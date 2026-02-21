@@ -34,7 +34,8 @@ pub enum Intrinsic {
     Rect,
     Circ,
     Spr,
-    Print,
+    Prints,
+    Printn,
     Btn,
     Btnp,
     Sfx,
@@ -48,6 +49,8 @@ pub enum Intrinsic {
     Min,
     Max,
     Flip,
+    Tracen,
+    Traces,
 }
 
 #[derive(Debug, Clone, PartialEq)]

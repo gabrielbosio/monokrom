@@ -45,7 +45,7 @@ pub const OP_LINE: u8 = 0x43;
 pub const OP_RECT: u8 = 0x44;
 pub const OP_CIRC: u8 = 0x45;
 pub const OP_SPR: u8 = 0x46;
-pub const OP_PRINT: u8 = 0x47;
+pub const OP_PRINTS: u8 = 0x47;
 pub const OP_BTN: u8 = 0x48;
 pub const OP_BTNP: u8 = 0x49;
 pub const OP_SFX: u8 = 0x4A;
@@ -59,6 +59,9 @@ pub const OP_ABS: u8 = 0x51;
 pub const OP_MIN: u8 = 0x52;
 pub const OP_MAX: u8 = 0x53;
 pub const OP_FLIP: u8 = 0x54;
+pub const OP_PRINTN: u8 = 0x55;
+pub const OP_TRACEN: u8 = 0x56;
+pub const OP_TRACES: u8 = 0x57;
 
 pub fn inst_size(op: u8) -> usize {
     match op {
@@ -78,7 +81,8 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Rect => OP_RECT,
         Intrinsic::Circ => OP_CIRC,
         Intrinsic::Spr => OP_SPR,
-        Intrinsic::Print => OP_PRINT,
+        Intrinsic::Prints => OP_PRINTS,
+        Intrinsic::Printn => OP_PRINTN,
         Intrinsic::Btn => OP_BTN,
         Intrinsic::Btnp => OP_BTNP,
         Intrinsic::Sfx => OP_SFX,
@@ -92,6 +96,8 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Min => OP_MIN,
         Intrinsic::Max => OP_MAX,
         Intrinsic::Flip => OP_FLIP,
+        Intrinsic::Tracen => OP_TRACEN,
+        Intrinsic::Traces => OP_TRACES,
     }
 }
 
@@ -153,7 +159,8 @@ pub fn op_name(b: u8) -> Option<&'static str> {
         OP_RECT => Some("Rect"),
         OP_CIRC => Some("Circ"),
         OP_SPR => Some("Spr"),
-        OP_PRINT => Some("Print"),
+        OP_PRINTS => Some("Prints"),
+        OP_PRINTN => Some("Printn"),
         OP_BTN => Some("Btn"),
         OP_BTNP => Some("Btnp"),
         OP_SFX => Some("Sfx"),
@@ -167,12 +174,14 @@ pub fn op_name(b: u8) -> Option<&'static str> {
         OP_MIN => Some("Min"),
         OP_MAX => Some("Max"),
         OP_FLIP => Some("Flip"),
+        OP_TRACEN => Some("Tracen"),
+        OP_TRACES => Some("Traces"),
         _ => None,
     }
 }
 
 /// All valid opcode byte values.
-pub const ALL_OPCODES: [u8; 52] = [
+pub const ALL_OPCODES: [u8; 55] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -211,7 +220,8 @@ pub const ALL_OPCODES: [u8; 52] = [
     OP_RECT,
     OP_CIRC,
     OP_SPR,
-    OP_PRINT,
+    OP_PRINTS,
+    OP_PRINTN,
     OP_BTN,
     OP_BTNP,
     OP_SFX,
@@ -225,6 +235,8 @@ pub const ALL_OPCODES: [u8; 52] = [
     OP_MIN,
     OP_MAX,
     OP_FLIP,
+    OP_TRACEN,
+    OP_TRACES,
 ];
 
 #[derive(Debug)]
