@@ -25,7 +25,7 @@ impl std::fmt::Display for HirType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Intrinsic {
     Pset,
     Pget,

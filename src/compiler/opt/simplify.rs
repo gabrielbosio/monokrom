@@ -1,0 +1,389 @@
+use std::collections::HashMap;
+
+use crate::compiler::ast::{BinOp, UnaryOp};
+use crate::compiler::lir::{LirFunc, LirInst, Value};
+
+use super::apply_replacements;
+
+pub fn simplify(func: &mut LirFunc) {
+    let mut consts: HashMap<Value, i16> = HashMap::new();
+    let mut bools: HashMap<Value, bool> = HashMap::new();
+    let mut replace: HashMap<Value, Value> = HashMap::new();
+
+    // Record params as non-constant (they're just not in the maps)
+    // Process all blocks
+    for block_idx in 0..func.blocks.len() {
+        for inst_idx in 0..func.blocks[block_idx].insts.len() {
+            let (val, ref inst) = func.blocks[block_idx].insts[inst_idx];
+            match inst.clone() {
+                LirInst::Const(n) => {
+                    consts.insert(val, n);
+                }
+                LirInst::ConstBool(b) => {
+                    bools.insert(val, b);
+                }
+                LirInst::BinOp { op, lhs, rhs } => {
+                    let lhs = resolve_val(&replace, lhs);
+                    let rhs = resolve_val(&replace, rhs);
+
+                    // Try constant fold
+                    let l_const = consts.get(&lhs).copied();
+                    let r_const = consts.get(&rhs).copied();
+                    let l_bool = bools.get(&lhs).copied();
+                    let r_bool = bools.get(&rhs).copied();
+
+                    if let (Some(l), Some(r)) = (l_const, r_const) {
+                        if let Some(result) = eval_binop(op, l, r) {
+                            if is_comparison(op) || is_logical(op) {
+                                let b = result != 0;
+                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(b);
+                                bools.insert(val, b);
+                            } else {
+                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::Const(result);
+                                consts.insert(val, result);
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Bool constant fold for logical ops
+                    if is_logical(op) {
+                        if let (Some(l), Some(r)) = (l_bool, r_bool) {
+                            let result = match op {
+                                BinOp::And => l && r,
+                                BinOp::Or => l || r,
+                                _ => unreachable!(),
+                            };
+                            func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(result);
+                            bools.insert(val, result);
+                            continue;
+                        }
+                    }
+
+                    // Algebraic simplifications
+                    if let Some(new) = algebraic_simplify(
+                        op,
+                        lhs,
+                        rhs,
+                        &consts,
+                        &bools,
+                        &mut func.blocks[block_idx].insts,
+                        inst_idx,
+                        val,
+                    ) {
+                        match new {
+                            Simplified::Replace(target) => {
+                                replace.insert(val, target);
+                                // Copy const/bool info
+                                if let Some(&n) = consts.get(&target) {
+                                    consts.insert(val, n);
+                                }
+                                if let Some(&b) = bools.get(&target) {
+                                    bools.insert(val, b);
+                                }
+                            }
+                            Simplified::Const(n) => {
+                                consts.insert(val, n);
+                            }
+                            Simplified::ConstBool(b) => {
+                                bools.insert(val, b);
+                            }
+                        }
+                    }
+                }
+                LirInst::UnaryOp { op, val: operand } => {
+                    let operand = resolve_val(&replace, operand);
+                    match op {
+                        UnaryOp::Neg => {
+                            if let Some(&n) = consts.get(&operand) {
+                                func.blocks[block_idx].insts[inst_idx].1 =
+                                    LirInst::Const(n.wrapping_neg());
+                                consts.insert(val, n.wrapping_neg());
+                            }
+                        }
+                        UnaryOp::Not => {
+                            if let Some(&b) = bools.get(&operand) {
+                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(!b);
+                                bools.insert(val, !b);
+                            }
+                        }
+                    }
+                }
+                LirInst::Phi(entries) => {
+                    let resolved: Vec<Value> = entries
+                        .iter()
+                        .map(|(_, v)| resolve_val(&replace, *v))
+                        .filter(|v| *v != val)
+                        .collect();
+
+                    if !resolved.is_empty() && resolved.iter().all(|v| *v == resolved[0]) {
+                        let target = resolved[0];
+                        replace.insert(val, target);
+                        if let Some(&n) = consts.get(&target) {
+                            consts.insert(val, n);
+                        }
+                        if let Some(&b) = bools.get(&target) {
+                            bools.insert(val, b);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    apply_replacements(func, &replace);
+}
+
+fn resolve_val(replace: &HashMap<Value, Value>, mut v: Value) -> Value {
+    while let Some(&next) = replace.get(&v) {
+        v = next;
+    }
+    v
+}
+
+fn is_comparison(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Gt | BinOp::Leq | BinOp::Geq
+    )
+}
+
+fn is_logical(op: BinOp) -> bool {
+    matches!(op, BinOp::And | BinOp::Or)
+}
+
+fn eval_binop(op: BinOp, l: i16, r: i16) -> Option<i16> {
+    Some(match op {
+        BinOp::Add => l.wrapping_add(r),
+        BinOp::Sub => l.wrapping_sub(r),
+        BinOp::Mul => l.wrapping_mul(r),
+        BinOp::Div => {
+            if r == 0 {
+                return None;
+            }
+            l.wrapping_div(r)
+        }
+        BinOp::Mod => {
+            if r == 0 {
+                return None;
+            }
+            l.wrapping_rem(r)
+        }
+        BinOp::Eq => (l == r) as i16,
+        BinOp::Neq => (l != r) as i16,
+        BinOp::Lt => (l < r) as i16,
+        BinOp::Gt => (l > r) as i16,
+        BinOp::Leq => (l <= r) as i16,
+        BinOp::Geq => (l >= r) as i16,
+        BinOp::And => ((l != 0) && (r != 0)) as i16,
+        BinOp::Or => ((l != 0) || (r != 0)) as i16,
+    })
+}
+
+enum Simplified {
+    Replace(Value),
+    Const(i16),
+    ConstBool(bool),
+}
+
+#[allow(clippy::too_many_arguments)]
+fn algebraic_simplify(
+    op: BinOp,
+    lhs: Value,
+    rhs: Value,
+    consts: &HashMap<Value, i16>,
+    bools: &HashMap<Value, bool>,
+    insts: &mut [(Value, LirInst)],
+    inst_idx: usize,
+    val: Value,
+) -> Option<Simplified> {
+    let l_const = consts.get(&lhs).copied();
+    let r_const = consts.get(&rhs).copied();
+    let l_bool = bools.get(&lhs).copied();
+    let r_bool = bools.get(&rhs).copied();
+
+    match op {
+        // x + 0, 0 + x -> x
+        BinOp::Add => {
+            if r_const == Some(0) {
+                return Some(Simplified::Replace(lhs));
+            }
+            if l_const == Some(0) {
+                return Some(Simplified::Replace(rhs));
+            }
+        }
+        // x - 0 -> x
+        BinOp::Sub => {
+            if r_const == Some(0) {
+                return Some(Simplified::Replace(lhs));
+            }
+        }
+        // x * 1, 1 * x -> x. x * 0, 0 * x -> 0
+        BinOp::Mul => {
+            if r_const == Some(1) {
+                return Some(Simplified::Replace(lhs));
+            }
+            if l_const == Some(1) {
+                return Some(Simplified::Replace(rhs));
+            }
+            if r_const == Some(0) {
+                insts[inst_idx].1 = LirInst::Const(0);
+                return Some(Simplified::Const(0));
+            }
+            if l_const == Some(0) {
+                insts[inst_idx].1 = LirInst::Const(0);
+                return Some(Simplified::Const(0));
+            }
+        }
+        // x / 1 -> x
+        BinOp::Div => {
+            if r_const == Some(1) {
+                return Some(Simplified::Replace(lhs));
+            }
+        }
+        // x and true, true and x -> x. x and false, false and x -> false
+        BinOp::And => {
+            if r_bool == Some(true) {
+                return Some(Simplified::Replace(lhs));
+            }
+            if l_bool == Some(true) {
+                return Some(Simplified::Replace(rhs));
+            }
+            if r_bool == Some(false) {
+                insts[inst_idx].1 = LirInst::ConstBool(false);
+                return Some(Simplified::ConstBool(false));
+            }
+            if l_bool == Some(false) {
+                insts[inst_idx].1 = LirInst::ConstBool(false);
+                return Some(Simplified::ConstBool(false));
+            }
+        }
+        // x or false, false or x -> x. x or true, true or x -> true
+        BinOp::Or => {
+            if r_bool == Some(false) {
+                return Some(Simplified::Replace(lhs));
+            }
+            if l_bool == Some(false) {
+                return Some(Simplified::Replace(rhs));
+            }
+            if r_bool == Some(true) {
+                insts[inst_idx].1 = LirInst::ConstBool(true);
+                return Some(Simplified::ConstBool(true));
+            }
+            if l_bool == Some(true) {
+                insts[inst_idx].1 = LirInst::ConstBool(true);
+                return Some(Simplified::ConstBool(true));
+            }
+        }
+        _ => {}
+    }
+
+    // Suppress unused warning for val, it's used through insts[inst_idx].0
+    let _ = val;
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::compiler::lir::*;
+    use crate::compiler::opt::optimize;
+    use crate::compiler::{lower, parse};
+
+    fn optimized_lir(src: &str) -> LirModule {
+        let ast = parse(src).unwrap();
+        let hir = lower(&ast).unwrap();
+        let mut module = crate::compiler::hir_to_lir::lower_to_lir(&hir);
+        optimize(&mut module);
+        module
+    }
+
+    fn find_func<'a>(m: &'a LirModule, name: &str) -> &'a LirFunc {
+        m.functions.iter().find(|f| f.name == name).unwrap()
+    }
+
+    fn has_inst(f: &LirFunc, pred: impl Fn(&LirInst) -> bool) -> bool {
+        f.blocks
+            .iter()
+            .any(|b| b.insts.iter().any(|(_, inst)| pred(inst)))
+    }
+
+    #[test]
+    fn fold_add() {
+        let m = optimized_lir("fn f(): int\n  return 3 + 5\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::Const(8))));
+        assert!(!has_inst(f, |i| matches!(i, LirInst::BinOp { .. })));
+    }
+
+    #[test]
+    fn fold_comparison() {
+        let m = optimized_lir("fn f(): bool\n  return 3 < 5\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::ConstBool(true))));
+        assert!(!has_inst(f, |i| matches!(i, LirInst::BinOp { .. })));
+    }
+
+    #[test]
+    fn fold_neg() {
+        let m = optimized_lir("fn f(): int\n  return -5\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::Const(-5))));
+    }
+
+    #[test]
+    fn fold_not() {
+        let m = optimized_lir("fn f(): bool\n  return not true\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::ConstBool(false))));
+    }
+
+    #[test]
+    fn fold_chain() {
+        let m = optimized_lir("fn f(): int\n  return 1 + 2 + 3\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::Const(6))));
+        assert!(!has_inst(f, |i| matches!(i, LirInst::BinOp { .. })));
+    }
+
+    #[test]
+    fn identity_mul_one() {
+        let m = optimized_lir("fn f(x: int): int\n  return x * 1\nend");
+        let f = find_func(&m, "f");
+        assert!(!has_inst(f, |i| matches!(
+            i,
+            LirInst::BinOp {
+                op: crate::compiler::ast::BinOp::Mul,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn identity_add_zero() {
+        let m = optimized_lir("fn f(x: int): int\n  return x + 0\nend");
+        let f = find_func(&m, "f");
+        assert!(!has_inst(f, |i| matches!(
+            i,
+            LirInst::BinOp {
+                op: crate::compiler::ast::BinOp::Add,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn mul_zero() {
+        let m = optimized_lir("fn f(x: int): int\n  return x * 0\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::Const(0))));
+    }
+
+    #[test]
+    fn div_by_zero_unchanged() {
+        let m = optimized_lir("fn f(): int\n  return 1 / 0\nend");
+        let f = find_func(&m, "f");
+        assert!(has_inst(f, |i| matches!(i, LirInst::BinOp { .. })));
+    }
+}

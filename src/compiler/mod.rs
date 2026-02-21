@@ -4,6 +4,7 @@ pub mod hir;
 pub mod hir_to_lir;
 pub mod lexer;
 pub mod lir;
+pub mod opt;
 pub mod type_check;
 
 lalrpop_util::lalrpop_mod!(
