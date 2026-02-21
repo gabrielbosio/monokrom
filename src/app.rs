@@ -18,11 +18,13 @@ use crate::ui::{
 };
 use crate::vm::Vm;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 enum PendingAction {
     #[default]
     None,
+    NewFile,
     OpenFile,
+    OpenNamed(String),
 }
 
 struct EditorState {
@@ -610,6 +612,7 @@ impl App {
             }
             EditorAction::New => {
                 if self.is_modified {
+                    self.pending_action = PendingAction::NewFile;
                     self.mode = AppMode::CloseConfirm;
                     self.confirm_dialog.show("Save changes?");
                 } else {
@@ -767,9 +770,13 @@ impl App {
     }
 
     fn after_close_confirm_action(&mut self) {
-        let action = self.pending_action;
-        self.pending_action = PendingAction::None;
+        let action = std::mem::take(&mut self.pending_action);
         match action {
+            PendingAction::OpenNamed(name) => {
+                self.open_file(&name);
+                self.terminal.push_output(&format!("opened {name}"));
+                self.mode = AppMode::Editing;
+            }
             PendingAction::OpenFile => match filesystem::list_files() {
                 Ok(files) => {
                     self.mode = AppMode::OpenPicker;
@@ -779,10 +786,11 @@ impl App {
                     self.show_message("Error: Cannot list files");
                 }
             },
-            _ => {
+            PendingAction::NewFile => {
                 self.create_new_file();
                 self.mode = AppMode::Editing;
             }
+            PendingAction::None => {}
         }
     }
 
@@ -1184,9 +1192,15 @@ impl App {
                 Err(e) => self.terminal.push_output(&format!("error: {e}")),
             },
             TerminalCommand::New => {
-                self.create_new_file();
-                self.terminal.push_output("new file created");
-                self.mode = AppMode::Editing;
+                if self.is_modified {
+                    self.pending_action = PendingAction::NewFile;
+                    self.mode = AppMode::CloseConfirm;
+                    self.confirm_dialog.show("Save changes?");
+                } else {
+                    self.create_new_file();
+                    self.terminal.push_output("new file created");
+                    self.mode = AppMode::Editing;
+                }
             }
             TerminalCommand::Save(name_arg) => {
                 let name = match name_arg {
@@ -1212,15 +1226,17 @@ impl App {
                     Err(e) => self.terminal.push_output(&format!("error: {e}")),
                 }
             }
-            TerminalCommand::Open(name) => match filesystem::read_file(&name) {
-                Ok(content) => {
-                    let buffer = TextBuffer::from_str(&content);
-                    self.reset_editor(buffer, Some(name.clone()));
+            TerminalCommand::Open(name) => {
+                if self.is_modified {
+                    self.pending_action = PendingAction::OpenNamed(name);
+                    self.mode = AppMode::CloseConfirm;
+                    self.confirm_dialog.show("Save changes?");
+                } else {
+                    self.open_file(&name);
                     self.terminal.push_output(&format!("opened {name}"));
                     self.mode = AppMode::Editing;
                 }
-                Err(e) => self.terminal.push_output(&format!("error: {e}")),
-            },
+            }
             TerminalCommand::Rm(name) => match filesystem::delete_file(&name) {
                 Ok(()) => self.terminal.push_output(&format!("removed {name}")),
                 Err(e) => self.terminal.push_output(&format!("error: {e}")),
