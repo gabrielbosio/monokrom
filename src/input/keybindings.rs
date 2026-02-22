@@ -24,6 +24,8 @@ pub enum EditorAction {
     SelectDown,
     SelectWordLeft,
     SelectWordRight,
+    SelectToLineStart,
+    SelectToLineEnd,
     SelectAll,
 
     // Editing

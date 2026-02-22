@@ -276,6 +276,8 @@ impl App {
                 | EditorAction::SelectDown
                 | EditorAction::SelectWordLeft
                 | EditorAction::SelectWordRight
+                | EditorAction::SelectToLineStart
+                | EditorAction::SelectToLineEnd
                 | EditorAction::SelectAll => self.handle_selection(action),
                 EditorAction::Backspace
                 | EditorAction::BackspaceWord
@@ -417,6 +419,10 @@ impl App {
             EditorAction::SelectWordLeft => self.editor.cursor.move_word_left(&self.editor.buffer),
             EditorAction::SelectWordRight => {
                 self.editor.cursor.move_word_right(&self.editor.buffer)
+            }
+            EditorAction::SelectToLineStart => self.editor.cursor.move_to_line_start(),
+            EditorAction::SelectToLineEnd => {
+                self.editor.cursor.move_to_line_end(&self.editor.buffer)
             }
             _ => return,
         }

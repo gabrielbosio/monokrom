@@ -126,6 +126,8 @@ const SHIFT_ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
 
 // Shift + key bindings (with key repeat)
 const SHIFT_BINDINGS: &[(KeyCode, EditorAction)] = &[
+    (KeyCode::Home, EditorAction::SelectToLineStart),
+    (KeyCode::End, EditorAction::SelectToLineEnd),
     (KeyCode::Left, EditorAction::SelectLeft),
     (KeyCode::Right, EditorAction::SelectRight),
     (KeyCode::Up, EditorAction::SelectUp),
