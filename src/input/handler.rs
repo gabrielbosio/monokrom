@@ -311,22 +311,22 @@ pub fn get_terminal_action() -> Option<EditorAction> {
             return Some(EditorAction::MoveDown);
         }
 
-        if is_key_pressed(KeyCode::Left) {
+        if should_key_fire(KeyCode::Left, false) {
             return Some(EditorAction::MoveLeft);
         }
-        if is_key_pressed(KeyCode::Right) {
+        if should_key_fire(KeyCode::Right, false) {
             return Some(EditorAction::MoveRight);
         }
-        if is_key_pressed(KeyCode::Home) {
+        if should_key_fire(KeyCode::Home, false) {
             return Some(EditorAction::MoveToLineStart);
         }
-        if is_key_pressed(KeyCode::End) {
+        if should_key_fire(KeyCode::End, false) {
             return Some(EditorAction::MoveToLineEnd);
         }
-        if is_key_pressed(KeyCode::Backspace) {
+        if should_key_fire(KeyCode::Backspace, false) {
             return Some(EditorAction::Backspace);
         }
-        if is_key_pressed(KeyCode::Delete) {
+        if should_key_fire(KeyCode::Delete, false) {
             return Some(EditorAction::Delete);
         }
 

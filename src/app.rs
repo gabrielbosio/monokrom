@@ -1143,6 +1143,9 @@ impl App {
     }
 
     fn update_running(&mut self) {
+        // Drain char queue so keypresses during gameplay don't leak into terminal
+        while get_char_pressed().is_some() {}
+
         if is_key_pressed(KeyCode::Escape) {
             self.terminal.push_output("stopped");
             self.run_state = None;
