@@ -2,6 +2,14 @@
 
 Monokrom uses a statically-typed language with type inference. Programs compile through `Source -> AST -> HIR -> LIR (SSA) -> Bytecode`. Blocks are delimited with `end`.
 
+## Example
+
+```
+fn main()
+  prints("Hello, world!", 55, 70, 3)
+end
+```
+
 ## Comments
 
 ```
