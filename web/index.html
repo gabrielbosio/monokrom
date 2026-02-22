@@ -60,16 +60,16 @@
             if (!wasm_exports) return;
             var code = into_sapp_keycode(codeForChar(ch));
             var mods = getModifiers();
-            if (modState.alt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
-            if (modState.shift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
+            var hadAlt = modState.alt, hadShift = modState.shift;
+            if (hadAlt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
+            if (hadShift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
             wasm_exports.key_down(code, mods, false);
             if (!mods) wasm_exports.key_press(ch.charCodeAt(0));
             wasm_exports.key_up(code, mods);
-            if (modState.shift) wasm_exports.key_up(into_sapp_keycode('ShiftLeft'), 0);
-            if (modState.alt) wasm_exports.key_up(into_sapp_keycode('AltLeft'), 0);
             modState.alt = false;
             modState.shift = false;
             updateToggleStyles();
+            releaseModifiers(hadAlt, hadShift);
         }
 
         function codeForChar(ch) {
@@ -93,20 +93,27 @@
             return (modState.alt ? SAPP_ALT : 0) | (modState.shift ? SAPP_SHIFT : 0);
         }
 
+        function releaseModifiers(hadAlt, hadShift) {
+            requestAnimationFrame(function() {
+                if (!wasm_exports) return;
+                if (hadShift) wasm_exports.key_up(into_sapp_keycode('ShiftLeft'), 0);
+                if (hadAlt) wasm_exports.key_up(into_sapp_keycode('AltLeft'), 0);
+            });
+        }
+
         function sendKeyMod(codeName) {
             if (!wasm_exports) return;
             var mods = getModifiers();
-            // Hold modifier keys down so Macroquad sees them as pressed
-            if (modState.alt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
-            if (modState.shift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
+            var hadAlt = modState.alt, hadShift = modState.shift;
+            if (hadAlt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
+            if (hadShift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
             var code = into_sapp_keycode(codeName);
             wasm_exports.key_down(code, mods, false);
             wasm_exports.key_up(code, mods);
-            if (modState.shift) wasm_exports.key_up(into_sapp_keycode('ShiftLeft'), 0);
-            if (modState.alt) wasm_exports.key_up(into_sapp_keycode('AltLeft'), 0);
             modState.alt = false;
             modState.shift = false;
             updateToggleStyles();
+            releaseModifiers(hadAlt, hadShift);
         }
 
         function updateToggleStyles() {
