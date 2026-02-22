@@ -195,10 +195,9 @@ pub fn get_editor_action() -> Option<EditorAction> {
         }
     }
 
-    // Ctrl+Enter to run program
-    if modifier
+    // Ctrl+Enter to run program (Alt+Enter on WASM)
+    if shortcut_mod
         && !shift
-        && !alt
         && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
     {
         drain_char_queue();
