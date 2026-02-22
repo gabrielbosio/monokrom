@@ -1,7 +1,6 @@
 use macroquad::prelude::*;
 
 use crate::compiler;
-use crate::compiler::bytecode::disassemble;
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
     EDITOR_TILES_Y, SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
@@ -1297,25 +1296,6 @@ impl App {
                 }
             }
             TerminalCommand::Run => self.run_program(),
-            TerminalCommand::Dis => {
-                let source = self.editor.buffer.to_string();
-                if source.is_empty() {
-                    self.terminal.push_output("(empty buffer)");
-                } else {
-                    match compiler::compile(&source) {
-                        Ok(bc) => {
-                            for line in disassemble(&bc) {
-                                self.terminal.push_output(&line);
-                            }
-                        }
-                        Err(errors) => {
-                            for e in &errors {
-                                self.terminal.push_output(&format!("error: {e}"));
-                            }
-                        }
-                    }
-                }
-            }
             TerminalCommand::Clear => {
                 self.terminal.clear();
             }
@@ -1328,8 +1308,6 @@ impl App {
                 self.terminal.push_output("  rm <name>   remove file");
                 self.terminal.push_output("  cp <s> <d>  copy file");
                 self.terminal.push_output("  run         run program");
-                self.terminal
-                    .push_output("  dis         disassemble buffer");
                 self.terminal.push_output("  clear       clear screen");
                 self.terminal.push_output("  help        show this");
                 self.terminal.push_output("");

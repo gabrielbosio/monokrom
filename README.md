@@ -44,7 +44,6 @@ Monokrom boots into a terminal. Press Escape to toggle between terminal and edit
 - `ls`, list files
 - `cp <src> <dst>`, copy file
 - `rm <file>`, remove file
-- `dis`, disassemble compiled bytecode
 
 ### Editor hotkeys
 
