@@ -252,7 +252,7 @@ Button mapping:
 
 ## Game Loop
 
-Programs run through a `main()` function. Call `flip()` at the end of each frame to present the screen and yield control:
+Programs run through a `main()` function. `flip()` presents the screen and yields control until the next frame. A typical game loop:
 
 ```
 fn main()
@@ -264,7 +264,7 @@ fn main()
 end
 ```
 
-Without `flip()`, the program runs to completion and exits.
+Programs that don't call `flip()` run once and exit, which is useful for one-shot scripts that just print output.
 
 ## Limits
 
