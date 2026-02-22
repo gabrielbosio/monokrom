@@ -214,8 +214,14 @@ Button mapping:
 
 | Function | Description |
 |----------|-------------|
-| `peek(addr): int` | Read memory |
-| `poke(addr, val)` | Write memory |
+| `peek(addr): int` | Read byte from memory |
+| `poke(addr, val)` | Write byte to memory |
+
+Peek and poke operate on single bytes. Since `int` is 16-bit (2 bytes, little-endian), reading a full int requires two peeks:
+
+```
+val = peek(addr) + peek(addr + 1) * 256
+```
 
 ### Math
 
