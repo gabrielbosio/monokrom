@@ -195,6 +195,16 @@ pub fn get_editor_action() -> Option<EditorAction> {
         }
     }
 
+    // Ctrl+Enter to run program
+    if modifier
+        && !shift
+        && !alt
+        && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
+    {
+        drain_char_queue();
+        return Some(EditorAction::RunProgram);
+    }
+
     // Shift + shortcut + Z for Redo (alternative)
     #[cfg(not(target_arch = "wasm32"))]
     let redo_alt = shortcut_mod && shift && !alt && is_key_pressed(KeyCode::Z);

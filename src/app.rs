@@ -296,6 +296,7 @@ impl App {
                 | EditorAction::Find
                 | EditorAction::Replace
                 | EditorAction::GoToLine => self.handle_file_action(action),
+                EditorAction::RunProgram => self.run_program(),
                 EditorAction::DialogCancel => {
                     if !self.search.query.is_empty() {
                         self.search.query.clear();
@@ -583,6 +584,33 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn run_program(&mut self) {
+        let source = self.editor.buffer.to_string();
+        if source.is_empty() {
+            self.terminal.push_output("(empty buffer)");
+            self.mode = AppMode::Terminal;
+        } else {
+            match compiler::compile(&source) {
+                Ok(bc) => match Vm::new(&bc) {
+                    Ok(vm) => {
+                        self.run_state = Some(vm);
+                        self.mode = AppMode::Running;
+                    }
+                    Err(e) => {
+                        self.terminal.push_output(&format!("error: {e}"));
+                        self.mode = AppMode::Terminal;
+                    }
+                },
+                Err(errors) => {
+                    for e in &errors {
+                        self.terminal.push_output(&format!("error: {e}"));
+                    }
+                    self.mode = AppMode::Terminal;
+                }
+            }
         }
     }
 
@@ -1263,29 +1291,7 @@ impl App {
                     Err(e) => self.terminal.push_output(&format!("error: {e}")),
                 }
             }
-            TerminalCommand::Run => {
-                let source = self.editor.buffer.to_string();
-                if source.is_empty() {
-                    self.terminal.push_output("(empty buffer)");
-                } else {
-                    match compiler::compile(&source) {
-                        Ok(bc) => match Vm::new(&bc) {
-                            Ok(vm) => {
-                                self.run_state = Some(vm);
-                                self.mode = AppMode::Running;
-                            }
-                            Err(e) => {
-                                self.terminal.push_output(&format!("error: {e}"));
-                            }
-                        },
-                        Err(errors) => {
-                            for e in &errors {
-                                self.terminal.push_output(&format!("error: {e}"));
-                            }
-                        }
-                    }
-                }
-            }
+            TerminalCommand::Run => self.run_program(),
             TerminalCommand::Lex => {
                 let source = self.editor.buffer.to_string();
                 if source.is_empty() {

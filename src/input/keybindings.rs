@@ -70,6 +70,9 @@ pub enum EditorAction {
     Replace,
     GoToLine,
 
+    // Run
+    RunProgram,
+
     // Terminal
     Autocomplete,
 
