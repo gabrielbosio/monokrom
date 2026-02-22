@@ -135,22 +135,6 @@ end
 
 All functions are global. No methods, no closures.
 
-## Arrays
-
-Fixed-size, homogeneous:
-
-```
-enemies: array[40] of Enemy
-scores: array[10] of int
-```
-
-Indexed with brackets:
-
-```
-enemies[0].x = 10
-scores[i] = 100
-```
-
 ## Structs
 
 Compiler sugar over raw memory. Fields have fixed offsets, no runtime type metadata. No methods.
@@ -167,8 +151,25 @@ end
 Field access with dot notation:
 
 ```
+e: Enemy
+e.x = 10
+e.alive = true
+```
+
+## Arrays
+
+Fixed-size, homogeneous:
+
+```
+enemies: array[40] of Enemy
+scores: array[10] of int
+```
+
+Indexed with brackets:
+
+```
 enemies[0].x = 10
-enemies[0].alive = true
+scores[i] = 100
 ```
 
 ## Intrinsics
