@@ -34,8 +34,6 @@ pub enum EditorAction {
     Delete,
     InsertTab,
     RemoveTab,
-    SwapLineUp,
-    SwapLineDown,
 
     // Clipboard
     Cut,
@@ -49,6 +47,8 @@ pub enum EditorAction {
     // Scrolling
     ScrollUp,
     ScrollDown,
+    ScrollLineUp,
+    ScrollLineDown,
 
     // File operations
     Save,

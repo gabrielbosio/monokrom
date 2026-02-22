@@ -113,8 +113,8 @@ const MODIFIER_REPEAT_BINDINGS: &[(KeyCode, EditorAction)] = &[
 const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Left, EditorAction::MoveWordLeft),
     (KeyCode::Right, EditorAction::MoveWordRight),
-    (KeyCode::Up, EditorAction::SwapLineUp),
-    (KeyCode::Down, EditorAction::SwapLineDown),
+    (KeyCode::Up, EditorAction::ScrollLineUp),
+    (KeyCode::Down, EditorAction::ScrollLineDown),
     (KeyCode::Backspace, EditorAction::BackspaceWord),
 ];
 
@@ -301,12 +301,20 @@ pub fn get_terminal_action() -> Option<EditorAction> {
 
     let modifier = is_modifier_pressed();
 
-    // PageUp/PageDown for scrollback (with hold-to-repeat)
+    // PageUp/PageDown and Alt+Up/Down for scrollback (with hold-to-repeat)
     if should_key_fire(KeyCode::PageUp, false) {
         return Some(EditorAction::ScrollUp);
     }
     if should_key_fire(KeyCode::PageDown, false) {
         return Some(EditorAction::ScrollDown);
+    }
+    if is_alt_pressed() {
+        if should_key_fire(KeyCode::Up, false) {
+            return Some(EditorAction::ScrollLineUp);
+        }
+        if should_key_fire(KeyCode::Down, false) {
+            return Some(EditorAction::ScrollLineDown);
+        }
     }
 
     if !modifier && is_key_pressed(KeyCode::Tab) {

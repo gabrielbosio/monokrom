@@ -282,14 +282,15 @@ impl App {
                 EditorAction::Backspace
                 | EditorAction::BackspaceWord
                 | EditorAction::Delete
-                | EditorAction::RemoveTab
-                | EditorAction::SwapLineUp
-                | EditorAction::SwapLineDown => self.handle_delete(action),
+                | EditorAction::RemoveTab => self.handle_delete(action),
                 EditorAction::Cut | EditorAction::Copy | EditorAction::Paste => {
                     self.handle_clipboard(action)
                 }
                 EditorAction::Undo | EditorAction::Redo => self.handle_history(action),
-                EditorAction::ScrollUp | EditorAction::ScrollDown => self.handle_scroll(action),
+                EditorAction::ScrollUp
+                | EditorAction::ScrollDown
+                | EditorAction::ScrollLineUp
+                | EditorAction::ScrollLineDown => self.handle_scroll(action),
                 EditorAction::Save
                 | EditorAction::Open
                 | EditorAction::New
@@ -474,18 +475,6 @@ impl App {
                     );
                 }
             }
-            EditorAction::SwapLineUp => operations::swap_line_up(
-                &mut self.editor.buffer,
-                &mut self.editor.cursor,
-                &mut self.editor.selection,
-                &mut self.editor.history,
-            ),
-            EditorAction::SwapLineDown => operations::swap_line_down(
-                &mut self.editor.buffer,
-                &mut self.editor.cursor,
-                &mut self.editor.selection,
-                &mut self.editor.history,
-            ),
             _ => return,
         }
         self.is_modified = true;
@@ -567,24 +556,38 @@ impl App {
     }
 
     fn handle_scroll(&mut self, action: EditorAction) {
-        let page = self.visible_lines().saturating_sub(1).max(1);
         match action {
-            EditorAction::ScrollUp => {
-                let new_line = self.editor.cursor.line().saturating_sub(page);
+            EditorAction::ScrollUp | EditorAction::ScrollDown => {
+                let page = self.visible_lines().saturating_sub(1).max(1);
+                let new_line = match action {
+                    EditorAction::ScrollUp => self.editor.cursor.line().saturating_sub(page),
+                    _ => {
+                        let last = self.editor.buffer.line_count().saturating_sub(1);
+                        (self.editor.cursor.line() + page).min(last)
+                    }
+                };
                 let line_len = self.editor.buffer.line_len(new_line);
                 let col = self.editor.cursor.col().min(line_len);
                 self.editor.cursor.set_position(new_line, col);
+                self.after_cursor_move();
             }
-            EditorAction::ScrollDown => {
-                let last = self.editor.buffer.line_count().saturating_sub(1);
-                let new_line = (self.editor.cursor.line() + page).min(last);
-                let line_len = self.editor.buffer.line_len(new_line);
-                let col = self.editor.cursor.col().min(line_len);
-                self.editor.cursor.set_position(new_line, col);
+            EditorAction::ScrollLineUp => {
+                if self.view.scroll_y > 0 {
+                    self.view.scroll_y -= 1;
+                }
+            }
+            EditorAction::ScrollLineDown => {
+                let max = self
+                    .editor
+                    .buffer
+                    .line_count()
+                    .saturating_sub(self.visible_lines());
+                if self.view.scroll_y < max {
+                    self.view.scroll_y += 1;
+                }
             }
             _ => {}
         }
-        self.after_cursor_move();
     }
 
     fn run_program(&mut self) {
@@ -1168,8 +1171,10 @@ impl App {
                 EditorAction::MoveToLineEnd => self.terminal.move_to_end(),
                 EditorAction::MoveUp => self.terminal.recall_prev(),
                 EditorAction::MoveDown => self.terminal.recall_next(),
-                EditorAction::ScrollUp => self.terminal.scroll_up(),
-                EditorAction::ScrollDown => self.terminal.scroll_down(),
+                EditorAction::ScrollUp | EditorAction::ScrollLineUp => self.terminal.scroll_up(),
+                EditorAction::ScrollDown | EditorAction::ScrollLineDown => {
+                    self.terminal.scroll_down()
+                }
                 EditorAction::Autocomplete => self.handle_terminal_autocomplete(),
                 _ => {}
             }
