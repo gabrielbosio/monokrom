@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
+use crate::compiler;
 use crate::compiler::bytecode::disassemble;
-use crate::compiler::{self, lexer};
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
     EDITOR_TILES_Y, SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
@@ -1297,72 +1297,6 @@ impl App {
                 }
             }
             TerminalCommand::Run => self.run_program(),
-            TerminalCommand::Lex => {
-                let source = self.editor.buffer.to_string();
-                if source.is_empty() {
-                    self.terminal.push_output("(empty buffer)");
-                } else {
-                    let tokens = lexer::tokenize(&source);
-                    for (tok, span) in &tokens {
-                        self.terminal.push_output(&format!("{:?} {:?}", tok, span));
-                    }
-                    self.terminal
-                        .push_output(&format!("{} tokens", tokens.len()));
-                }
-            }
-            TerminalCommand::Parse => {
-                let source = self.editor.buffer.to_string();
-                if source.is_empty() {
-                    self.terminal.push_output("(empty buffer)");
-                } else {
-                    match compiler::parse(&source) {
-                        Ok(module) => {
-                            for item in &module.items {
-                                for line in format!("{:#?}", item).lines() {
-                                    let spaces = line.len() - line.trim_start().len();
-                                    let compact =
-                                        format!("{:w$}{}", "", line.trim_start(), w = spaces / 2);
-                                    self.terminal.push_output(&compact);
-                                }
-                            }
-                            self.terminal
-                                .push_output(&format!("{} items", module.items.len()));
-                        }
-                        Err(e) => {
-                            self.terminal.push_output(&format!("parse error: {e:?}"));
-                        }
-                    }
-                }
-            }
-            TerminalCommand::Check => {
-                let source = self.editor.buffer.to_string();
-                if source.is_empty() {
-                    self.terminal.push_output("(empty buffer)");
-                } else {
-                    match compiler::parse(&source) {
-                        Ok(module) => match compiler::lower(&module) {
-                            Ok(hir) => {
-                                self.terminal.push_output("ok");
-                                self.terminal.push_output(&format!(
-                                    " {}S {}G {}F {}str",
-                                    hir.structs.len(),
-                                    hir.globals.len(),
-                                    hir.functions.len(),
-                                    hir.string_pool.len()
-                                ));
-                            }
-                            Err(errors) => {
-                                for e in &errors {
-                                    self.terminal.push_output(&format!("error: {e}"));
-                                }
-                            }
-                        },
-                        Err(e) => {
-                            self.terminal.push_output(&format!("parse error: {e:?}"));
-                        }
-                    }
-                }
-            }
             TerminalCommand::Dis => {
                 let source = self.editor.buffer.to_string();
                 if source.is_empty() {
@@ -1394,9 +1328,6 @@ impl App {
                 self.terminal.push_output("  rm <name>   remove file");
                 self.terminal.push_output("  cp <s> <d>  copy file");
                 self.terminal.push_output("  run         run program");
-                self.terminal.push_output("  lex         tokenize buffer");
-                self.terminal.push_output("  parse       parse buffer AST");
-                self.terminal.push_output("  check       type-check buffer");
                 self.terminal
                     .push_output("  dis         disassemble buffer");
                 self.terminal.push_output("  clear       clear screen");
