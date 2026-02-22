@@ -59,9 +59,13 @@
         function sendChar(ch) {
             if (!wasm_exports) return;
             var code = into_sapp_keycode(codeForChar(ch));
-            wasm_exports.key_down(code, 0, false);
-            wasm_exports.key_press(ch.charCodeAt(0));
-            wasm_exports.key_up(code, 0);
+            var mods = getModifiers();
+            wasm_exports.key_down(code, mods, false);
+            if (!mods) wasm_exports.key_press(ch.charCodeAt(0));
+            wasm_exports.key_up(code, mods);
+            modState.alt = false;
+            modState.shift = false;
+            updateToggleStyles();
         }
 
         function codeForChar(ch) {
@@ -77,23 +81,68 @@
             return map[ch] || 'Unidentified';
         }
 
-        // Arrow key bar
+        // Modifier state
+        var modState = { alt: false, shift: false };
+        var SAPP_SHIFT = 1, SAPP_ALT = 4;
+
+        function getModifiers() {
+            return (modState.alt ? SAPP_ALT : 0) | (modState.shift ? SAPP_SHIFT : 0);
+        }
+
+        function sendKeyMod(codeName) {
+            sendKey(codeName, getModifiers());
+            // Auto-release modifiers after key press
+            modState.alt = false;
+            modState.shift = false;
+            updateToggleStyles();
+        }
+
+        function updateToggleStyles() {
+            if (altBtn) altBtn.style.background = modState.alt ? '#888' : '#333';
+            if (shiftBtn) shiftBtn.style.background = modState.shift ? '#888' : '#333';
+        }
+
+        // Virtual button bar
         var bar = document.createElement('div');
-        bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;background:rgba(0,0,0,0.8);z-index:20;touch-action:none;';
-        var keys = [
-            ['\u25C0', 'ArrowLeft'],
-            ['\u25B2', 'ArrowUp'],
-            ['\u25BC', 'ArrowDown'],
-            ['\u25B6', 'ArrowRight']
+        bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:3px;background:rgba(0,0,0,0.8);z-index:20;touch-action:none;';
+
+        var btnStyle = 'height:28px;border:1px solid #888;border-radius:4px;background:#333;color:#fff;font-size:12px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;padding:0 6px;min-width:32px;';
+
+        var altBtn = null, shiftBtn = null;
+
+        var buttons = [
+            ['Esc', 'Escape', false],
+            ['Alt', null, true],
+            ['Shift', null, true],
+            ['Tab', 'Tab', false],
+            ['\u25C0', 'ArrowLeft', false],
+            ['\u25B2', 'ArrowUp', false],
+            ['\u25BC', 'ArrowDown', false],
+            ['\u25B6', 'ArrowRight', false],
+            ['PgU', 'PageUp', false],
+            ['PgD', 'PageDown', false]
         ];
-        keys.forEach(function(k) {
+
+        buttons.forEach(function(b) {
             var btn = document.createElement('button');
-            btn.textContent = k[0];
-            btn.style.cssText = 'width:44px;height:28px;border:1px solid #888;border-radius:4px;background:#333;color:#fff;font-size:16px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;';
-            btn.addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                sendKey(k[1]);
-            });
+            btn.textContent = b[0];
+            btn.style.cssText = btnStyle;
+            if (b[2]) {
+                // Toggle button (Alt/Shift)
+                if (b[0] === 'Alt') altBtn = btn;
+                if (b[0] === 'Shift') shiftBtn = btn;
+                btn.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
+                    var key = b[0].toLowerCase();
+                    modState[key] = !modState[key];
+                    updateToggleStyles();
+                });
+            } else {
+                btn.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
+                    sendKeyMod(b[1]);
+                });
+            }
             bar.appendChild(btn);
         });
         document.body.appendChild(bar);
