@@ -1,13 +1,26 @@
 # Monokrom
 
-Fantasy console inspired by retro monochrome handhelds. Like Pico-8/TIC-80 but memory limits are based on bytecode size, not source character count.
+Fantasy console inspired by retro monochrome handhelds. Like PICO-8/TIC-80 but memory limits are based on bytecode size, not source character count.
 
-Built in Rust with Macroquad. Currently in Version 1 (text editor).
+Built in Rust with Macroquad.
 
 ## Specs
 
-- Screen: 256x240 pixels (32x30 tiles of 8x8, scaled 3x)
-- Palette: Black (0), White (1), Gray (2)
+- Screen: 160x144 pixels (40x24 chars with 4x6 font, scaled 4x)
+- Palette: 4-color monochrome (black, dark gray, light gray, white)
+- Bytecode limit: 32KB
+- Runtime memory: 16KB flat
+- Sprites: 8x8
+
+## Language
+
+Monokrom programs are written in a statically-typed language with type inference. The compiler pipeline is:
+
+```
+Source -> AST -> HIR -> LIR (SSA) -> Bytecode
+```
+
+Optimization passes: constant folding, constant propagation, dead code elimination, CSE, strength reduction, function inlining, peephole store-load elimination.
 
 ## Building
 
@@ -20,3 +33,31 @@ cargo run --release                # release
 
 Debug stores files in `./fs/`, release in `~/.monokrom/`.
 
+## Usage
+
+Monokrom boots into a terminal. Press Escape to toggle between terminal and editor.
+
+### Terminal commands
+
+- `run`: compile and run the current file
+- `open <file>` / `save <file>`, file operations (use quotes for spaces: `open "my file"`)
+- `ls`, list files
+- `cp <src> <dst>`, copy file
+- `rm <file>`, remove file
+- `dis`, disassemble compiled bytecode
+
+### Editor hotkeys
+
+- **Ctrl+S** save, **Ctrl+O** open, **Ctrl+N** new file
+- **Ctrl+Enter** run program
+- **Ctrl+Z** undo, **Ctrl+Y** redo
+- **Ctrl+X/C/V** cut, copy, paste
+- **Ctrl+A** select all
+- **Ctrl+F** find, **Ctrl+R** replace, **Ctrl+L** go to line
+- **Alt+Left/Right** word movement, **Alt+Backspace** word delete
+- **Alt+Up/Down** scroll viewport one line
+- **Shift+arrows** selection, **Shift+Home/End** select to line start/end
+- **Shift+Alt+Left/Right** select by word
+- **PageUp/PageDown** move cursor by page
+- **Tab/Shift+Tab** indent/dedent (block indent when multi-line selected)
+- **Escape** toggle terminal/editor
