@@ -1296,6 +1296,26 @@ impl App {
                 }
             }
             TerminalCommand::Run => self.run_program(),
+            TerminalCommand::Stat => {
+                let source = self.editor.buffer.to_string();
+                if source.is_empty() {
+                    self.terminal.push_output("(empty buffer)");
+                } else {
+                    match compiler::compile(&source) {
+                        Ok(bc) => {
+                            let size = bc.code.len();
+                            let pct = size * 100 / 32768;
+                            self.terminal
+                                .push_output(&format!("{size} / 32768 bytes ({pct}%)"));
+                        }
+                        Err(errors) => {
+                            for e in &errors {
+                                self.terminal.push_output(&format!("error: {e}"));
+                            }
+                        }
+                    }
+                }
+            }
             TerminalCommand::Clear => {
                 self.terminal.clear();
             }
@@ -1308,6 +1328,7 @@ impl App {
                 self.terminal.push_output("  rm <name>   remove file");
                 self.terminal.push_output("  cp <s> <d>  copy file");
                 self.terminal.push_output("  run         run program");
+                self.terminal.push_output("  stat        bytecode size");
                 self.terminal.push_output("  clear       clear screen");
                 self.terminal.push_output("  help        show this");
                 self.terminal.push_output("");

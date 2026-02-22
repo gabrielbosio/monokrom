@@ -1,5 +1,5 @@
 pub const COMMAND_NAMES: &[&str] = &[
-    "clear", "cp", "help", "ls", "new", "open", "rm", "run", "save",
+    "clear", "cp", "help", "ls", "new", "open", "rm", "run", "save", "stat",
 ];
 
 pub enum TerminalCommand {
@@ -10,6 +10,7 @@ pub enum TerminalCommand {
     Rm(String),
     Cp(String, String),
     Run,
+    Stat,
     Clear,
     Help,
     Unknown(String),
@@ -68,6 +69,7 @@ pub fn parse_command(input: &str) -> TerminalCommand {
             _ => TerminalCommand::Unknown("cp: usage: cp <src> <dst>".to_string()),
         },
         "run" => TerminalCommand::Run,
+        "stat" => TerminalCommand::Stat,
         "clear" => TerminalCommand::Clear,
         "help" => TerminalCommand::Help,
         "" => TerminalCommand::Unknown(String::new()),
