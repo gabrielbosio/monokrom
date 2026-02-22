@@ -596,7 +596,7 @@ impl App {
             self.mode = AppMode::Terminal;
         } else {
             match compiler::compile(&source) {
-                Ok(bc) => match Vm::new(&bc) {
+                Ok(bc) => match Vm::new(&bc, get_time()) {
                     Ok(vm) => {
                         self.run_state = Some(vm);
                         self.mode = AppMode::Running;
@@ -1202,6 +1202,7 @@ impl App {
 
         vm.prev_buttons = vm.buttons;
         vm.buttons = sample_buttons();
+        vm.current_time = get_time();
 
         match vm.run_until_flip() {
             Ok(crate::vm::VmResult::Flip | crate::vm::VmResult::Halted) => {

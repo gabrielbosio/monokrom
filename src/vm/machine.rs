@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use crate::compiler::bytecode::*;
 use crate::render::font::FONT_DATA;
 
@@ -69,12 +67,13 @@ pub struct Vm {
     functions: Vec<FuncEntry>,
     pub halted: bool,
     pub trace_output: Vec<String>,
-    start_time: Instant,
+    start_time: f64,
+    pub current_time: f64,
     rng_state: u32,
 }
 
 impl Vm {
-    pub fn new(bc: &Bytecode) -> Result<Self, VmError> {
+    pub fn new(bc: &Bytecode, time: f64) -> Result<Self, VmError> {
         let entry = bc.entry_point.ok_or(VmError::NoEntryPoint)?;
 
         let functions: Vec<FuncEntry> = bc
@@ -110,12 +109,9 @@ impl Vm {
             functions,
             halted: false,
             trace_output: Vec::new(),
-            start_time: Instant::now(),
-            rng_state: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u32)
-                .unwrap_or(0xDEAD)
-                | 1,
+            start_time: time,
+            current_time: time,
+            rng_state: (time * 1_000_000.0) as u32 | 1,
         };
 
         // Push initial call frame for main (return_pc = usize::MAX means halt on return)
@@ -515,7 +511,7 @@ impl Vm {
                 }
             }
             OP_TIME => {
-                let secs = self.start_time.elapsed().as_secs() as i16;
+                let secs = (self.current_time - self.start_time) as i16;
                 self.push(secs)?;
             }
             OP_RND => {
@@ -668,7 +664,7 @@ mod tests {
     #[test]
     fn halt_immediately() {
         let bc = make_bc(vec![HALT], 0);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert_eq!(vm.step().unwrap(), VmResult::Halted);
         assert!(vm.halted);
     }
@@ -677,7 +673,7 @@ mod tests {
     fn push_and_store() {
         // Push 42, store to slot 0, halt
         let bc = make_bc(vec![PUSH_I8, 42, STORE_LOCAL, 0, HALT], 1);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 42);
     }
@@ -706,7 +702,7 @@ mod tests {
             ],
             3,
         );
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[2], 13);
     }
@@ -714,7 +710,7 @@ mod tests {
     #[test]
     fn division_by_zero() {
         let bc = make_bc(vec![PUSH1, PUSH0, DIV], 0);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert!(matches!(vm.run_until_flip(), Err(VmError::DivisionByZero)));
     }
 
@@ -722,7 +718,7 @@ mod tests {
     fn cls_fills_framebuffer() {
         // cls(2): push 2, OP_CLS, halt
         let bc = make_bc(vec![PUSH_I8, 2, OP_CLS, HALT], 0);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert!(vm.framebuffer.iter().all(|&p| p == 2));
     }
@@ -730,7 +726,7 @@ mod tests {
     #[test]
     fn flip_yields() {
         let bc = make_bc(vec![OP_FLIP, HALT], 0);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert_eq!(vm.step().unwrap(), VmResult::Flip);
         assert!(!vm.halted);
         assert_eq!(vm.step().unwrap(), VmResult::Halted);
@@ -759,7 +755,7 @@ mod tests {
             ],
             1,
         );
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 3);
         assert_eq!(vm.framebuffer[3 * FB_WIDTH + 5], 3);
@@ -785,7 +781,7 @@ mod tests {
             ],
             1,
         );
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         // Slot 0 should still be 0 (the push_i8 99 was skipped)
         assert_eq!(vm.locals[0], 0);
@@ -794,7 +790,7 @@ mod tests {
     #[test]
     fn ret_from_main_halts() {
         let bc = make_bc(vec![RET], 0);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert_eq!(vm.step().unwrap(), VmResult::Halted);
     }
 
@@ -802,7 +798,7 @@ mod tests {
     fn btn_reads_buttons() {
         // btn(4): push 4, OP_BTN, store 0, halt
         let bc = make_bc(vec![PUSH_I8, 4, OP_BTN, STORE_LOCAL, 0, HALT], 1);
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.buttons = 0b0001_0000; // bit 4 set
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 1);
@@ -827,7 +823,7 @@ mod tests {
             ],
             1,
         );
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 42);
         assert_eq!(vm.memory[100], 42);
@@ -857,7 +853,7 @@ mod tests {
             ],
             1,
         );
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 500);
     }
@@ -906,7 +902,7 @@ mod tests {
             code,
         };
 
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         // main's locals start at index 0, slot 0 should have 30
         assert_eq!(vm.locals[0], 30);
@@ -917,7 +913,7 @@ mod tests {
         // Compile and run a nested while loop to verify outer variable increments
         let src = "fn main()\n  x: int = 0\n  while x < 3\n    y: int = 0\n    while y < 3\n      pset(x, y, 3)\n      y = y + 1\n    end\n    x = x + 1\n  end\n  flip()\nend";
         let bc = crate::compiler::compile(src).unwrap();
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
         // Should have 9 white pixels: (0,0)..(2,2)

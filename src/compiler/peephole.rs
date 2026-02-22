@@ -188,7 +188,7 @@ mod tests {
     fn jump_offsets_adjusted() {
         let src = "fn main()\n  x: int = 0\n  while x < 10\n    x = x + 1\n  end\n  flip()\nend";
         let bc = compile(src).unwrap();
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
     }
@@ -197,7 +197,7 @@ mod tests {
     fn if_else_runs_correctly() {
         let src = "fn main()\n  x: int = 5\n  if x > 3\n    pset(0, 0, 3)\n  else\n    pset(0, 0, 1)\n  end\n  flip()\nend";
         let bc = compile(src).unwrap();
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
         assert_eq!(vm.framebuffer[0], 3);
@@ -207,7 +207,7 @@ mod tests {
     fn nested_while_compiled() {
         let src = "fn main()\n  x: int = 0\n  while x < 3\n    y: int = 0\n    while y < 3\n      pset(x, y, 3)\n      y = y + 1\n    end\n    x = x + 1\n  end\n  flip()\nend";
         let bc = compile(src).unwrap();
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
         for x in 0..3 {
@@ -221,7 +221,7 @@ mod tests {
     fn function_call_after_peephole() {
         let src = "fn add(a: int, b: int): int\n  return a + b\nend\nfn main()\n  r: int = add(10, 20)\n  pset(r, 0, 3)\n  flip()\nend";
         let bc = compile(src).unwrap();
-        let mut vm = Vm::new(&bc).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
         assert_eq!(vm.framebuffer[30], 3);
