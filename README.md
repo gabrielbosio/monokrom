@@ -48,6 +48,8 @@ Monokrom boots into a terminal. Press Escape to toggle between terminal and edit
 
 ### Editor hotkeys
 
+On the WASM build, all Ctrl shortcuts use Alt instead (browsers intercept Ctrl combos).
+
 - **Ctrl+S** save, **Ctrl+O** open, **Ctrl+N** new file
 - **Ctrl+Enter** run program
 - **Ctrl+Z** undo, **Ctrl+Y** redo
