@@ -60,16 +60,10 @@
             if (!wasm_exports) return;
             var code = into_sapp_keycode(codeForChar(ch));
             var mods = getModifiers();
-            var hadAlt = modState.alt, hadShift = modState.shift;
-            if (hadAlt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
-            if (hadShift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
             wasm_exports.key_down(code, mods, false);
             if (!mods) wasm_exports.key_press(ch.charCodeAt(0));
             wasm_exports.key_up(code, mods);
-            modState.alt = false;
-            modState.shift = false;
-            updateToggleStyles();
-            releaseModifiers(hadAlt, hadShift);
+            releaseModifiers();
         }
 
         function codeForChar(ch) {
@@ -93,27 +87,37 @@
             return (modState.alt ? SAPP_ALT : 0) | (modState.shift ? SAPP_SHIFT : 0);
         }
 
-        function releaseModifiers(hadAlt, hadShift) {
-            requestAnimationFrame(function() {
-                if (!wasm_exports) return;
-                if (hadShift) wasm_exports.key_up(into_sapp_keycode('ShiftLeft'), 0);
-                if (hadAlt) wasm_exports.key_up(into_sapp_keycode('AltLeft'), 0);
-            });
+        // Toggle a modifier: send key_down when activating, key_up when deactivating.
+        // This ensures modifier state is set in a separate frame from the action key.
+        function toggleModifier(key) {
+            if (!wasm_exports) return;
+            modState[key] = !modState[key];
+            if (key === 'alt') {
+                if (modState.alt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
+                else wasm_exports.key_up(into_sapp_keycode('AltLeft'), 0);
+            } else {
+                if (modState.shift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
+                else wasm_exports.key_up(into_sapp_keycode('ShiftLeft'), 0);
+            }
+            updateToggleStyles();
+        }
+
+        function releaseModifiers() {
+            if (!wasm_exports) return;
+            if (modState.alt) wasm_exports.key_up(into_sapp_keycode('AltLeft'), 0);
+            if (modState.shift) wasm_exports.key_up(into_sapp_keycode('ShiftLeft'), 0);
+            modState.alt = false;
+            modState.shift = false;
+            updateToggleStyles();
         }
 
         function sendKeyMod(codeName) {
             if (!wasm_exports) return;
-            var mods = getModifiers();
-            var hadAlt = modState.alt, hadShift = modState.shift;
-            if (hadAlt) wasm_exports.key_down(into_sapp_keycode('AltLeft'), SAPP_ALT, false);
-            if (hadShift) wasm_exports.key_down(into_sapp_keycode('ShiftLeft'), SAPP_SHIFT, false);
             var code = into_sapp_keycode(codeName);
+            var mods = getModifiers();
             wasm_exports.key_down(code, mods, false);
             wasm_exports.key_up(code, mods);
-            modState.alt = false;
-            modState.shift = false;
-            updateToggleStyles();
-            releaseModifiers(hadAlt, hadShift);
+            releaseModifiers();
         }
 
         function updateToggleStyles() {
@@ -152,9 +156,7 @@
                 if (b[0] === 'Shift') shiftBtn = btn;
                 btn.addEventListener('touchstart', function(e) {
                     e.preventDefault();
-                    var key = b[0].toLowerCase();
-                    modState[key] = !modState[key];
-                    updateToggleStyles();
+                    toggleModifier(b[0].toLowerCase());
                 });
             } else {
                 btn.addEventListener('touchstart', function(e) {
