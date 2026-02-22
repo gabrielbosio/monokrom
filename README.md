@@ -40,6 +40,7 @@ Monokrom boots into a terminal. Press Escape to toggle between terminal and edit
 ### Terminal commands
 
 - `run`: compile and run the current file
+- `stat`: show bytecode size vs 32KB limit
 - `open <file>` / `save <file>`, file operations (use quotes for spaces: `open "my file"`)
 - `ls`, list files
 - `cp <src> <dst>`, copy file
