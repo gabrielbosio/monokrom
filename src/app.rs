@@ -567,24 +567,24 @@ impl App {
     }
 
     fn handle_scroll(&mut self, action: EditorAction) {
+        let page = self.visible_lines().saturating_sub(1).max(1);
         match action {
             EditorAction::ScrollUp => {
-                if self.view.scroll_y > 0 {
-                    self.view.scroll_y -= 1;
-                }
+                let new_line = self.editor.cursor.line().saturating_sub(page);
+                let line_len = self.editor.buffer.line_len(new_line);
+                let col = self.editor.cursor.col().min(line_len);
+                self.editor.cursor.set_position(new_line, col);
             }
             EditorAction::ScrollDown => {
-                let max = self
-                    .editor
-                    .buffer
-                    .line_count()
-                    .saturating_sub(self.visible_lines());
-                if self.view.scroll_y < max {
-                    self.view.scroll_y += 1;
-                }
+                let last = self.editor.buffer.line_count().saturating_sub(1);
+                let new_line = (self.editor.cursor.line() + page).min(last);
+                let line_len = self.editor.buffer.line_len(new_line);
+                let col = self.editor.cursor.col().min(line_len);
+                self.editor.cursor.set_position(new_line, col);
             }
             _ => {}
         }
+        self.after_cursor_move();
     }
 
     fn run_program(&mut self) {
