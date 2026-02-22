@@ -22,6 +22,8 @@ Source -> AST -> HIR -> LIR (SSA) -> Bytecode
 
 Optimization passes: constant folding, constant propagation, dead code elimination, CSE, strength reduction, function inlining, peephole store-load elimination.
 
+See [LANGUAGE.md](LANGUAGE.md) for the full language reference.
+
 ## Building
 
 Requires Rust (stable).
