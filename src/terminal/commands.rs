@@ -19,33 +19,67 @@ pub enum TerminalCommand {
     Unknown(String),
 }
 
+/// Extract the next argument, supporting double-quoted strings.
+/// Returns Ok((arg, remaining)) or Err for unbalanced quotes. None if empty.
+fn next_arg(s: &str) -> Result<Option<(&str, &str)>, ()> {
+    let s = s.trim_start();
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if let Some(inner) = s.strip_prefix('"') {
+        match inner.find('"') {
+            Some(end) => Ok(Some((&inner[..end], inner[end + 1..].trim_start()))),
+            None => Err(()),
+        }
+    } else {
+        match s.find(' ') {
+            Some(i) => Ok(Some((&s[..i], s[i + 1..].trim_start()))),
+            None => Ok(Some((s, ""))),
+        }
+    }
+}
+
+const UNBALANCED_QUOTE: &str = "unbalanced quotes";
+
 pub fn parse_command(input: &str) -> TerminalCommand {
-    let parts: Vec<&str> = input.trim().splitn(3, ' ').collect();
-    match parts.first().copied() {
-        Some("ls") => TerminalCommand::Ls,
-        Some("new") => TerminalCommand::New,
-        Some("save") => TerminalCommand::Save(parts.get(1).map(|s| s.to_string())),
-        Some("open") => match parts.get(1) {
-            Some(name) => TerminalCommand::Open(name.to_string()),
+    let trimmed = input.trim();
+    let (cmd, rest) = match trimmed.find(' ') {
+        Some(i) => (&trimmed[..i], trimmed[i + 1..].trim_start()),
+        None => (trimmed, ""),
+    };
+    let arg = match next_arg(rest) {
+        Ok(a) => a,
+        Err(()) => return TerminalCommand::Unknown(UNBALANCED_QUOTE.to_string()),
+    };
+    match cmd {
+        "ls" => TerminalCommand::Ls,
+        "new" => TerminalCommand::New,
+        "save" => TerminalCommand::Save(arg.map(|(s, _)| s.to_string())),
+        "open" => match arg {
+            Some((name, _)) => TerminalCommand::Open(name.to_string()),
             None => TerminalCommand::Unknown("open: missing filename".to_string()),
         },
-        Some("rm") => match parts.get(1) {
-            Some(name) => TerminalCommand::Rm(name.to_string()),
+        "rm" => match arg {
+            Some((name, _)) => TerminalCommand::Rm(name.to_string()),
             None => TerminalCommand::Unknown("rm: missing filename".to_string()),
         },
-        Some("cp") => match (parts.get(1), parts.get(2)) {
-            (Some(src), Some(dst)) => TerminalCommand::Cp(src.to_string(), dst.to_string()),
+        "cp" => match arg {
+            Some((src, dst_rest)) if !dst_rest.is_empty() => match next_arg(dst_rest) {
+                Ok(Some((dst, _))) => TerminalCommand::Cp(src.to_string(), dst.to_string()),
+                Err(()) => TerminalCommand::Unknown(UNBALANCED_QUOTE.to_string()),
+                _ => TerminalCommand::Unknown("cp: usage: cp <src> <dst>".to_string()),
+            },
             _ => TerminalCommand::Unknown("cp: usage: cp <src> <dst>".to_string()),
         },
-        Some("run") => TerminalCommand::Run,
-        Some("lex") => TerminalCommand::Lex,
-        Some("parse") => TerminalCommand::Parse,
-        Some("check") => TerminalCommand::Check,
-        Some("dis") => TerminalCommand::Dis,
-        Some("clear") => TerminalCommand::Clear,
-        Some("help") => TerminalCommand::Help,
-        Some(other) => TerminalCommand::Unknown(format!("unknown command: {other}")),
-        None => TerminalCommand::Unknown(String::new()),
+        "run" => TerminalCommand::Run,
+        "lex" => TerminalCommand::Lex,
+        "parse" => TerminalCommand::Parse,
+        "check" => TerminalCommand::Check,
+        "dis" => TerminalCommand::Dis,
+        "clear" => TerminalCommand::Clear,
+        "help" => TerminalCommand::Help,
+        "" => TerminalCommand::Unknown(String::new()),
+        other => TerminalCommand::Unknown(format!("unknown command: {other}")),
     }
 }
 
@@ -155,6 +189,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_unbalanced_quote() {
+        match parse_command(r#"save "my file"#) {
+            TerminalCommand::Unknown(msg) => assert_eq!(msg, "unbalanced quotes"),
+            _ => panic!("expected Unknown"),
+        }
+    }
+
+    #[test]
+    fn parse_cp_unbalanced_quote() {
+        match parse_command(r#"cp "my src dst"#) {
+            TerminalCommand::Unknown(msg) => assert_eq!(msg, "unbalanced quotes"),
+            _ => panic!("expected Unknown"),
+        }
+    }
+
+    #[test]
     fn complete_single_match() {
         let (prefix, matches) = complete("sa", COMMAND_NAMES).unwrap();
         assert_eq!(prefix, "save");
@@ -184,6 +234,68 @@ mod tests {
         let (prefix, matches) = complete("ls", COMMAND_NAMES).unwrap();
         assert_eq!(prefix, "ls");
         assert_eq!(matches, vec!["ls"]);
+    }
+
+    #[test]
+    fn parse_open_unquoted_first_word() {
+        match parse_command("open my file.mkr") {
+            TerminalCommand::Open(name) => assert_eq!(name, "my"),
+            _ => panic!("expected Open"),
+        }
+    }
+
+    #[test]
+    fn parse_open_quoted() {
+        match parse_command(r#"open "my file.mkr""#) {
+            TerminalCommand::Open(name) => assert_eq!(name, "my file.mkr"),
+            _ => panic!("expected Open"),
+        }
+    }
+
+    #[test]
+    fn parse_rm_unquoted_first_word() {
+        match parse_command("rm my file.mkr") {
+            TerminalCommand::Rm(name) => assert_eq!(name, "my"),
+            _ => panic!("expected Rm"),
+        }
+    }
+
+    #[test]
+    fn parse_rm_quoted() {
+        match parse_command(r#"rm "my file.mkr""#) {
+            TerminalCommand::Rm(name) => assert_eq!(name, "my file.mkr"),
+            _ => panic!("expected Rm"),
+        }
+    }
+
+    #[test]
+    fn parse_save_quoted() {
+        match parse_command(r#"save "my file.mkr""#) {
+            TerminalCommand::Save(Some(name)) => assert_eq!(name, "my file.mkr"),
+            _ => panic!("expected Save(Some)"),
+        }
+    }
+
+    #[test]
+    fn parse_cp_quoted() {
+        match parse_command(r#"cp "my src" "my dst""#) {
+            TerminalCommand::Cp(s, d) => {
+                assert_eq!(s, "my src");
+                assert_eq!(d, "my dst");
+            }
+            _ => panic!("expected Cp"),
+        }
+    }
+
+    #[test]
+    fn parse_cp_first_quoted() {
+        match parse_command(r#"cp "my src" dst"#) {
+            TerminalCommand::Cp(s, d) => {
+                assert_eq!(s, "my src");
+                assert_eq!(d, "dst");
+            }
+            _ => panic!("expected Cp"),
+        }
     }
 
     #[test]
