@@ -5,6 +5,8 @@ use crate::compiler::bytecode::*;
 use crate::compiler::error::CompileError;
 use crate::compiler::lir::*;
 
+const BYTECODE_LIMIT: usize = 32 * 1024;
+
 pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
     let mut bc = Bytecode::new();
     bc.string_pool = module.string_pool.clone();
@@ -35,7 +37,7 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
         }
     }
 
-    if bc.code.len() > 32768 {
+    if bc.code.len() > BYTECODE_LIMIT {
         return Err(CompileError::new("bytecode exceeds 32KB limit"));
     }
 

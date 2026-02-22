@@ -922,13 +922,13 @@ mod tests {
         for x in 0..3 {
             for y in 0..3 {
                 assert_eq!(
-                    vm.framebuffer[y * 160 + x],
+                    vm.framebuffer[y * FB_WIDTH + x],
                     3,
                     "expected pixel at ({x},{y})"
                 );
             }
         }
         // Pixel at (3,0) should NOT be set
-        assert_eq!(vm.framebuffer[0 * 160 + 3], 0);
+        assert_eq!(vm.framebuffer[3], 0);
     }
 }

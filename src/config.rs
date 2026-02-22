@@ -22,7 +22,6 @@ pub const WINDOW_HEIGHT: u32 = SCREEN_HEIGHT * SCALE; // 576
 // Color palette (4-color monochrome)
 pub const COLOR_BLACK: Color = Color::new(0.0, 0.0, 0.0, 1.0);
 pub const COLOR_DARK_GRAY: Color = Color::new(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0, 1.0);
-#[allow(dead_code)]
 pub const COLOR_LIGHT_GRAY: Color = Color::new(2.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0, 1.0);
 pub const COLOR_WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
 
