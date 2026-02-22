@@ -420,19 +420,21 @@ impl Vm {
                 self.pop()?;
             }
             OP_PRINTS => {
+                let col = self.pop()?;
                 let y = self.pop()?;
                 let x = self.pop()?;
                 let str_idx = self.pop()? as u16 as usize;
                 if str_idx < self.string_pool.len() {
                     let s = self.string_pool[str_idx].clone();
-                    self.fb_print(&s, x as i32, y as i32);
+                    self.fb_print(&s, x as i32, y as i32, col as u8);
                 }
             }
             OP_PRINTN => {
+                let col = self.pop()?;
                 let y = self.pop()?;
                 let x = self.pop()?;
                 let val = self.pop()?;
-                self.fb_print(&format!("{val}"), x as i32, y as i32);
+                self.fb_print(&format!("{val}"), x as i32, y as i32, col as u8);
             }
             OP_BTN => {
                 let n = self.pop()? as u8;
@@ -625,7 +627,7 @@ impl Vm {
         }
     }
 
-    fn fb_print(&mut self, text: &str, mut x: i32, y: i32) {
+    fn fb_print(&mut self, text: &str, mut x: i32, y: i32, color: u8) {
         for ch in text.chars() {
             let code = ch as u32;
             if (32..=127).contains(&code) {
@@ -634,7 +636,7 @@ impl Vm {
                     let byte = FONT_DATA[idx * 6 + row];
                     for col in 0..4 {
                         if (byte >> (7 - col)) & 1 != 0 {
-                            self.fb_pset(x + col, y + row as i32, 3);
+                            self.fb_pset(x + col, y + row as i32, color);
                         }
                     }
                 }
