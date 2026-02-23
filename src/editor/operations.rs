@@ -150,6 +150,45 @@ pub fn delete_word_before(
     selection.clear();
 }
 
+pub fn delete_word_after(
+    buffer: &mut TextBuffer,
+    cursor: &mut Cursor,
+    selection: &mut Selection,
+    history: &mut History,
+) {
+    // If there's a selection, delete it
+    if let Some((start, end)) = selection.get_range(buffer) {
+        if start != end {
+            history.push(buffer, cursor.position);
+            let (line, col) = buffer.char_to_line_col(start);
+            buffer.delete_range(start, end);
+            cursor.set_position(line, col);
+            selection.clear();
+            return;
+        }
+    }
+
+    let last_line = buffer.line_count().saturating_sub(1);
+    let last_col = buffer.line_len(last_line);
+    if cursor.line() == last_line && cursor.col() == last_col {
+        return;
+    }
+
+    history.push(buffer, cursor.position);
+
+    let start_idx = cursor.char_index(buffer);
+    // Temporarily move cursor to find word boundary
+    let saved = cursor.position;
+    cursor.move_word_right(buffer);
+    let end_idx = cursor.char_index(buffer);
+    cursor.set_position(saved.line, saved.col);
+
+    if start_idx < end_idx {
+        buffer.delete_range(start_idx, end_idx);
+    }
+    selection.clear();
+}
+
 /// Indent all lines in a multi-line selection by 2 spaces
 pub fn indent_lines(
     buffer: &mut TextBuffer,

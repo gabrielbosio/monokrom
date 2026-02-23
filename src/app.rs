@@ -285,6 +285,7 @@ impl App {
                 EditorAction::Backspace
                 | EditorAction::BackspaceWord
                 | EditorAction::Delete
+                | EditorAction::DeleteWord
                 | EditorAction::RemoveTab => self.handle_delete(action),
                 EditorAction::Cut | EditorAction::Copy | EditorAction::Paste => {
                     self.handle_clipboard(action)
@@ -452,6 +453,12 @@ impl App {
                 &mut self.editor.history,
             ),
             EditorAction::Delete => operations::delete_at(
+                &mut self.editor.buffer,
+                &mut self.editor.cursor,
+                &mut self.editor.selection,
+                &mut self.editor.history,
+            ),
+            EditorAction::DeleteWord => operations::delete_word_after(
                 &mut self.editor.buffer,
                 &mut self.editor.cursor,
                 &mut self.editor.selection,

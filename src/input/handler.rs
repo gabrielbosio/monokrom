@@ -116,6 +116,7 @@ const ALT_BINDINGS: &[(KeyCode, EditorAction)] = &[
     (KeyCode::Up, EditorAction::ScrollLineUp),
     (KeyCode::Down, EditorAction::ScrollLineDown),
     (KeyCode::Backspace, EditorAction::BackspaceWord),
+    (KeyCode::Delete, EditorAction::DeleteWord),
 ];
 
 // Shift + Alt bindings (select by word)
