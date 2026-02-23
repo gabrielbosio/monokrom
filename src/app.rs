@@ -1086,7 +1086,11 @@ impl App {
 
     fn ensure_cursor_visible(&mut self) {
         let visible_cols = self.visible_cols();
-        let visible_lines = self.visible_lines();
+        let mut visible_lines = self.visible_lines();
+        // Search hint bar covers 2 rows at the bottom
+        if self.is_in_search_mode() {
+            visible_lines = visible_lines.saturating_sub(2);
+        }
 
         // Vertical scrolling
         if self.editor.cursor.line() < self.view.scroll_y {
