@@ -197,6 +197,7 @@ Built-in functions that compile to single opcodes.
 | `spr(n, x, y)` | Draw sprite |
 | `prints(s, x, y, col)` | Print string |
 | `printn(val, x, y, col)` | Print number |
+| `printf(val, x, y, col)` | Print fixed-point as decimal (e.g. "1.50") |
 
 ### Input
 
@@ -241,6 +242,26 @@ val = peek(addr) + peek(addr + 1) * 256
 | `abs(x): int` | Absolute value |
 | `min(a, b): int` | Minimum |
 | `max(a, b): int` | Maximum |
+| `exp(x): fixed` | e^x |
+| `log(x): fixed` | Natural logarithm (ln). Returns 0 for x <= 0 |
+| `pow(x, y): fixed` | x raised to the power y |
+| `atan2(y, x): fixed` | Two-argument arctangent (radians) |
+
+### Conversion
+
+| Function | Description |
+|----------|-------------|
+| `ftoi(x): int` | Fixed to integer (truncates fractional part) |
+| `itof(x): fixed` | Integer to fixed-point |
+
+### Constants
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `PI` | 3.14159265 | The mathematical constant pi |
+| `E` | 2.71828182 | Euler's number |
+
+Constants are inlined at compile time as fixed-point literals.
 
 ### System
 
@@ -256,6 +277,7 @@ val = peek(addr) + peek(addr + 1) * 256
 |----------|-------------|
 | `tracen(val)` | Print number to terminal |
 | `traces(s)` | Print string to terminal |
+| `tracef(val)` | Print fixed-point as decimal to terminal |
 
 ### Audio (deferred)
 

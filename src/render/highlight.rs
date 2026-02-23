@@ -47,7 +47,9 @@ fn classify(token: &Token) -> CharStyle {
         | Token::Fixed
         | Token::Bool
         | Token::Str
-        | Token::Void => CharStyle::Keyword,
+        | Token::Void
+        | Token::Pi
+        | Token::Euler => CharStyle::Keyword,
 
         Token::LineComment | Token::BlockComment => CharStyle::Comment,
 

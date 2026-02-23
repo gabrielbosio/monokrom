@@ -43,6 +43,12 @@ pub enum Token {
     #[token("of")]
     Of,
 
+    // Constants
+    #[token("PI")]
+    Pi,
+    #[token("E", priority = 3)]
+    Euler,
+
     // Type keywords
     #[token("int")]
     Int,

@@ -31,6 +31,8 @@ extern {
         "bool" => Token::Bool,
         "str" => Token::Str,
         "void" => Token::Void,
+        "PI" => Token::Pi,
+        "E" => Token::Euler,
         INT => Token::IntLit(<i16>),
         FIXED => Token::FixedLit(<String>),
         STRING => Token::StrLit(<String>),
@@ -267,6 +269,8 @@ AtomExpr: Expr = {
     "true" => Expr::BoolLit(true),
     "false" => Expr::BoolLit(false),
     <s:STRING> => Expr::StrLit(s),
+    "PI" => Expr::FixedLit("3.14159265".to_string()),
+    "E" => Expr::FixedLit("2.71828182".to_string()),
     <name:IDENT> => Expr::Ident(name),
     "(" <Expr> ")",
 };

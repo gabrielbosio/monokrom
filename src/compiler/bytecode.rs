@@ -64,6 +64,14 @@ pub const OP_TRACEN: u8 = 0x56;
 pub const OP_TRACES: u8 = 0x57;
 pub const OP_TIME: u8 = 0x58;
 pub const OP_RND: u8 = 0x59;
+pub const OP_EXP: u8 = 0x5A;
+pub const OP_LOG: u8 = 0x5B;
+pub const OP_POW: u8 = 0x5C;
+pub const OP_ATAN2: u8 = 0x5D;
+pub const OP_FTOI: u8 = 0x5E;
+pub const OP_ITOF: u8 = 0x5F;
+pub const OP_TRACEF: u8 = 0x60;
+pub const OP_PRINTF: u8 = 0x61;
 
 pub fn inst_size(op: u8) -> usize {
     match op {
@@ -102,6 +110,14 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Traces => OP_TRACES,
         Intrinsic::Time => OP_TIME,
         Intrinsic::Rnd => OP_RND,
+        Intrinsic::Exp => OP_EXP,
+        Intrinsic::Log => OP_LOG,
+        Intrinsic::Pow => OP_POW,
+        Intrinsic::Atan2 => OP_ATAN2,
+        Intrinsic::Ftoi => OP_FTOI,
+        Intrinsic::Itof => OP_ITOF,
+        Intrinsic::Tracef => OP_TRACEF,
+        Intrinsic::Printf => OP_PRINTF,
     }
 }
 
@@ -120,6 +136,12 @@ pub fn intrinsic_has_return_value(op: Intrinsic) -> bool {
             | Intrinsic::Max
             | Intrinsic::Time
             | Intrinsic::Rnd
+            | Intrinsic::Exp
+            | Intrinsic::Log
+            | Intrinsic::Pow
+            | Intrinsic::Atan2
+            | Intrinsic::Ftoi
+            | Intrinsic::Itof
     )
 }
 
@@ -184,12 +206,20 @@ pub fn op_name(b: u8) -> Option<&'static str> {
         OP_TRACES => Some("Traces"),
         OP_TIME => Some("Time"),
         OP_RND => Some("Rnd"),
+        OP_EXP => Some("Exp"),
+        OP_LOG => Some("Log"),
+        OP_POW => Some("Pow"),
+        OP_ATAN2 => Some("Atan2"),
+        OP_FTOI => Some("Ftoi"),
+        OP_ITOF => Some("Itof"),
+        OP_TRACEF => Some("Tracef"),
+        OP_PRINTF => Some("Printf"),
         _ => None,
     }
 }
 
 /// All valid opcode byte values.
-pub const ALL_OPCODES: [u8; 57] = [
+pub const ALL_OPCODES: [u8; 65] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -247,6 +277,14 @@ pub const ALL_OPCODES: [u8; 57] = [
     OP_TRACES,
     OP_TIME,
     OP_RND,
+    OP_EXP,
+    OP_LOG,
+    OP_POW,
+    OP_ATAN2,
+    OP_FTOI,
+    OP_ITOF,
+    OP_TRACEF,
+    OP_PRINTF,
 ];
 
 #[derive(Debug)]

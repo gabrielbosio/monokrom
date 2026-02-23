@@ -53,6 +53,14 @@ pub enum Intrinsic {
     Traces,
     Time,
     Rnd,
+    Exp,
+    Log,
+    Pow,
+    Atan2,
+    Ftoi,
+    Itof,
+    Tracef,
+    Printf,
 }
 
 #[derive(Debug, Clone, PartialEq)]

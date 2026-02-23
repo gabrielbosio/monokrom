@@ -526,6 +526,52 @@ impl Vm {
                     self.push((self.rng_state % n as u32) as i16)?;
                 }
             }
+            OP_EXP => {
+                let x = self.pop()?;
+                let result = ((x as f32 / 256.0).exp() * 256.0) as i16;
+                self.push(result)?;
+            }
+            OP_LOG => {
+                let x = self.pop()?;
+                let result = if x <= 0 {
+                    0
+                } else {
+                    ((x as f32 / 256.0).ln() * 256.0) as i16
+                };
+                self.push(result)?;
+            }
+            OP_POW => {
+                let exp = self.pop()?;
+                let base = self.pop()?;
+                let result = ((base as f32 / 256.0).powf(exp as f32 / 256.0) * 256.0) as i16;
+                self.push(result)?;
+            }
+            OP_ATAN2 => {
+                let x = self.pop()?;
+                let y = self.pop()?;
+                let result = ((y as f32 / 256.0).atan2(x as f32 / 256.0) * 256.0) as i16;
+                self.push(result)?;
+            }
+            OP_FTOI => {
+                let x = self.pop()?;
+                self.push(x >> 8)?;
+            }
+            OP_ITOF => {
+                let x = self.pop()?;
+                self.push(x << 8)?;
+            }
+            OP_TRACEF => {
+                let val = self.pop()?;
+                self.trace_output.push(format_fixed(val));
+            }
+            OP_PRINTF => {
+                let col = self.pop()?;
+                let y = self.pop()?;
+                let x = self.pop()?;
+                let val = self.pop()?;
+                let s = format_fixed(val);
+                self.fb_print(&s, x as i32, y as i32, col as u8);
+            }
             OP_FLIP => {
                 self.prev_buttons = self.buttons;
                 return Ok(VmResult::Flip);
@@ -639,6 +685,17 @@ impl Vm {
             }
             x += 4;
         }
+    }
+}
+
+fn format_fixed(val: i16) -> String {
+    let abs = (val as i32).abs();
+    let int_part = abs >> 8;
+    let frac_part = (abs & 0xFF) * 100 / 256;
+    if val < 0 {
+        format!("-{int_part}.{frac_part:02}")
+    } else {
+        format!("{int_part}.{frac_part:02}")
     }
 }
 
