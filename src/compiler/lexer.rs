@@ -62,6 +62,9 @@ pub enum Token {
     Void,
 
     // Literals
+    #[regex(r"0[xX][0-9a-fA-F]+", |lex| i16::from_str_radix(&lex.slice()[2..], 16).ok())]
+    #[regex(r"0[bB][01]+", |lex| i16::from_str_radix(&lex.slice()[2..], 2).ok())]
+    #[regex(r"0[oO][0-7]+", |lex| i16::from_str_radix(&lex.slice()[2..], 8).ok())]
     #[regex(r"[0-9]+", |lex| lex.slice().parse::<i16>().ok())]
     IntLit(i16),
 
@@ -514,6 +517,43 @@ mod tests {
                 Token::End,
             ]
         );
+    }
+
+    #[test]
+    fn hex_literals() {
+        assert_eq!(tokens("0xFF"), vec![Token::IntLit(255)]);
+        assert_eq!(tokens("0x0"), vec![Token::IntLit(0)]);
+        assert_eq!(tokens("0x7FFF"), vec![Token::IntLit(32767)]);
+        assert_eq!(tokens("0XAB"), vec![Token::IntLit(0xAB)]);
+    }
+
+    #[test]
+    fn binary_literals() {
+        assert_eq!(tokens("0b1010"), vec![Token::IntLit(0b1010)]);
+        assert_eq!(tokens("0b0"), vec![Token::IntLit(0)]);
+        assert_eq!(tokens("0B11111111"), vec![Token::IntLit(255)]);
+    }
+
+    #[test]
+    fn octal_literals() {
+        assert_eq!(tokens("0o17"), vec![Token::IntLit(15)]);
+        assert_eq!(tokens("0o0"), vec![Token::IntLit(0)]);
+        assert_eq!(tokens("0O377"), vec![Token::IntLit(255)]);
+    }
+
+    #[test]
+    fn overflow_hex_skipped() {
+        assert!(tokens("0xFFFF").is_empty());
+    }
+
+    #[test]
+    fn overflow_bin_skipped() {
+        assert!(tokens("0b1000000000000000").is_empty());
+    }
+
+    #[test]
+    fn overflow_oct_skipped() {
+        assert!(tokens("0o200000").is_empty());
     }
 
     #[test]

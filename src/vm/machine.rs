@@ -1015,7 +1015,18 @@ mod tests {
     fn fmul_opcode() {
         // 1.5 * 2.0 = 3.0 (384 * 512 >> 8 = 768)
         let bc = make_bc(
-            vec![PUSH_I16, 0x80, 0x01, PUSH_I16, 0x00, 0x02, FMUL, STORE_LOCAL, 0, HALT],
+            vec![
+                PUSH_I16,
+                0x80,
+                0x01,
+                PUSH_I16,
+                0x00,
+                0x02,
+                FMUL,
+                STORE_LOCAL,
+                0,
+                HALT,
+            ],
             1,
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
@@ -1027,7 +1038,18 @@ mod tests {
     fn fdiv_opcode() {
         // 3.0 / 1.5 = 2.0 (768 << 8 / 384 = 512)
         let bc = make_bc(
-            vec![PUSH_I16, 0x00, 0x03, PUSH_I16, 0x80, 0x01, FDIV, STORE_LOCAL, 0, HALT],
+            vec![
+                PUSH_I16,
+                0x00,
+                0x03,
+                PUSH_I16,
+                0x80,
+                0x01,
+                FDIV,
+                STORE_LOCAL,
+                0,
+                HALT,
+            ],
             1,
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();

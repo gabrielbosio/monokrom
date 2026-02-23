@@ -29,6 +29,15 @@ end
 | `str` | Immutable string |
 | `void` | For functions that return nothing |
 
+Integer literals support decimal, hexadecimal, binary, and octal:
+
+```
+x = 255      // decimal
+x = 0xFF     // hexadecimal (0x or 0X prefix)
+x = 0b11111111 // binary (0b or 0B prefix)
+x = 0o377    // octal (0o or 0O prefix)
+```
+
 ## Variables
 
 Type is inferred from the right-hand side:
