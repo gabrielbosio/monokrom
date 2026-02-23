@@ -12,13 +12,6 @@ pub const SCREEN_TILES_Y: u32 = 24;
 pub const SCREEN_WIDTH: u32 = SCREEN_TILES_X * TILE_WIDTH; // 160
 pub const SCREEN_HEIGHT: u32 = SCREEN_TILES_Y * TILE_HEIGHT; // 144
 
-// Window scale factor
-pub const SCALE: u32 = 4;
-
-// Window dimensions
-pub const WINDOW_WIDTH: u32 = SCREEN_WIDTH * SCALE; // 640
-pub const WINDOW_HEIGHT: u32 = SCREEN_HEIGHT * SCALE; // 576
-
 // Color palette (4-color monochrome)
 pub const COLOR_BLACK: Color = Color::new(0.0, 0.0, 0.0, 1.0);
 pub const COLOR_DARK_GRAY: Color = Color::new(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0, 1.0);

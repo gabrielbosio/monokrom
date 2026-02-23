@@ -13,14 +13,13 @@ mod vm;
 use macroquad::prelude::*;
 
 use app::App;
-use config::{WINDOW_HEIGHT, WINDOW_WIDTH};
 
 fn window_conf() -> Conf {
     Conf {
         window_title: "Monokrom".to_string(),
-        window_width: WINDOW_WIDTH as i32,
-        window_height: WINDOW_HEIGHT as i32,
-        window_resizable: false,
+        window_width: 480,  // 3x native (fits 1024x600)
+        window_height: 432, // 3x native
+        window_resizable: true,
         high_dpi: true,
         ..Default::default()
     }

@@ -3,8 +3,8 @@ use macroquad::prelude::*;
 use crate::compiler;
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
-    EDITOR_TILES_Y, SCALE, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
-    SCROLLBAR_WIDTH, TILE_HEIGHT, TILE_WIDTH,
+    EDITOR_TILES_Y, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH,
+    TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
@@ -98,6 +98,7 @@ pub struct App {
 
     // Rendering
     font: BitmapFont,
+    render_target: RenderTarget,
 
     // Syntax highlighting
     highlight_styles: Vec<CharStyle>,
@@ -110,6 +111,8 @@ pub struct App {
 impl App {
     pub async fn new() -> Self {
         let font = BitmapFont::new().await;
+        let rt = render_target(SCREEN_WIDTH, SCREEN_HEIGHT);
+        rt.texture.set_filter(FilterMode::Nearest);
         #[cfg(not(target_arch = "wasm32"))]
         let clipboard = arboard::Clipboard::new().ok();
         #[cfg(target_arch = "wasm32")]
@@ -157,6 +160,7 @@ impl App {
             cursor_visible: true,
 
             font,
+            render_target: rt,
 
             highlight_styles: Vec::new(),
             highlight_valid: false,
@@ -1434,49 +1438,66 @@ impl App {
     }
 
     pub fn draw(&self) {
-        let helpers = DrawHelpers::new(&self.font, SCALE as f32);
+        let helpers = DrawHelpers::new(&self.font, 1.0);
+
+        // Set camera to render target (160x144, top-left origin)
+        let camera = Camera2D {
+            render_target: Some(self.render_target.clone()),
+            zoom: vec2(2.0 / SCREEN_WIDTH as f32, -2.0 / SCREEN_HEIGHT as f32),
+            target: vec2(SCREEN_WIDTH as f32 / 2.0, SCREEN_HEIGHT as f32 / 2.0),
+            ..Default::default()
+        };
+        set_camera(&camera);
 
         if self.mode == AppMode::Running {
             clear_background(COLOR_BLACK);
             self.draw_running(&helpers);
-            return;
-        }
-
-        // Clear with background color
-        clear_background(if self.mode == AppMode::Terminal {
-            COLOR_BLACK
-        } else {
-            COLOR_DARK_GRAY
-        });
-
-        if self.mode == AppMode::Terminal {
+        } else if self.mode == AppMode::Terminal {
+            clear_background(COLOR_BLACK);
             self.draw_terminal(&helpers);
-            return;
-        }
+        } else {
+            clear_background(COLOR_DARK_GRAY);
+            self.draw_editor(&helpers);
+            self.draw_scrollbars_scaled(&helpers);
 
-        // Draw editor content (scaled)
-        self.draw_editor(&helpers);
-
-        // Draw scrollbars (scaled)
-        self.draw_scrollbars_scaled(&helpers);
-
-        // Draw dialogs (scaled)
-        match self.mode {
-            AppMode::SaveDialog
-            | AppMode::FindDialog
-            | AppMode::ReplaceDialog
-            | AppMode::GoToLineDialog => self.input_dialog.draw_scaled(&helpers),
-            AppMode::OpenPicker => self.file_picker.draw_scaled(&helpers),
-            AppMode::CloseConfirm => self.confirm_dialog.draw_scaled(&helpers),
-            AppMode::Message => self.message_dialog.draw_scaled(&helpers),
-            AppMode::Editing => {
-                // Draw search hint if we have an active search
-                if !self.search.query.is_empty() {
-                    self.draw_search_hint(&helpers);
+            match self.mode {
+                AppMode::SaveDialog
+                | AppMode::FindDialog
+                | AppMode::ReplaceDialog
+                | AppMode::GoToLineDialog => self.input_dialog.draw_scaled(&helpers),
+                AppMode::OpenPicker => self.file_picker.draw_scaled(&helpers),
+                AppMode::CloseConfirm => self.confirm_dialog.draw_scaled(&helpers),
+                AppMode::Message => self.message_dialog.draw_scaled(&helpers),
+                AppMode::Editing => {
+                    if !self.search.query.is_empty() {
+                        self.draw_search_hint(&helpers);
+                    }
                 }
+                AppMode::Terminal | AppMode::Running => unreachable!(),
             }
-            AppMode::Terminal | AppMode::Running => unreachable!(),
         }
+
+        // Blit render target to window with integer scaling + letterboxing
+        set_default_camera();
+        clear_background(BLACK);
+        let sx = (screen_width() / SCREEN_WIDTH as f32).floor().max(1.0);
+        let sy = (screen_height() / SCREEN_HEIGHT as f32).floor().max(1.0);
+        let scale = sx.min(sy);
+        let w = SCREEN_WIDTH as f32 * scale;
+        let h = SCREEN_HEIGHT as f32 * scale;
+        let x = (screen_width() - w) / 2.0;
+        let y = (screen_height() - h) / 2.0;
+        draw_texture_ex(
+            &self.render_target.texture,
+            x,
+            y,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(w, h)),
+                flip_y: true,
+                ..Default::default()
+            },
+        );
     }
 
     fn draw_running(&self, helpers: &DrawHelpers) {
