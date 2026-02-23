@@ -9,10 +9,21 @@ use super::apply_replacements;
 enum CseKey {
     Const(i16),
     ConstBool(bool),
-    BinOp { op: BinOp, lhs: Value, rhs: Value },
-    UnaryOp { op: UnaryOp, val: Value },
+    BinOp {
+        op: BinOp,
+        lhs: Value,
+        rhs: Value,
+        is_fixed: bool,
+    },
+    UnaryOp {
+        op: UnaryOp,
+        val: Value,
+    },
     GlobalAddr(u16),
-    Load { addr: Value, size: u8 },
+    Load {
+        addr: Value,
+        size: u8,
+    },
 }
 
 pub fn eliminate(func: &mut LirFunc) {
@@ -34,10 +45,16 @@ pub fn eliminate(func: &mut LirFunc) {
             let key = match inst {
                 LirInst::Const(n) => CseKey::Const(*n),
                 LirInst::ConstBool(b) => CseKey::ConstBool(*b),
-                LirInst::BinOp { op, lhs, rhs } => CseKey::BinOp {
+                LirInst::BinOp {
+                    op,
+                    lhs,
+                    rhs,
+                    is_fixed,
+                } => CseKey::BinOp {
                     op: *op,
                     lhs: *lhs,
                     rhs: *rhs,
+                    is_fixed: *is_fixed,
                 },
                 LirInst::UnaryOp { op, val } => CseKey::UnaryOp { op: *op, val: *val },
                 LirInst::GlobalAddr(addr) => CseKey::GlobalAddr(*addr),

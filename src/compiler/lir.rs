@@ -11,13 +11,34 @@ pub struct BlockId(pub u32);
 pub enum LirInst {
     Const(i16),
     ConstBool(bool),
-    BinOp { op: BinOp, lhs: Value, rhs: Value },
-    UnaryOp { op: UnaryOp, val: Value },
-    Call { name: String, args: Vec<Value> },
-    Intrinsic { op: Intrinsic, args: Vec<Value> },
+    BinOp {
+        op: BinOp,
+        lhs: Value,
+        rhs: Value,
+        is_fixed: bool,
+    },
+    UnaryOp {
+        op: UnaryOp,
+        val: Value,
+    },
+    Call {
+        name: String,
+        args: Vec<Value>,
+    },
+    Intrinsic {
+        op: Intrinsic,
+        args: Vec<Value>,
+    },
     GlobalAddr(u16),
-    Load { addr: Value, size: u8 },
-    Store { addr: Value, val: Value, size: u8 },
+    Load {
+        addr: Value,
+        size: u8,
+    },
+    Store {
+        addr: Value,
+        val: Value,
+        size: u8,
+    },
     Phi(Vec<(BlockId, Value)>),
 }
 

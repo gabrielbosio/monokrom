@@ -237,6 +237,19 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(a.wrapping_neg())?;
             }
+            FMUL => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(((a as i32 * b as i32) >> 8) as i16)?;
+            }
+            FDIV => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                if b == 0 {
+                    return Err(VmError::DivisionByZero);
+                }
+                self.push((((a as i32) << 8) / b as i32) as i16)?;
+            }
             EQ => {
                 let b = self.pop()?;
                 let a = self.pop()?;
@@ -985,6 +998,41 @@ mod tests {
         }
         // Pixel at (3,0) should NOT be set
         assert_eq!(vm.framebuffer[3], 0);
+    }
+
+    #[test]
+    fn fixed_mul_no_overflow() {
+        // cos(0.01) * 1.00 should be ~0.99, not -1.00
+        let src = "fn main()\n  x = cos(0.01)\n  y = x * 1.00\n  tracef(y)\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output.len(), 1);
+        assert_eq!(vm.trace_output[0], "0.99");
+    }
+
+    #[test]
+    fn fmul_opcode() {
+        // 1.5 * 2.0 = 3.0 (384 * 512 >> 8 = 768)
+        let bc = make_bc(
+            vec![PUSH_I16, 0x80, 0x01, PUSH_I16, 0x00, 0x02, FMUL, STORE_LOCAL, 0, HALT],
+            1,
+        );
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.locals[0], 768); // 3.0 in 8.8
+    }
+
+    #[test]
+    fn fdiv_opcode() {
+        // 3.0 / 1.5 = 2.0 (768 << 8 / 384 = 512)
+        let bc = make_bc(
+            vec![PUSH_I16, 0x00, 0x03, PUSH_I16, 0x80, 0x01, FDIV, STORE_LOCAL, 0, HALT],
+            1,
+        );
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.locals[0], 512); // 2.0 in 8.8
     }
 
     #[test]

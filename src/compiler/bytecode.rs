@@ -72,6 +72,8 @@ pub const OP_FTOI: u8 = 0x5E;
 pub const OP_ITOF: u8 = 0x5F;
 pub const OP_TRACEF: u8 = 0x60;
 pub const OP_PRINTF: u8 = 0x61;
+pub const FMUL: u8 = 0x62;
+pub const FDIV: u8 = 0x63;
 
 pub fn inst_size(op: u8) -> usize {
     match op {
@@ -214,12 +216,14 @@ pub fn op_name(b: u8) -> Option<&'static str> {
         OP_ITOF => Some("Itof"),
         OP_TRACEF => Some("Tracef"),
         OP_PRINTF => Some("Printf"),
+        FMUL => Some("Fmul"),
+        FDIV => Some("Fdiv"),
         _ => None,
     }
 }
 
 /// All valid opcode byte values.
-pub const ALL_OPCODES: [u8; 65] = [
+pub const ALL_OPCODES: [u8; 67] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -285,6 +289,8 @@ pub const ALL_OPCODES: [u8; 65] = [
     OP_ITOF,
     OP_TRACEF,
     OP_PRINTF,
+    FMUL,
+    FDIV,
 ];
 
 #[derive(Debug)]

@@ -22,7 +22,12 @@ pub fn simplify(func: &mut LirFunc) {
                 LirInst::ConstBool(b) => {
                     bools.insert(val, b);
                 }
-                LirInst::BinOp { op, lhs, rhs } => {
+                LirInst::BinOp {
+                    op,
+                    lhs,
+                    rhs,
+                    is_fixed,
+                } => {
                     let lhs = resolve_val(&replace, lhs);
                     let rhs = resolve_val(&replace, rhs);
 
@@ -33,7 +38,7 @@ pub fn simplify(func: &mut LirFunc) {
                     let r_bool = bools.get(&rhs).copied();
 
                     if let (Some(l), Some(r)) = (l_const, r_const) {
-                        if let Some(result) = eval_binop(op, l, r) {
+                        if let Some(result) = eval_binop(op, l, r, is_fixed) {
                             if is_comparison(op) || is_logical(op) {
                                 let b = result != 0;
                                 func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(b);
@@ -153,16 +158,26 @@ fn is_logical(op: BinOp) -> bool {
     matches!(op, BinOp::And | BinOp::Or)
 }
 
-fn eval_binop(op: BinOp, l: i16, r: i16) -> Option<i16> {
+fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
     Some(match op {
         BinOp::Add => l.wrapping_add(r),
         BinOp::Sub => l.wrapping_sub(r),
-        BinOp::Mul => l.wrapping_mul(r),
+        BinOp::Mul => {
+            if is_fixed {
+                ((l as i32 * r as i32) >> 8) as i16
+            } else {
+                l.wrapping_mul(r)
+            }
+        }
         BinOp::Div => {
             if r == 0 {
                 return None;
             }
-            l.wrapping_div(r)
+            if is_fixed {
+                (((l as i32) << 8) / r as i32) as i16
+            } else {
+                l.wrapping_div(r)
+            }
         }
         BinOp::Mod => {
             if r == 0 {

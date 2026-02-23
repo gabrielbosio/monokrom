@@ -346,6 +346,7 @@ impl<'a> LowerCtx<'a> {
                     op: *op,
                     lhs: l,
                     rhs: r,
+                    is_fixed: lhs.ty == HirType::Fixed,
                 })
             }
 
@@ -389,6 +390,7 @@ impl<'a> LowerCtx<'a> {
                     op: BinOp::Add,
                     lhs: base_addr,
                     rhs: off,
+                    is_fixed: false,
                 });
                 if self.is_scalar(&expr.ty) {
                     let size = self.type_size(&expr.ty);
@@ -423,6 +425,7 @@ impl<'a> LowerCtx<'a> {
                     op: BinOp::Add,
                     lhs: base_addr,
                     rhs: off,
+                    is_fixed: false,
                 })
             }
             _ => self.lower_expr(expr),
@@ -438,11 +441,13 @@ impl<'a> LowerCtx<'a> {
             op: BinOp::Mul,
             lhs: idx,
             rhs: size_val,
+            is_fixed: false,
         });
         self.emit(LirInst::BinOp {
             op: BinOp::Add,
             lhs: base_addr,
             rhs: offset,
+            is_fixed: false,
         })
     }
 
@@ -726,6 +731,7 @@ impl<'a> LowerCtx<'a> {
             op: cmp_op,
             lhs: counter,
             rhs: end_val,
+            is_fixed: false,
         });
         let cur = self.current_block;
         self.add_predecessor(body_block, cur);
@@ -752,6 +758,7 @@ impl<'a> LowerCtx<'a> {
                 op: BinOp::Add,
                 lhs: cur_counter,
                 rhs: one,
+                is_fixed: false,
             });
             let block = self.current_block;
             self.write_variable(var, block, next);
@@ -791,6 +798,7 @@ impl<'a> LowerCtx<'a> {
             op: BinOp::Lt,
             lhs: idx,
             rhs: count_val,
+            is_fixed: false,
         });
         let cur = self.current_block;
         self.add_predecessor(body_block, cur);
@@ -815,11 +823,13 @@ impl<'a> LowerCtx<'a> {
                 op: BinOp::Mul,
                 lhs: cur_idx,
                 rhs: size_val,
+                is_fixed: false,
             });
             let elem_addr = self.emit(LirInst::BinOp {
                 op: BinOp::Add,
                 lhs: base_addr,
                 rhs: offset,
+                is_fixed: false,
             });
             if self.is_scalar(&elem_ty) {
                 let size = self.type_size(&elem_ty);
@@ -849,6 +859,7 @@ impl<'a> LowerCtx<'a> {
                 op: BinOp::Add,
                 lhs: cur_idx,
                 rhs: one,
+                is_fixed: false,
             });
             let block = self.current_block;
             self.write_variable(index_var, block, next_idx);

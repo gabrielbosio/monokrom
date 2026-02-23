@@ -224,12 +224,25 @@ fn emit_instruction(
                 bc.emit_op(POP);
             }
         }
-        LirInst::BinOp { op, lhs, rhs } => {
+        LirInst::BinOp {
+            op,
+            lhs,
+            rhs,
+            is_fixed,
+        } => {
             bc.emit_op(LOAD_LOCAL);
             bc.emit_u8(lhs.0 as u8);
             bc.emit_op(LOAD_LOCAL);
             bc.emit_u8(rhs.0 as u8);
-            bc.emit_op(binop_opcode(*op));
+            if *is_fixed {
+                match op {
+                    BinOp::Mul => bc.emit_op(FMUL),
+                    BinOp::Div => bc.emit_op(FDIV),
+                    _ => bc.emit_op(binop_opcode(*op)),
+                }
+            } else {
+                bc.emit_op(binop_opcode(*op));
+            }
             if used {
                 bc.emit_op(STORE_LOCAL);
                 bc.emit_u8(val.0 as u8);
