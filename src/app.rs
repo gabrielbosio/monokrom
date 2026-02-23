@@ -233,7 +233,7 @@ impl App {
         );
 
         // Recompute syntax highlighting if needed
-        if !self.highlight_valid && self.is_mkr_file() {
+        if !self.highlight_valid {
             let source = self.editor.buffer.to_string();
             self.highlight_styles = highlight::highlight(&source);
             self.highlight_valid = true;
@@ -350,9 +350,7 @@ impl App {
                     &mut self.editor.selection,
                     &mut self.editor.history,
                 );
-                if self.is_mkr_file() {
-                    self.smart_indent();
-                }
+                self.smart_indent();
                 self.is_modified = true;
                 self.highlight_valid = false;
                 self.ensure_cursor_visible();
@@ -1009,12 +1007,6 @@ impl App {
         self.find_next();
     }
 
-    fn is_mkr_file(&self) -> bool {
-        self.current_filename
-            .as_ref()
-            .is_some_and(|f| f.ends_with(".mkr"))
-    }
-
     /// After insert_newline, adjust indent based on previous line content
     fn smart_indent(&mut self) {
         let cur_line = self.editor.cursor.line();
@@ -1561,8 +1553,6 @@ impl App {
     fn draw_editor(&self, helpers: &DrawHelpers) {
         let visible_cols = self.visible_cols();
         let visible_lines = self.visible_lines();
-        let is_mkr = self.is_mkr_file();
-
         // Draw each visible line
         for screen_line in 0..visible_lines {
             let buffer_line = self.view.scroll_y + screen_line;
@@ -1572,11 +1562,7 @@ impl App {
 
             let line_text = self.editor.buffer.get_line(buffer_line);
             let y = (screen_line * TILE_HEIGHT as usize) as f32;
-            let line_start_char = if is_mkr {
-                self.editor.buffer.line_col_to_char(buffer_line, 0)
-            } else {
-                0
-            };
+            let line_start_char = self.editor.buffer.line_col_to_char(buffer_line, 0);
 
             // Get selection range for this line if any
             let selection_range = self
@@ -1602,25 +1588,21 @@ impl App {
                     // Draw character in inverted colors
                     helpers.draw_char(c, x, y, COLOR_BLACK);
                 } else if c != ' ' {
-                    if is_mkr {
-                        let char_idx = line_start_char + buffer_col;
-                        let style = self
-                            .highlight_styles
-                            .get(char_idx)
-                            .copied()
-                            .unwrap_or(CharStyle::Normal);
-                        if style == CharStyle::Comment {
-                            helpers.draw_char(c, x, y, COLOR_LIGHT_GRAY);
-                        } else {
-                            let fg = if style == CharStyle::Keyword {
-                                COLOR_LIGHT_GRAY
-                            } else {
-                                COLOR_WHITE
-                            };
-                            helpers.draw_char_with_shadow(c, x, y, fg, COLOR_BLACK);
-                        }
+                    let char_idx = line_start_char + buffer_col;
+                    let style = self
+                        .highlight_styles
+                        .get(char_idx)
+                        .copied()
+                        .unwrap_or(CharStyle::Normal);
+                    if style == CharStyle::Comment {
+                        helpers.draw_char(c, x, y, COLOR_LIGHT_GRAY);
                     } else {
-                        helpers.draw_char_with_shadow(c, x, y, COLOR_WHITE, COLOR_BLACK);
+                        let fg = if style == CharStyle::Keyword {
+                            COLOR_LIGHT_GRAY
+                        } else {
+                            COLOR_WHITE
+                        };
+                        helpers.draw_char_with_shadow(c, x, y, fg, COLOR_BLACK);
                     }
                 }
             }
