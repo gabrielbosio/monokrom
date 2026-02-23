@@ -929,4 +929,12 @@ mod tests {
         // Pixel at (3,0) should NOT be set
         assert_eq!(vm.framebuffer[3], 0);
     }
+
+    #[test]
+    fn struct_return_field_access() {
+        let src = "fn main()\n  printn(g().x, 55, 70, 3)\nend\n\nstruct F\n  x: int\nend\n\nfn g(): F\n  f: F\n  return f\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+    }
 }

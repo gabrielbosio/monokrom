@@ -78,13 +78,16 @@ pub fn optimize(bc: &mut Bytecode) {
 
     bc.code = new_code;
 
-    // Update function offsets and recount n_locals
+    // Update all function offsets first
     for fi in 0..bc.functions.len() {
         let old_offset = bc.functions[fi].code_offset;
         bc.functions[fi].code_offset = old_to_new[old_offset];
+    }
 
-        let end = func_end_new(bc, fi);
+    // Recount n_locals with corrected offsets
+    for fi in 0..bc.functions.len() {
         let start = bc.functions[fi].code_offset;
+        let end = func_end_new(bc, fi);
         let mut max_slot: Option<u8> = None;
         let insts = parse_insts(&bc.code, start, end);
         for &(off, op, _) in &insts {
