@@ -44,7 +44,7 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
     Ok(bc)
 }
 
-fn count_locals(func: &LirFunc) -> u8 {
+fn count_locals(func: &LirFunc) -> u16 {
     let mut max_val: u32 = 0;
     let mut found = false;
     for block in &func.blocks {
@@ -62,7 +62,7 @@ fn count_locals(func: &LirFunc) -> u8 {
         }
     }
     if found {
-        (max_val + 1).min(255) as u8
+        (max_val + 1) as u16
     } else {
         0
     }
@@ -197,7 +197,7 @@ fn emit_instruction(
             emit_const(bc, *n);
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
@@ -210,7 +210,7 @@ fn emit_instruction(
             }
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
@@ -219,7 +219,7 @@ fn emit_instruction(
             emit_const(bc, *addr as i16);
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
@@ -231,9 +231,9 @@ fn emit_instruction(
             is_fixed,
         } => {
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(lhs.0 as u8);
+            bc.emit_u16(lhs.0 as u16);
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(rhs.0 as u8);
+            bc.emit_u16(rhs.0 as u16);
             if *is_fixed {
                 match op {
                     BinOp::Mul => bc.emit_op(FMUL),
@@ -245,18 +245,18 @@ fn emit_instruction(
             }
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
         }
         LirInst::UnaryOp { op, val: operand } => {
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(operand.0 as u8);
+            bc.emit_u16(operand.0 as u16);
             bc.emit_op(unaryop_opcode(*op));
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
@@ -264,7 +264,7 @@ fn emit_instruction(
         LirInst::Call { name, args } => {
             for arg in args {
                 bc.emit_op(LOAD_LOCAL);
-                bc.emit_u8(arg.0 as u8);
+                bc.emit_u16(arg.0 as u16);
             }
             let func_idx = func_indices
                 .get(name.as_str())
@@ -274,7 +274,7 @@ fn emit_instruction(
             bc.emit_u8(args.len() as u8);
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
@@ -282,13 +282,13 @@ fn emit_instruction(
         LirInst::Intrinsic { op, args } => {
             for arg in args {
                 bc.emit_op(LOAD_LOCAL);
-                bc.emit_u8(arg.0 as u8);
+                bc.emit_u16(arg.0 as u16);
             }
             bc.emit_op(intrinsic_opcode(*op));
             if intrinsic_has_return_value(*op) {
                 if used {
                     bc.emit_op(STORE_LOCAL);
-                    bc.emit_u8(val.0 as u8);
+                    bc.emit_u16(val.0 as u16);
                 } else {
                     bc.emit_op(POP);
                 }
@@ -296,14 +296,14 @@ fn emit_instruction(
         }
         LirInst::Load { addr, size } => {
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(addr.0 as u8);
+            bc.emit_u16(addr.0 as u16);
             match size {
                 1 => bc.emit_op(LOAD1),
                 _ => bc.emit_op(LOAD2),
             }
             if used {
                 bc.emit_op(STORE_LOCAL);
-                bc.emit_u8(val.0 as u8);
+                bc.emit_u16(val.0 as u16);
             } else {
                 bc.emit_op(POP);
             }
@@ -314,9 +314,9 @@ fn emit_instruction(
             size,
         } => {
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(addr.0 as u8);
+            bc.emit_u16(addr.0 as u16);
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(store_val.0 as u8);
+            bc.emit_u16(store_val.0 as u16);
             match size {
                 1 => bc.emit_op(STORE1),
                 _ => bc.emit_op(STORE2),
@@ -337,9 +337,9 @@ fn emit_phi_copies(bc: &mut Bytecode, from_block: BlockId, to_block: BlockId, fu
             for (block_id, source_val) in entries {
                 if *block_id == from_block {
                     bc.emit_op(LOAD_LOCAL);
-                    bc.emit_u8(source_val.0 as u8);
+                    bc.emit_u16(source_val.0 as u16);
                     bc.emit_op(STORE_LOCAL);
-                    bc.emit_u8(phi_val.0 as u8);
+                    bc.emit_u16(phi_val.0 as u16);
                     break;
                 }
             }
@@ -371,7 +371,7 @@ fn emit_terminator(
             else_block,
         } => {
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(cond.0 as u8);
+            bc.emit_u16(cond.0 as u16);
             bc.emit_op(JUMP_IF_FALSE);
             let else_patch_offset = bc.pos();
             bc.emit_i16(0); // placeholder for else copies
@@ -405,7 +405,7 @@ fn emit_terminator(
         }
         Terminator::Return(Some(val)) => {
             bc.emit_op(LOAD_LOCAL);
-            bc.emit_u8(val.0 as u8);
+            bc.emit_u16(val.0 as u16);
             bc.emit_op(RET);
         }
     }

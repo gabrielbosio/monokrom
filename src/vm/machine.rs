@@ -50,7 +50,7 @@ struct CallFrame {
 
 struct FuncEntry {
     code_offset: usize,
-    n_locals: u8,
+    n_locals: u16,
 }
 
 pub struct Vm {
@@ -163,11 +163,11 @@ impl Vm {
         self.call_stack.last().map(|f| f.locals_base).unwrap_or(0)
     }
 
-    fn load_local(&self, slot: u8) -> i16 {
+    fn load_local(&self, slot: u16) -> i16 {
         self.locals[self.locals_base() + slot as usize]
     }
 
-    fn store_local(&mut self, slot: u8, val: i16) {
+    fn store_local(&mut self, slot: u16, val: i16) {
         let base = self.locals_base();
         self.locals[base + slot as usize] = val;
     }
@@ -193,12 +193,12 @@ impl Vm {
                 self.pop()?;
             }
             LOAD_LOCAL => {
-                let slot = self.read_u8();
+                let slot = self.read_u16();
                 let v = self.load_local(slot);
                 self.push(v)?;
             }
             STORE_LOCAL => {
-                let slot = self.read_u8();
+                let slot = self.read_u16();
                 let v = self.pop()?;
                 self.store_local(slot, v);
             }
@@ -717,7 +717,7 @@ mod tests {
     use super::*;
 
     /// Build a minimal Bytecode with one function (main) from raw bytes.
-    fn make_bc(code: Vec<u8>, n_locals: u8) -> Bytecode {
+    fn make_bc(code: Vec<u8>, n_locals: u16) -> Bytecode {
         Bytecode {
             entry_point: Some(0),
             functions: vec![FuncInfo {
@@ -742,7 +742,7 @@ mod tests {
     #[test]
     fn push_and_store() {
         // Push 42, store to slot 0, halt
-        let bc = make_bc(vec![PUSH_I8, 42, STORE_LOCAL, 0, HALT], 1);
+        let bc = make_bc(vec![PUSH_I8, 42, STORE_LOCAL, 0, 0, HALT], 1);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 42);
@@ -757,17 +757,22 @@ mod tests {
                 10,
                 STORE_LOCAL,
                 0,
+                0,
                 PUSH_I8,
                 3,
                 STORE_LOCAL,
                 1,
+                0,
                 LOAD_LOCAL,
+                0,
                 0,
                 LOAD_LOCAL,
                 1,
+                0,
                 ADD,
                 STORE_LOCAL,
                 2,
+                0,
                 HALT,
             ],
             3,
@@ -821,6 +826,7 @@ mod tests {
                 OP_PGET,
                 STORE_LOCAL,
                 0,
+                0,
                 HALT,
             ],
             1,
@@ -833,19 +839,18 @@ mod tests {
 
     #[test]
     fn jump_if_false() {
-        // Push 0 (false), jump_if_false +3, push_i8 99 (skipped), store_local 0, halt
-        // On false: skip the push_i8 99 + store_local 0 (4 bytes)
-        // After JUMP_IF_FALSE + 2-byte offset, pc is at the push_i8 instruction
-        // We want to skip push_i8(99) [2 bytes] + store_local(0) [2 bytes] = 4 bytes
+        // Push 0 (false), jump_if_false +N, push_i8 99 (skipped), store_local 0, halt
+        // On false: skip push_i8(99) [2 bytes] + store_local(0) [3 bytes] = 5 bytes
         let bc = make_bc(
             vec![
                 PUSH0,
                 JUMP_IF_FALSE,
-                4,
-                0, // offset +4 (skip next 4 bytes)
+                5,
+                0, // offset +5 (skip next 5 bytes)
                 PUSH_I8,
                 99,
                 STORE_LOCAL,
+                0,
                 0,
                 HALT,
             ],
@@ -867,7 +872,7 @@ mod tests {
     #[test]
     fn btn_reads_buttons() {
         // btn(4): push 4, OP_BTN, store 0, halt
-        let bc = make_bc(vec![PUSH_I8, 4, OP_BTN, STORE_LOCAL, 0, HALT], 1);
+        let bc = make_bc(vec![PUSH_I8, 4, OP_BTN, STORE_LOCAL, 0, 0, HALT], 1);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.buttons = 0b0001_0000; // bit 4 set
         vm.run_until_flip().unwrap();
@@ -888,6 +893,7 @@ mod tests {
                 100,
                 OP_PEEK,
                 STORE_LOCAL,
+                0,
                 0,
                 HALT,
             ],
@@ -919,6 +925,7 @@ mod tests {
                 LOAD2,
                 STORE_LOCAL,
                 0,
+                0,
                 HALT,
             ],
             1,
@@ -933,7 +940,7 @@ mod tests {
         // Two functions: add(a, b) at offset 0, main at offset N
         // add: load 0, load 1, ADD, RET  (returns a+b on stack)
         // main: push 10, push 20, CALL #0 (2 args), store 0, HALT
-        let add_code = vec![LOAD_LOCAL, 0, LOAD_LOCAL, 1, ADD, RET];
+        let add_code = vec![LOAD_LOCAL, 0, 0, LOAD_LOCAL, 1, 0, ADD, RET];
         let add_len = add_code.len();
         let main_offset = add_len;
 
@@ -948,6 +955,7 @@ mod tests {
             0, // func_idx=0
             2, // argc=2
             STORE_LOCAL,
+            0,
             0,
             HALT,
         ]);
@@ -1025,6 +1033,7 @@ mod tests {
                 FMUL,
                 STORE_LOCAL,
                 0,
+                0,
                 HALT,
             ],
             1,
@@ -1047,6 +1056,7 @@ mod tests {
                 0x00,
                 FDIV,
                 STORE_LOCAL,
+                0,
                 0,
                 HALT,
             ],

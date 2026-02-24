@@ -318,10 +318,12 @@ impl<'a> LowerCtx<'a> {
             HirExprKind::Var(name) => {
                 if self.is_scalar(&expr.ty) {
                     self.read_variable(name, self.current_block)
-                } else {
-                    // Compound local, return its address
-                    let addr = self.compound_local_addrs.get(name).copied().unwrap_or(0);
+                } else if self.compound_local_addrs.contains_key(name) {
+                    let addr = self.compound_local_addrs[name];
                     self.emit(LirInst::GlobalAddr(addr))
+                } else {
+                    // Dynamic compound address (e.g. for-in element variable)
+                    self.read_variable(name, self.current_block)
                 }
             }
 
@@ -410,8 +412,12 @@ impl<'a> LowerCtx<'a> {
                 self.emit(LirInst::GlobalAddr(addr))
             }
             HirExprKind::Var(name) => {
-                let addr = self.compound_local_addrs.get(name).copied().unwrap_or(0);
-                self.emit(LirInst::GlobalAddr(addr))
+                if self.compound_local_addrs.contains_key(name) {
+                    let addr = self.compound_local_addrs[name];
+                    self.emit(LirInst::GlobalAddr(addr))
+                } else {
+                    self.read_variable(name, self.current_block)
+                }
             }
             HirExprKind::Index { expr: base, index } => {
                 self.lower_addr_index(base, index, &expr.ty)
@@ -742,29 +748,38 @@ impl<'a> LowerCtx<'a> {
             else_block: exit,
         });
 
+        // Latch block: increment counter then jump to header
+        let latch = self.fresh_block();
+
         // Body
         self.sealed.insert(body_block);
         self.start_block(body_block);
-        self.loop_stack.push((header, exit));
+        self.loop_stack.push((latch, exit));
         for s in body {
             self.lower_stmt(s);
         }
         self.loop_stack.pop();
         if !self.block_terminated {
-            // Increment counter
-            let cur_counter = self.read_variable(var, self.current_block);
-            let one = self.emit(LirInst::Const(1));
-            let next = self.emit(LirInst::BinOp {
-                op: BinOp::Add,
-                lhs: cur_counter,
-                rhs: one,
-                is_fixed: false,
-            });
-            let block = self.current_block;
-            self.write_variable(var, block, next);
-            self.add_predecessor(header, block);
-            self.finish_block(Terminator::Jump(header));
+            let cur = self.current_block;
+            self.add_predecessor(latch, cur);
+            self.finish_block(Terminator::Jump(latch));
         }
+
+        // Latch: increment counter
+        self.seal_block(latch);
+        self.start_block(latch);
+        let cur_counter = self.read_variable(var, self.current_block);
+        let one = self.emit(LirInst::Const(1));
+        let next = self.emit(LirInst::BinOp {
+            op: BinOp::Add,
+            lhs: cur_counter,
+            rhs: one,
+            is_fixed: false,
+        });
+        let block = self.current_block;
+        self.write_variable(var, block, next);
+        self.add_predecessor(header, block);
+        self.finish_block(Terminator::Jump(header));
 
         self.seal_block(header);
         self.sealed.insert(exit);
@@ -845,27 +860,36 @@ impl<'a> LowerCtx<'a> {
             }
         }
 
-        self.loop_stack.push((header, exit));
+        // Latch block: increment index then jump to header
+        let latch = self.fresh_block();
+
+        self.loop_stack.push((latch, exit));
         for s in body {
             self.lower_stmt(s);
         }
         self.loop_stack.pop();
 
         if !self.block_terminated {
-            // Increment index
-            let cur_idx = self.read_variable(index_var, self.current_block);
-            let one = self.emit(LirInst::Const(1));
-            let next_idx = self.emit(LirInst::BinOp {
-                op: BinOp::Add,
-                lhs: cur_idx,
-                rhs: one,
-                is_fixed: false,
-            });
-            let block = self.current_block;
-            self.write_variable(index_var, block, next_idx);
-            self.add_predecessor(header, block);
-            self.finish_block(Terminator::Jump(header));
+            let cur = self.current_block;
+            self.add_predecessor(latch, cur);
+            self.finish_block(Terminator::Jump(latch));
         }
+
+        // Latch: increment index
+        self.seal_block(latch);
+        self.start_block(latch);
+        let cur_idx = self.read_variable(index_var, self.current_block);
+        let one = self.emit(LirInst::Const(1));
+        let next_idx = self.emit(LirInst::BinOp {
+            op: BinOp::Add,
+            lhs: cur_idx,
+            rhs: one,
+            is_fixed: false,
+        });
+        let block = self.current_block;
+        self.write_variable(index_var, block, next_idx);
+        self.add_predecessor(header, block);
+        self.finish_block(Terminator::Jump(header));
 
         self.seal_block(header);
         self.sealed.insert(exit);

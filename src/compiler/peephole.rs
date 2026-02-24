@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::compiler::bytecode::*;
 
 pub fn optimize(bc: &mut Bytecode) {
@@ -15,10 +17,11 @@ pub fn optimize(bc: &mut Bytecode) {
         let insts = parse_insts(&bc.code, start, end);
 
         // Count LOAD_LOCAL per slot within this function
-        let mut load_count = [0u32; 256];
+        let mut load_count: HashMap<u16, u32> = HashMap::new();
         for &(off, op, _) in &insts {
             if op == LOAD_LOCAL {
-                load_count[bc.code[off + 1] as usize] += 1;
+                let slot = u16::from_le_bytes([bc.code[off + 1], bc.code[off + 2]]);
+                *load_count.entry(slot).or_default() += 1;
             }
         }
 
@@ -27,9 +30,9 @@ pub fn optimize(bc: &mut Bytecode) {
             let (off_a, op_a, sz_a) = insts[i];
             let (off_b, op_b, sz_b) = insts[i + 1];
             if op_a == STORE_LOCAL && op_b == LOAD_LOCAL {
-                let slot_a = bc.code[off_a + 1];
-                let slot_b = bc.code[off_b + 1];
-                if slot_a == slot_b && load_count[slot_a as usize] == 1 {
+                let slot_a = u16::from_le_bytes([bc.code[off_a + 1], bc.code[off_a + 2]]);
+                let slot_b = u16::from_le_bytes([bc.code[off_b + 1], bc.code[off_b + 2]]);
+                if slot_a == slot_b && load_count.get(&slot_a).copied().unwrap_or(0) == 1 {
                     remove[off_a..off_a + sz_a].fill(true);
                     remove[off_b..off_b + sz_b].fill(true);
                     any_removed = true;
@@ -88,15 +91,15 @@ pub fn optimize(bc: &mut Bytecode) {
     for fi in 0..bc.functions.len() {
         let start = bc.functions[fi].code_offset;
         let end = func_end_new(bc, fi);
-        let mut max_slot: Option<u8> = None;
+        let mut max_slot: Option<u16> = None;
         let insts = parse_insts(&bc.code, start, end);
         for &(off, op, _) in &insts {
             if op == STORE_LOCAL || op == LOAD_LOCAL {
-                let slot = bc.code[off + 1];
-                max_slot = Some(max_slot.map_or(slot, |m: u8| m.max(slot)));
+                let slot = u16::from_le_bytes([bc.code[off + 1], bc.code[off + 2]]);
+                max_slot = Some(max_slot.map_or(slot, |m: u16| m.max(slot)));
             }
         }
-        let n_params = bc.functions[fi].n_params;
+        let n_params = bc.functions[fi].n_params as u16;
         bc.functions[fi].n_locals = match max_slot {
             Some(s) => (s + 1).max(n_params),
             None => n_params,
@@ -249,8 +252,8 @@ mod tests {
         let src = "fn main()\n  x = 80\n  y = 72\n  dx = 1\n  dy = 1\n  while true\n    cls(0)\n    if x > 160\n      dx = -1\n    else if x < 0\n      dx = 1\n    end\n    if y > 144\n      dy = -1\n    else if y < 0\n      dy = 1\n    end\n    y = y + dy\n    x = x + dx\n    circ(x, y, 5, 3)\n    flip()\n  end\nend";
         let bc = compile(src).unwrap();
         assert!(
-            bc.code.len() <= 200,
-            "bouncing ball should be <= 200 bytes, got {}",
+            bc.code.len() <= 300,
+            "bouncing ball should be <= 300 bytes, got {}",
             bc.code.len()
         );
     }

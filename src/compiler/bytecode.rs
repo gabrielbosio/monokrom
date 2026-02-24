@@ -77,8 +77,8 @@ pub const FDIV: u8 = 0x63;
 
 pub fn inst_size(op: u8) -> usize {
     match op {
-        PUSH_I8 | LOAD_LOCAL | STORE_LOCAL => 2,
-        PUSH_I16 | JUMP | JUMP_IF_FALSE => 3,
+        PUSH_I8 => 2,
+        PUSH_I16 | LOAD_LOCAL | STORE_LOCAL | JUMP | JUMP_IF_FALSE => 3,
         CALL => 4,
         _ => 1,
     }
@@ -298,7 +298,7 @@ pub struct FuncInfo {
     pub name: String,
     pub code_offset: usize,
     pub n_params: u8,
-    pub n_locals: u8,
+    pub n_locals: u16,
 }
 
 #[derive(Debug)]
@@ -385,9 +385,9 @@ pub fn disassemble(bc: &Bytecode) -> Vec<String> {
                     pc += 3;
                 }
                 LOAD_LOCAL | STORE_LOCAL => {
-                    let slot = bc.code[pc + 1];
+                    let slot = u16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
                     lines.push(format!("{pc:04X}: {name} {slot}"));
-                    pc += 2;
+                    pc += 3;
                 }
                 JUMP | JUMP_IF_FALSE => {
                     let off = i16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
