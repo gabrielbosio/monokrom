@@ -240,7 +240,7 @@ impl Vm {
             FMUL => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(((a as i32 * b as i32) >> 8) as i16)?;
+                self.push(((a as i32 * b as i32) >> 7) as i16)?;
             }
             FDIV => {
                 let b = self.pop()?;
@@ -248,7 +248,7 @@ impl Vm {
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
                 }
-                self.push((((a as i32) << 8) / b as i32) as i16)?;
+                self.push((((a as i32) << 7) / b as i32) as i16)?;
             }
             EQ => {
                 let b = self.pop()?;
@@ -480,14 +480,14 @@ impl Vm {
             }
             OP_SIN => {
                 let x = self.pop()?;
-                let rad = (x as f32) / 256.0;
-                let result = (rad.sin() * 256.0) as i16;
+                let rad = (x as f32) / 128.0;
+                let result = (rad.sin() * 128.0) as i16;
                 self.push(result)?;
             }
             OP_COS => {
                 let x = self.pop()?;
-                let rad = (x as f32) / 256.0;
-                let result = (rad.cos() * 256.0) as i16;
+                let rad = (x as f32) / 128.0;
+                let result = (rad.cos() * 128.0) as i16;
                 self.push(result)?;
             }
             OP_SQRT => {
@@ -495,7 +495,7 @@ impl Vm {
                 let result = if x <= 0 {
                     0
                 } else {
-                    ((x as f32).sqrt() * 256.0) as i16
+                    ((x as f32 / 128.0).sqrt() * 128.0) as i16
                 };
                 self.push(result)?;
             }
@@ -541,7 +541,7 @@ impl Vm {
             }
             OP_EXP => {
                 let x = self.pop()?;
-                let result = ((x as f32 / 256.0).exp() * 256.0) as i16;
+                let result = ((x as f32 / 128.0).exp() * 128.0) as i16;
                 self.push(result)?;
             }
             OP_LOG => {
@@ -549,29 +549,29 @@ impl Vm {
                 let result = if x <= 0 {
                     0
                 } else {
-                    ((x as f32 / 256.0).ln() * 256.0) as i16
+                    ((x as f32 / 128.0).ln() * 128.0) as i16
                 };
                 self.push(result)?;
             }
             OP_POW => {
                 let exp = self.pop()?;
                 let base = self.pop()?;
-                let result = ((base as f32 / 256.0).powf(exp as f32 / 256.0) * 256.0) as i16;
+                let result = ((base as f32 / 128.0).powf(exp as f32 / 128.0) * 128.0) as i16;
                 self.push(result)?;
             }
             OP_ATAN2 => {
                 let x = self.pop()?;
                 let y = self.pop()?;
-                let result = ((y as f32 / 256.0).atan2(x as f32 / 256.0) * 256.0) as i16;
+                let result = ((y as f32 / 128.0).atan2(x as f32 / 128.0) * 128.0) as i16;
                 self.push(result)?;
             }
             OP_FTOI => {
                 let x = self.pop()?;
-                self.push(x >> 8)?;
+                self.push(x >> 7)?;
             }
             OP_ITOF => {
                 let x = self.pop()?;
-                self.push(x << 8)?;
+                self.push(x << 7)?;
             }
             OP_TRACEF => {
                 let val = self.pop()?;
@@ -703,8 +703,8 @@ impl Vm {
 
 fn format_fixed(val: i16) -> String {
     let abs = (val as i32).abs();
-    let int_part = abs >> 8;
-    let frac_part = (abs & 0xFF) * 100 / 256;
+    let int_part = abs >> 7;
+    let frac_part = (abs & 0x7F) * 100 / 128;
     if val < 0 {
         format!("-{int_part}.{frac_part:02}")
     } else {
@@ -1013,15 +1013,15 @@ mod tests {
 
     #[test]
     fn fmul_opcode() {
-        // 1.5 * 2.0 = 3.0 (384 * 512 >> 8 = 768)
+        // 1.5 * 2.0 = 3.0 (192 * 256 >> 7 = 384)
         let bc = make_bc(
             vec![
                 PUSH_I16,
-                0x80,
-                0x01,
+                0xC0,
+                0x00,
                 PUSH_I16,
                 0x00,
-                0x02,
+                0x01,
                 FMUL,
                 STORE_LOCAL,
                 0,
@@ -1031,20 +1031,20 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 768); // 3.0 in 8.8
+        assert_eq!(vm.locals[0], 384); // 3.0 in 9.7
     }
 
     #[test]
     fn fdiv_opcode() {
-        // 3.0 / 1.5 = 2.0 (768 << 8 / 384 = 512)
+        // 3.0 / 1.5 = 2.0 (384 << 7 / 192 = 256)
         let bc = make_bc(
             vec![
                 PUSH_I16,
-                0x00,
-                0x03,
-                PUSH_I16,
                 0x80,
                 0x01,
+                PUSH_I16,
+                0xC0,
+                0x00,
                 FDIV,
                 STORE_LOCAL,
                 0,
@@ -1054,7 +1054,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 512); // 2.0 in 8.8
+        assert_eq!(vm.locals[0], 256); // 2.0 in 9.7
     }
 
     #[test]

@@ -24,7 +24,7 @@ end
 | Type | Description |
 |------|-------------|
 | `int` | 16-bit signed integer (-32768 to 32767) |
-| `fixed` | 8.8 fixed-point. Compiler sugar over `int`, compiles to pure integer operations |
+| `fixed` | 9.7 fixed-point. Compiler sugar over `int` that compiles to pure integer operations |
 | `bool` | `true` or `false` |
 | `str` | Immutable string |
 | `void` | For functions that return nothing |

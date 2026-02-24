@@ -164,7 +164,7 @@ fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
         BinOp::Sub => l.wrapping_sub(r),
         BinOp::Mul => {
             if is_fixed {
-                ((l as i32 * r as i32) >> 8) as i16
+                ((l as i32 * r as i32) >> 7) as i16
             } else {
                 l.wrapping_mul(r)
             }
@@ -174,7 +174,7 @@ fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
                 return None;
             }
             if is_fixed {
-                (((l as i32) << 8) / r as i32) as i16
+                (((l as i32) << 7) / r as i32) as i16
             } else {
                 l.wrapping_div(r)
             }

@@ -895,7 +895,7 @@ pub fn type_size_standalone(ty: &HirType, structs: &[HirStruct]) -> u16 {
 
 fn parse_fixed(s: &str) -> i16 {
     let val: f64 = s.parse().unwrap_or(0.0);
-    (val * 256.0).round() as i16
+    (val * 128.0).round() as i16
 }
 
 #[cfg(test)]
@@ -1082,9 +1082,9 @@ mod tests {
 
     #[test]
     fn fixed_point_value() {
-        assert_eq!(parse_fixed("1.5"), 384);
+        assert_eq!(parse_fixed("1.5"), 192);
         assert_eq!(parse_fixed("0.0"), 0);
-        assert_eq!(parse_fixed("1.0"), 256);
+        assert_eq!(parse_fixed("1.0"), 128);
     }
 
     #[test]
