@@ -58,10 +58,10 @@ On the WASM build, all Ctrl shortcuts use Alt instead (browsers intercept Ctrl c
 - **Ctrl+X/C/V** cut, copy, paste
 - **Ctrl+A** select all
 - **Ctrl+F** find, **Ctrl+R** replace, **Ctrl+L** go to line
-- **Alt+Left/Right** word movement, **Alt+Backspace** word delete
-- **Alt+Up/Down** scroll viewport one line
+- **Ctrl+Left/Right** word movement, **Ctrl+Backspace** word delete
+- **Ctrl+Up/Down** scroll viewport one line
 - **Shift+arrows** selection, **Shift+Home/End** select to line start/end
-- **Shift+Alt+Left/Right** select by word
+- **Ctrl+Shift+Left/Right** select by word
 - **PageUp/PageDown** move cursor by page
 - **Tab/Shift+Tab** indent/dedent (block indent when multi-line selected)
 - **Escape** toggle terminal/editor
