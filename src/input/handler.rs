@@ -280,7 +280,7 @@ pub fn get_editor_action() -> Option<EditorAction> {
 
     // Text input - check for typed characters
     if let Some(c) = get_char_pressed() {
-        if (' '..='~').contains(&c) {
+        if !modifier && (' '..='~').contains(&c) {
             return Some(EditorAction::InsertChar(c));
         }
     }
