@@ -2,9 +2,11 @@ use macroquad::prelude::*;
 use std::sync::Mutex;
 
 use crate::input::keybindings::{
-    is_alt_pressed, is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed,
-    refresh_cmd_timer, EditorAction,
+    is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, refresh_cmd_timer,
+    EditorAction,
 };
+#[cfg(target_arch = "wasm32")]
+use crate::input::keybindings::is_alt_pressed;
 
 /// Key repeat timing constants
 const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
@@ -176,12 +178,19 @@ fn check_repeating(
 pub fn get_editor_action() -> Option<EditorAction> {
     let modifier = is_modifier_pressed();
     let shift = is_shift_pressed();
-    let alt = is_alt_pressed();
     let shortcut_mod = is_shortcut_modifier_pressed();
+
+    // On native, we don't use Alt for any bindings, word movement uses Ctrl
+    // (standard Linux/Windows convention). This avoids the "stuck Alt after Alt+Tab"
+    // problem where macroquad doesn't receive the Alt release event.
+    #[cfg(not(target_arch = "wasm32"))]
+    let alt = false;
+    #[cfg(target_arch = "wasm32")]
+    let alt = is_alt_pressed();
 
     // Letter-key shortcuts: Alt on WASM, Ctrl on native
     #[cfg(not(target_arch = "wasm32"))]
-    let shortcut_only = shortcut_mod && !shift && !alt;
+    let shortcut_only = shortcut_mod && !shift;
     #[cfg(target_arch = "wasm32")]
     let shortcut_only = shortcut_mod && !shift && !modifier;
 
@@ -192,6 +201,11 @@ pub fn get_editor_action() -> Option<EditorAction> {
         }
         if let Some(action) = check_pressed(MODIFIER_BINDINGS) {
             refresh_cmd_timer();
+            return Some(action);
+        }
+        // Native: Ctrl+Arrow/Backspace/Delete for word operations
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(action) = check_repeating(ALT_BINDINGS, true) {
             return Some(action);
         }
     }
@@ -207,13 +221,21 @@ pub fn get_editor_action() -> Option<EditorAction> {
 
     // Shift + shortcut + Z for Redo (alternative)
     #[cfg(not(target_arch = "wasm32"))]
-    let redo_alt = shortcut_mod && shift && !alt && is_key_pressed(KeyCode::Z);
+    let redo_alt = shortcut_mod && shift && is_key_pressed(KeyCode::Z);
     #[cfg(target_arch = "wasm32")]
     let redo_alt = shortcut_mod && shift && !modifier && is_key_pressed(KeyCode::Z);
     if redo_alt {
         drain_char_queue();
         refresh_cmd_timer();
         return Some(EditorAction::Redo);
+    }
+
+    // Word select: Ctrl+Shift on native, Shift+Alt on WASM
+    #[cfg(not(target_arch = "wasm32"))]
+    if modifier && shift {
+        if let Some(action) = check_repeating(SHIFT_ALT_BINDINGS, true) {
+            return Some(action);
+        }
     }
 
     if shift && alt && !modifier {
@@ -301,13 +323,24 @@ pub fn get_terminal_action() -> Option<EditorAction> {
 
     let modifier = is_modifier_pressed();
 
-    // PageUp/PageDown and Alt+Up/Down for scrollback (with hold-to-repeat)
+    // PageUp/PageDown for scrollback (with hold-to-repeat)
     if should_key_fire(KeyCode::PageUp, false) {
         return Some(EditorAction::ScrollUp);
     }
     if should_key_fire(KeyCode::PageDown, false) {
         return Some(EditorAction::ScrollDown);
     }
+    // Ctrl+Up/Down for line scrollback (native) / Alt+Up/Down (WASM)
+    #[cfg(not(target_arch = "wasm32"))]
+    if modifier {
+        if should_key_fire(KeyCode::Up, true) {
+            return Some(EditorAction::ScrollLineUp);
+        }
+        if should_key_fire(KeyCode::Down, true) {
+            return Some(EditorAction::ScrollLineDown);
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
     if is_alt_pressed() {
         if should_key_fire(KeyCode::Up, false) {
             return Some(EditorAction::ScrollLineUp);
