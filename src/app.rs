@@ -544,9 +544,7 @@ impl App {
                             .and_then(|mut cb| cb.get_text().ok());
                         let _ = tx.send(text);
                     });
-                    if let Ok(Some(text)) =
-                        rx.recv_timeout(std::time::Duration::from_millis(100))
-                    {
+                    if let Ok(Some(text)) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
                         self.paste_cache = Some(text);
                     }
                 }

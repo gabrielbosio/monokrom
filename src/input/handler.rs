@@ -1,12 +1,12 @@
 use macroquad::prelude::*;
 use std::sync::Mutex;
 
+#[cfg(target_arch = "wasm32")]
+use crate::input::keybindings::is_alt_pressed;
 use crate::input::keybindings::{
     is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, refresh_cmd_timer,
     EditorAction,
 };
-#[cfg(target_arch = "wasm32")]
-use crate::input::keybindings::is_alt_pressed;
 
 /// Key repeat timing constants
 const KEY_REPEAT_DELAY: f32 = 0.4; // Initial delay before repeat starts
