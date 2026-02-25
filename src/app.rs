@@ -91,6 +91,7 @@ pub struct App {
 
     // Clipboard
     clipboard: operations::Clipboard,
+    paste_cache: Option<String>,
 
     // Cursor blink
     cursor_blink_timer: f64,
@@ -155,6 +156,7 @@ impl App {
             pending_action: PendingAction::None,
 
             clipboard,
+            paste_cache: None,
 
             cursor_blink_timer: 0.0,
             cursor_visible: true,
@@ -503,7 +505,8 @@ impl App {
                     &mut self.editor.history,
                     &mut self.clipboard,
                 );
-                if text.is_some() {
+                if let Some(ref text) = text {
+                    self.paste_cache = Some(text.clone());
                     self.is_modified = true;
                     self.highlight_valid = false;
                     if !clipboard_ok && self.clipboard.is_some() {
@@ -517,24 +520,48 @@ impl App {
                     &self.editor.selection,
                     &mut self.clipboard,
                 );
-                if text.is_some() && !clipboard_ok && self.clipboard.is_some() {
-                    self.show_message("Warning: Clipboard error");
+                if let Some(ref text) = text {
+                    self.paste_cache = Some(text.clone());
+                    if !clipboard_ok && self.clipboard.is_some() {
+                        self.show_message("Warning: Clipboard error");
+                    }
                 }
             }
             EditorAction::Paste => {
                 if self.is_in_search_mode() {
                     return;
                 }
-                operations::paste(
-                    &mut self.editor.buffer,
-                    &mut self.editor.cursor,
-                    &mut self.editor.selection,
-                    &mut self.editor.history,
-                    &mut self.clipboard,
-                );
-                self.is_modified = true;
-                self.highlight_valid = false;
-                self.ensure_cursor_visible();
+                // On first key press, try reading system clipboard with a timeout.
+                // This supports pasting from external apps. A new arboard instance
+                // is used in a thread to avoid deadlocking the main event loop
+                // (arboard on X11 can block when our process owns the clipboard).
+                #[cfg(not(target_arch = "wasm32"))]
+                if is_key_pressed(KeyCode::V) {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        let text = arboard::Clipboard::new()
+                            .ok()
+                            .and_then(|mut cb| cb.get_text().ok());
+                        let _ = tx.send(text);
+                    });
+                    if let Ok(Some(text)) =
+                        rx.recv_timeout(std::time::Duration::from_millis(100))
+                    {
+                        self.paste_cache = Some(text);
+                    }
+                }
+                if let Some(text) = self.paste_cache.clone() {
+                    operations::paste(
+                        &mut self.editor.buffer,
+                        &mut self.editor.cursor,
+                        &mut self.editor.selection,
+                        &mut self.editor.history,
+                        &text,
+                    );
+                    self.is_modified = true;
+                    self.highlight_valid = false;
+                    self.ensure_cursor_visible();
+                }
             }
             _ => {}
         }

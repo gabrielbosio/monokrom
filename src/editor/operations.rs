@@ -375,45 +375,39 @@ pub fn cut_selection(
     (Some(text), clipboard_ok)
 }
 
-/// Paste from clipboard
+/// Paste text into the buffer at cursor position
 pub fn paste(
     buffer: &mut TextBuffer,
     cursor: &mut Cursor,
     selection: &mut Selection,
     history: &mut History,
-    clipboard: &mut Clipboard,
+    text: &str,
 ) {
-    #[cfg(not(target_arch = "wasm32"))]
-    let text = clipboard.as_mut().and_then(|cb| cb.get_text().ok());
-    #[cfg(target_arch = "wasm32")]
-    let text = clipboard.clone();
-    if let Some(text) = text {
-        if text.is_empty() {
-            return;
-        }
-
-        history.push(buffer, cursor.position);
-
-        // Delete selection if active
-        if let Some((start, end)) = selection.get_range(buffer) {
-            if start != end {
-                let (line, col) = buffer.char_to_line_col(start);
-                buffer.delete_range(start, end);
-                cursor.set_position(line, col);
-            }
-        }
-
-        // Insert pasted text
-        let char_idx = cursor.char_index(buffer);
-        buffer.insert(char_idx, &text);
-
-        // Move cursor to end of pasted text
-        let new_idx = char_idx + text.chars().count();
-        let (new_line, new_col) = buffer.char_to_line_col(new_idx);
-        cursor.set_position(new_line, new_col);
-
-        selection.clear();
+    if text.is_empty() {
+        return;
     }
+
+    history.push(buffer, cursor.position);
+
+    // Delete selection if active
+    if let Some((start, end)) = selection.get_range(buffer) {
+        if start != end {
+            let (line, col) = buffer.char_to_line_col(start);
+            buffer.delete_range(start, end);
+            cursor.set_position(line, col);
+        }
+    }
+
+    // Insert pasted text
+    let char_idx = cursor.char_index(buffer);
+    buffer.insert(char_idx, text);
+
+    // Move cursor to end of pasted text
+    let new_idx = char_idx + text.chars().count();
+    let (new_line, new_col) = buffer.char_to_line_col(new_idx);
+    cursor.set_position(new_line, new_col);
+
+    selection.clear();
 }
 
 /// Undo last operation
