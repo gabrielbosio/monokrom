@@ -73,8 +73,7 @@ pub fn simplify(func: &mut LirFunc) {
                         is_fixed,
                         &consts,
                         &bools,
-                        &mut func.blocks[block_idx].insts,
-                        inst_idx,
+                        &mut func.blocks[block_idx].insts[inst_idx].1,
                     ) {
                         match new {
                             Simplified::Replace(target) => {
@@ -209,8 +208,7 @@ fn algebraic_simplify(
     is_fixed: bool,
     consts: &HashMap<Value, i16>,
     bools: &HashMap<Value, bool>,
-    insts: &mut [(Value, LirInst)],
-    inst_idx: usize,
+    inst: &mut LirInst,
 ) -> Option<Simplified> {
     let l_const = consts.get(&lhs).copied();
     let r_const = consts.get(&rhs).copied();
@@ -244,11 +242,11 @@ fn algebraic_simplify(
                 return Some(Simplified::Replace(rhs));
             }
             if r_const == Some(0) {
-                insts[inst_idx].1 = LirInst::Const(0);
+                *inst = LirInst::Const(0);
                 return Some(Simplified::Const(0));
             }
             if l_const == Some(0) {
-                insts[inst_idx].1 = LirInst::Const(0);
+                *inst = LirInst::Const(0);
                 return Some(Simplified::Const(0));
             }
         }
@@ -267,11 +265,11 @@ fn algebraic_simplify(
                 return Some(Simplified::Replace(rhs));
             }
             if r_bool == Some(false) {
-                insts[inst_idx].1 = LirInst::ConstBool(false);
+                *inst = LirInst::ConstBool(false);
                 return Some(Simplified::ConstBool(false));
             }
             if l_bool == Some(false) {
-                insts[inst_idx].1 = LirInst::ConstBool(false);
+                *inst = LirInst::ConstBool(false);
                 return Some(Simplified::ConstBool(false));
             }
         }
@@ -284,11 +282,11 @@ fn algebraic_simplify(
                 return Some(Simplified::Replace(rhs));
             }
             if r_bool == Some(true) {
-                insts[inst_idx].1 = LirInst::ConstBool(true);
+                *inst = LirInst::ConstBool(true);
                 return Some(Simplified::ConstBool(true));
             }
             if l_bool == Some(true) {
-                insts[inst_idx].1 = LirInst::ConstBool(true);
+                *inst = LirInst::ConstBool(true);
                 return Some(Simplified::ConstBool(true));
             }
         }
