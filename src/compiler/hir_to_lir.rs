@@ -477,7 +477,15 @@ impl<'a> LowerCtx<'a> {
                     let block = self.current_block;
                     self.write_variable(name, block, val);
                 }
-                // Compound types: already allocated, no-op (init handled by assignments)
+                // Compound types: if initialized from a function return, use its address
+                if !self.is_scalar(ty) {
+                    if let Some(v) = value {
+                        let val = self.lower_expr(v);
+                        let block = self.current_block;
+                        self.compound_local_addrs.remove(name.as_str());
+                        self.write_variable(name, block, val);
+                    }
+                }
             }
 
             HirStmt::Assign { target, value } => {
@@ -488,7 +496,14 @@ impl<'a> LowerCtx<'a> {
                         let block = self.current_block;
                         self.write_variable(name, block, val);
                     }
-                    // Global or compound
+                    // Compound local reassigned from a function return
+                    HirExprKind::Var(name) if !self.is_scalar(&target.ty) => {
+                        let val = self.lower_expr(value);
+                        let block = self.current_block;
+                        self.compound_local_addrs.remove(name.as_str());
+                        self.write_variable(name, block, val);
+                    }
+                    // Global or compound field
                     _ => {
                         let addr = self.lower_addr_of(target);
                         let val = self.lower_expr(value);

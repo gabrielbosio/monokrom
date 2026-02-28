@@ -1074,4 +1074,13 @@ mod tests {
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
     }
+
+    #[test]
+    fn compound_return_value_assignment() {
+        let src = "fn new_list(): array[10] of int\n  a: array[10] of int\n  a[0] = 12\n  return a\nend\n\nfn main()\n  a = new_list()\n  tracen(a[0])\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "12");
+    }
 }
