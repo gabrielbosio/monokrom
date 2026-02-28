@@ -191,8 +191,17 @@ fn format_parse_error(
 
 pub fn compile(source: &str) -> Result<bytecode::Bytecode, Vec<String>> {
     let ast = parse(source).map_err(|e| vec![format_parse_error(source, &e)])?;
-    let hir =
-        lower(&ast).map_err(|errs| errs.iter().map(|e| format!("{e}")).collect::<Vec<_>>())?;
+    let hir = lower(&ast).map_err(|errs| {
+        errs.iter()
+            .map(|e| {
+                if let Some(span) = e.span {
+                    format!("line {}: {}", offset_to_line(source, span.0), e.message)
+                } else {
+                    e.message.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+    })?;
     let mut lir = lower_lir(&hir);
     opt::optimize(&mut lir);
     let mut bc = codegen::generate(&lir).map_err(|e| vec![format!("{e}")])?;
@@ -273,151 +282,176 @@ mod tests {
     #[test]
     fn if_else_if_else() {
         let m = p("if x == 1\n  a()\nelse if x == 2\n  b()\nelse\n  c()\nend");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::If {
-                else_ifs,
-                else_body,
-                ..
-            }) => {
-                assert_eq!(else_ifs.len(), 1);
-                assert_eq!(else_body.len(), 1);
-            }
-            other => panic!("expected if, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::If {
+            else_ifs,
+            else_body,
+            ..
+        } = &s.kind
+        else {
+            panic!("expected if, got {:?}", s.kind)
+        };
+        assert_eq!(else_ifs.len(), 1);
+        assert_eq!(else_body.len(), 1);
     }
 
     #[test]
     fn while_loop() {
         let m = p("while x > 0\n  x = x - 1\nend");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::While { body, .. }) => {
-                assert_eq!(body.len(), 1);
-            }
-            other => panic!("expected while, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::While { body, .. } = &s.kind else {
+            panic!("expected while, got {:?}", s.kind)
+        };
+        assert_eq!(body.len(), 1);
     }
 
     #[test]
     fn for_in_loop() {
         let m = p("for i, e in enemies\n  update(e)\nend");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::ForIn {
-                index, elem, body, ..
-            }) => {
-                assert_eq!(index, "i");
-                assert_eq!(elem, "e");
-                assert_eq!(body.len(), 1);
-            }
-            other => panic!("expected for-in, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::ForIn {
+            index, elem, body, ..
+        } = &s.kind
+        else {
+            panic!("expected for-in, got {:?}", s.kind)
+        };
+        assert_eq!(index, "i");
+        assert_eq!(elem, "e");
+        assert_eq!(body.len(), 1);
     }
 
     #[test]
     fn for_range_exclusive() {
         let m = p("for i in 0..10\n  f(i)\nend");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::ForRange { var, inclusive, .. }) => {
-                assert_eq!(var, "i");
-                assert!(!inclusive);
-            }
-            other => panic!("expected for-range, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::ForRange { var, inclusive, .. } = &s.kind else {
+            panic!("expected for-range, got {:?}", s.kind)
+        };
+        assert_eq!(var, "i");
+        assert!(!inclusive);
     }
 
     #[test]
     fn for_range_inclusive() {
         let m = p("for i in 0..=10\n  f(i)\nend");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::ForRange { var, inclusive, .. }) => {
-                assert_eq!(var, "i");
-                assert!(inclusive);
-            }
-            other => panic!("expected for-range, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::ForRange { var, inclusive, .. } = &s.kind else {
+            panic!("expected for-range, got {:?}", s.kind)
+        };
+        assert_eq!(var, "i");
+        assert!(inclusive);
     }
 
     #[test]
     fn expression_precedence() {
         // 1 + 2 * 3 should parse as 1 + (2 * 3)
         let m = p("1 + 2 * 3");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::BinOp { op, lhs, rhs })) => {
-                assert_eq!(*op, BinOp::Add);
-                assert_eq!(**lhs, Expr::IntLit(1));
-                match rhs.as_ref() {
-                    Expr::BinOp { op, lhs, rhs } => {
-                        assert_eq!(*op, BinOp::Mul);
-                        assert_eq!(**lhs, Expr::IntLit(2));
-                        assert_eq!(**rhs, Expr::IntLit(3));
-                    }
-                    other => panic!("expected mul, got {:?}", other),
-                }
-            }
-            other => panic!("expected expr stmt, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::BinOp { op, lhs, rhs } = &e.kind else {
+            panic!("expected binop")
+        };
+        assert_eq!(*op, BinOp::Add);
+        assert_eq!(lhs.kind, ExprKind::IntLit(1));
+        let ExprKind::BinOp { op, lhs, rhs } = &rhs.kind else {
+            panic!("expected mul")
+        };
+        assert_eq!(*op, BinOp::Mul);
+        assert_eq!(lhs.kind, ExprKind::IntLit(2));
+        assert_eq!(rhs.kind, ExprKind::IntLit(3));
     }
 
     #[test]
     fn function_call() {
         let m = p("cls(0)");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::Call { func, args })) => {
-                assert_eq!(**func, Expr::Ident("cls".into()));
-                assert_eq!(args, &vec![Expr::IntLit(0)]);
-            }
-            other => panic!("expected call, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::Call { func, args } = &e.kind else {
+            panic!("expected call")
+        };
+        assert_eq!(func.kind, ExprKind::Ident("cls".into()));
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].kind, ExprKind::IntLit(0));
     }
 
     #[test]
     fn array_access_and_field() {
         let m = p("enemies[0].x");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::FieldAccess { expr, field })) => {
-                assert_eq!(field, "x");
-                match expr.as_ref() {
-                    Expr::Index { expr, index } => {
-                        assert_eq!(**expr, Expr::Ident("enemies".into()));
-                        assert_eq!(**index, Expr::IntLit(0));
-                    }
-                    other => panic!("expected index, got {:?}", other),
-                }
-            }
-            other => panic!("expected field access, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::FieldAccess { expr, field } = &e.kind else {
+            panic!("expected field access")
+        };
+        assert_eq!(field, "x");
+        let ExprKind::Index { expr, index } = &expr.kind else {
+            panic!("expected index")
+        };
+        assert_eq!(expr.kind, ExprKind::Ident("enemies".into()));
+        assert_eq!(index.kind, ExprKind::IntLit(0));
     }
 
     #[test]
     fn global_assignment() {
         let m = p("x = 5");
-        assert_eq!(
-            m.items,
-            vec![TopLevel::Global(Stmt::Assign {
-                target: Expr::Ident("x".into()),
-                value: Expr::IntLit(5),
-            })]
-        );
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Assign { target, value } = &s.kind else {
+            panic!("expected assign")
+        };
+        assert_eq!(target.kind, ExprKind::Ident("x".into()));
+        assert_eq!(value.kind, ExprKind::IntLit(5));
     }
 
     #[test]
     fn unary_operators() {
         let m = p("-x");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::UnaryOp { op, expr })) => {
-                assert_eq!(*op, UnaryOp::Neg);
-                assert_eq!(**expr, Expr::Ident("x".into()));
-            }
-            other => panic!("expected unary, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::UnaryOp { op, expr } = &e.kind else {
+            panic!("expected unary")
+        };
+        assert_eq!(*op, UnaryOp::Neg);
+        assert_eq!(expr.kind, ExprKind::Ident("x".into()));
 
         let m = p("not true");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::UnaryOp { op, expr })) => {
-                assert_eq!(*op, UnaryOp::Not);
-                assert_eq!(**expr, Expr::BoolLit(true));
-            }
-            other => panic!("expected unary, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::UnaryOp { op, expr } = &e.kind else {
+            panic!("expected unary")
+        };
+        assert_eq!(*op, UnaryOp::Not);
+        assert_eq!(expr.kind, ExprKind::BoolLit(true));
     }
 
     #[test]
@@ -429,12 +463,16 @@ mod tests {
     fn multiline_parens() {
         // Newlines inside parens should be suppressed by LexerAdapter
         let m = p("f(\n  1,\n  2\n)");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::Call { args, .. })) => {
-                assert_eq!(args.len(), 2);
-            }
-            other => panic!("expected call, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::Call { args, .. } = &e.kind else {
+            panic!("expected call")
+        };
+        assert_eq!(args.len(), 2);
     }
 
     #[test]
@@ -460,111 +498,125 @@ mod tests {
     #[test]
     fn break_and_continue() {
         let m = p("while true\n  break\n  continue\nend");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::While { body, .. }) => {
-                assert_eq!(body[0], Stmt::Break);
-                assert_eq!(body[1], Stmt::Continue);
-            }
-            other => panic!("expected while, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::While { body, .. } = &s.kind else {
+            panic!("expected while")
+        };
+        assert_eq!(body[0].kind, StmtKind::Break);
+        assert_eq!(body[1].kind, StmtKind::Continue);
     }
 
     #[test]
     fn return_with_value() {
         let m = p("fn f(): int\n  return 42\nend");
-        match &m.items[0] {
-            TopLevel::Function(f) => {
-                assert_eq!(f.body[0], Stmt::Return(Some(Expr::IntLit(42))));
-            }
-            other => panic!("expected function, got {:?}", other),
-        }
+        let TopLevel::Function(f) = &m.items[0] else {
+            panic!("expected function")
+        };
+        let StmtKind::Return(Some(e)) = &f.body[0].kind else {
+            panic!("expected return with value")
+        };
+        assert_eq!(e.kind, ExprKind::IntLit(42));
     }
 
     #[test]
     fn return_without_value() {
         let m = p("fn f()\n  return\nend");
-        match &m.items[0] {
-            TopLevel::Function(f) => {
-                assert_eq!(f.body[0], Stmt::Return(None));
-            }
-            other => panic!("expected function, got {:?}", other),
-        }
+        let TopLevel::Function(f) = &m.items[0] else {
+            panic!("expected function")
+        };
+        assert_eq!(f.body[0].kind, StmtKind::Return(None));
     }
 
     #[test]
     fn logic_operators() {
         let m = p("a and b or c");
         // Should parse as (a and b) or c
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::BinOp { op, .. })) => {
-                assert_eq!(*op, BinOp::Or);
-            }
-            other => panic!("expected binop, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::BinOp { op, .. } = &e.kind else {
+            panic!("expected binop")
+        };
+        assert_eq!(*op, BinOp::Or);
     }
 
     #[test]
     fn field_assignment() {
         let m = p("enemies[0].x = 10");
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Assign { target, value }) => {
-                match target {
-                    Expr::FieldAccess { field, .. } => assert_eq!(field, "x"),
-                    other => panic!("expected field access, got {:?}", other),
-                }
-                assert_eq!(*value, Expr::IntLit(10));
-            }
-            other => panic!("expected assign, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Assign { target, value } = &s.kind else {
+            panic!("expected assign")
+        };
+        let ExprKind::FieldAccess { field, .. } = &target.kind else {
+            panic!("expected field access")
+        };
+        assert_eq!(field, "x");
+        assert_eq!(value.kind, ExprKind::IntLit(10));
     }
 
     #[test]
     fn string_literal_expr() {
         let m = p(r#"print("hello", 0, 0)"#);
-        match &m.items[0] {
-            TopLevel::Global(Stmt::Expression(Expr::Call { args, .. })) => {
-                assert_eq!(args[0], Expr::StrLit("hello".into()));
-            }
-            other => panic!("expected call, got {:?}", other),
-        }
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::Call { args, .. } = &e.kind else {
+            panic!("expected call")
+        };
+        assert_eq!(args[0].kind, ExprKind::StrLit("hello".into()));
     }
 
     #[test]
     fn var_decl_with_value() {
         let m = p("x: int = 5");
-        assert_eq!(
-            m.items,
-            vec![TopLevel::Global(Stmt::VarDecl {
-                name: "x".into(),
-                ty: TypeExpr::Int,
-                value: Some(Expr::IntLit(5)),
-            })]
-        );
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::VarDecl { name, ty, value } = &s.kind else {
+            panic!("expected var decl")
+        };
+        assert_eq!(name, "x");
+        assert_eq!(*ty, TypeExpr::Int);
+        assert_eq!(value.as_ref().unwrap().kind, ExprKind::IntLit(5));
     }
 
     #[test]
     fn var_decl_without_value() {
         let m = p("x: int");
-        assert_eq!(
-            m.items,
-            vec![TopLevel::Global(Stmt::VarDecl {
-                name: "x".into(),
-                ty: TypeExpr::Int,
-                value: None,
-            })]
-        );
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::VarDecl { name, ty, value } = &s.kind else {
+            panic!("expected var decl")
+        };
+        assert_eq!(name, "x");
+        assert_eq!(*ty, TypeExpr::Int);
+        assert!(value.is_none());
     }
 
     #[test]
     fn var_decl_array_type() {
         let m = p("enemies: array[40] of Enemy");
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::VarDecl { name, ty, .. } = &s.kind else {
+            panic!("expected var decl")
+        };
+        assert_eq!(name, "enemies");
         assert_eq!(
-            m.items,
-            vec![TopLevel::Global(Stmt::VarDecl {
-                name: "enemies".into(),
-                ty: TypeExpr::Array(Box::new(TypeExpr::Named("Enemy".into())), 40),
-                value: None,
-            })]
+            *ty,
+            TypeExpr::Array(Box::new(TypeExpr::Named("Enemy".into())), 40)
         );
     }
 
@@ -585,5 +637,11 @@ mod tests {
     fn compile_type_error() {
         let errs = super::compile("fn f(): int\nend").unwrap_err();
         assert!(!errs.is_empty());
+    }
+
+    #[test]
+    fn compile_type_error_has_line_number() {
+        let errs = super::compile("fn f()\n  x: int = true\nend").unwrap_err();
+        assert!(errs.iter().any(|e| e.starts_with("line ")));
     }
 }

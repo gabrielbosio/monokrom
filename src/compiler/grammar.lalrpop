@@ -130,56 +130,59 @@ Body: Vec<Stmt> = {
 };
 
 Stmt: Stmt = {
-    <name:IDENT> ":" <ty:Type> "=" <value:Expr> => Stmt::VarDecl { name, ty, value: Some(value) },
-    <name:IDENT> ":" <ty:Type> => Stmt::VarDecl { name, ty, value: None },
-    <target:PostfixExpr> "=" <value:Expr> => Stmt::Assign { target, value },
+    <l:@L> <name:IDENT> ":" <ty:Type> "=" <value:Expr> <r:@R> =>
+        Stmt::new(StmtKind::VarDecl { name, ty, value: Some(value) }, (l, r)),
+    <l:@L> <name:IDENT> ":" <ty:Type> <r:@R> =>
+        Stmt::new(StmtKind::VarDecl { name, ty, value: None }, (l, r)),
+    <l:@L> <target:PostfixExpr> "=" <value:Expr> <r:@R> =>
+        Stmt::new(StmtKind::Assign { target, value }, (l, r)),
     IfStmt,
     WhileStmt,
     ForStmt,
-    "return" <e:Expr?> => Stmt::Return(e),
-    "break" => Stmt::Break,
-    "continue" => Stmt::Continue,
-    <e:Expr> => Stmt::Expression(e),
+    <l:@L> "return" <e:Expr?> <r:@R> => Stmt::new(StmtKind::Return(e), (l, r)),
+    <l:@L> "break" <r:@R> => Stmt::new(StmtKind::Break, (l, r)),
+    <l:@L> "continue" <r:@R> => Stmt::new(StmtKind::Continue, (l, r)),
+    <l:@L> <e:Expr> <r:@R> => Stmt::new(StmtKind::Expression(e), (l, r)),
 };
 
 IfStmt: Stmt = {
-    "if" <cond:Expr> NL1
+    <l:@L> "if" <cond:Expr> NL1
         <body:Body>
         <else_ifs:("else" "if" <Expr> NL1 <Body>)*>
         <else_body:("else" NL1 <Body>)?>
-    "end" => {
-        Stmt::If {
+    "end" <r:@R> => {
+        Stmt::new(StmtKind::If {
             cond,
             body,
             else_ifs,
             else_body: else_body.unwrap_or_default(),
-        }
+        }, (l, r))
     }
 };
 
 WhileStmt: Stmt = {
-    "while" <cond:Expr> NL1
+    <l:@L> "while" <cond:Expr> NL1
         <body:Body>
-    "end" => {
-        Stmt::While { cond, body }
+    "end" <r:@R> => {
+        Stmt::new(StmtKind::While { cond, body }, (l, r))
     }
 };
 
 ForStmt: Stmt = {
-    "for" <index:IDENT> "," <elem:IDENT> "in" <iter:Expr> NL1
+    <l:@L> "for" <index:IDENT> "," <elem:IDENT> "in" <iter:Expr> NL1
         <body:Body>
-    "end" => {
-        Stmt::ForIn { index, elem, iter, body }
+    "end" <r:@R> => {
+        Stmt::new(StmtKind::ForIn { index, elem, iter, body }, (l, r))
     },
-    "for" <var:IDENT> "in" <start:Expr> ".." <end:Expr> NL1
+    <l:@L> "for" <var:IDENT> "in" <start:Expr> ".." <end:Expr> NL1
         <body:Body>
-    "end" => {
-        Stmt::ForRange { var, start, end, inclusive: false, body }
+    "end" <r:@R> => {
+        Stmt::new(StmtKind::ForRange { var, start, end, inclusive: false, body }, (l, r))
     },
-    "for" <var:IDENT> "in" <start:Expr> "..=" <end:Expr> NL1
+    <l:@L> "for" <var:IDENT> "in" <start:Expr> "..=" <end:Expr> NL1
         <body:Body>
-    "end" => {
-        Stmt::ForRange { var, start, end, inclusive: true, body }
+    "end" <r:@R> => {
+        Stmt::new(StmtKind::ForRange { var, start, end, inclusive: true, body }, (l, r))
     },
 };
 
@@ -188,23 +191,23 @@ ForStmt: Stmt = {
 Expr: Expr = OrExpr;
 
 OrExpr: Expr = {
-    <lhs:OrExpr> "or" <rhs:AndExpr> => Expr::BinOp {
+    <l:@L> <lhs:OrExpr> "or" <rhs:AndExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::Or, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
+    }, (l, r)),
     AndExpr,
 };
 
 AndExpr: Expr = {
-    <lhs:AndExpr> "and" <rhs:CmpExpr> => Expr::BinOp {
+    <l:@L> <lhs:AndExpr> "and" <rhs:CmpExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::And, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
+    }, (l, r)),
     CmpExpr,
 };
 
 CmpExpr: Expr = {
-    <lhs:AddExpr> <op:CmpOp> <rhs:AddExpr> => Expr::BinOp {
+    <l:@L> <lhs:AddExpr> <op:CmpOp> <rhs:AddExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
+    }, (l, r)),
     AddExpr,
 };
 
@@ -218,59 +221,59 @@ CmpOp: BinOp = {
 };
 
 AddExpr: Expr = {
-    <lhs:AddExpr> "+" <rhs:MulExpr> => Expr::BinOp {
+    <l:@L> <lhs:AddExpr> "+" <rhs:MulExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::Add, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
-    <lhs:AddExpr> "-" <rhs:MulExpr> => Expr::BinOp {
+    }, (l, r)),
+    <l:@L> <lhs:AddExpr> "-" <rhs:MulExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::Sub, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
+    }, (l, r)),
     MulExpr,
 };
 
 MulExpr: Expr = {
-    <lhs:MulExpr> "*" <rhs:UnaryExpr> => Expr::BinOp {
+    <l:@L> <lhs:MulExpr> "*" <rhs:UnaryExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::Mul, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
-    <lhs:MulExpr> "/" <rhs:UnaryExpr> => Expr::BinOp {
+    }, (l, r)),
+    <l:@L> <lhs:MulExpr> "/" <rhs:UnaryExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::Div, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
-    <lhs:MulExpr> "%" <rhs:UnaryExpr> => Expr::BinOp {
+    }, (l, r)),
+    <l:@L> <lhs:MulExpr> "%" <rhs:UnaryExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::Mod, lhs: Box::new(lhs), rhs: Box::new(rhs)
-    },
+    }, (l, r)),
     UnaryExpr,
 };
 
 UnaryExpr: Expr = {
-    "-" <e:UnaryExpr> => Expr::UnaryOp {
+    <l:@L> "-" <e:UnaryExpr> <r:@R> => Expr::new(ExprKind::UnaryOp {
         op: UnaryOp::Neg, expr: Box::new(e)
-    },
-    "not" <e:UnaryExpr> => Expr::UnaryOp {
+    }, (l, r)),
+    <l:@L> "not" <e:UnaryExpr> <r:@R> => Expr::new(ExprKind::UnaryOp {
         op: UnaryOp::Not, expr: Box::new(e)
-    },
+    }, (l, r)),
     PostfixExpr,
 };
 
 PostfixExpr: Expr = {
-    <f:PostfixExpr> "(" <args:Comma<Expr>> ")" => Expr::Call {
+    <l:@L> <f:PostfixExpr> "(" <args:Comma<Expr>> ")" <r:@R> => Expr::new(ExprKind::Call {
         func: Box::new(f), args
-    },
-    <e:PostfixExpr> "[" <i:Expr> "]" => Expr::Index {
+    }, (l, r)),
+    <l:@L> <e:PostfixExpr> "[" <i:Expr> "]" <r:@R> => Expr::new(ExprKind::Index {
         expr: Box::new(e), index: Box::new(i)
-    },
-    <e:PostfixExpr> "." <field:IDENT> => Expr::FieldAccess {
+    }, (l, r)),
+    <l:@L> <e:PostfixExpr> "." <field:IDENT> <r:@R> => Expr::new(ExprKind::FieldAccess {
         expr: Box::new(e), field
-    },
+    }, (l, r)),
     AtomExpr,
 };
 
 AtomExpr: Expr = {
-    <n:INT> => Expr::IntLit(n),
-    <f:FIXED> => Expr::FixedLit(f),
-    "true" => Expr::BoolLit(true),
-    "false" => Expr::BoolLit(false),
-    <s:STRING> => Expr::StrLit(s),
-    "PI" => Expr::FixedLit("3.14159265".to_string()),
-    "E" => Expr::FixedLit("2.71828182".to_string()),
-    <name:IDENT> => Expr::Ident(name),
+    <l:@L> <n:INT> <r:@R> => Expr::new(ExprKind::IntLit(n), (l, r)),
+    <l:@L> <f:FIXED> <r:@R> => Expr::new(ExprKind::FixedLit(f), (l, r)),
+    <l:@L> "true" <r:@R> => Expr::new(ExprKind::BoolLit(true), (l, r)),
+    <l:@L> "false" <r:@R> => Expr::new(ExprKind::BoolLit(false), (l, r)),
+    <l:@L> <s:STRING> <r:@R> => Expr::new(ExprKind::StrLit(s), (l, r)),
+    <l:@L> "PI" <r:@R> => Expr::new(ExprKind::FixedLit("3.14159265".to_string()), (l, r)),
+    <l:@L> "E" <r:@R> => Expr::new(ExprKind::FixedLit("2.71828182".to_string()), (l, r)),
+    <l:@L> <name:IDENT> <r:@R> => Expr::new(ExprKind::Ident(name), (l, r)),
     "(" <Expr> ")",
 };

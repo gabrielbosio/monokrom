@@ -1,3 +1,5 @@
+pub type Span = (usize, usize);
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub items: Vec<TopLevel>,
@@ -47,8 +49,26 @@ pub enum TypeExpr {
     Named(String),
 }
 
+#[derive(Debug, Clone)]
+pub struct Stmt {
+    pub kind: StmtKind,
+    pub span: Span,
+}
+
+impl Stmt {
+    pub fn new(kind: StmtKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+impl PartialEq for Stmt {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Stmt {
+pub enum StmtKind {
     VarDecl {
         name: String,
         ty: TypeExpr,
@@ -87,8 +107,26 @@ pub enum Stmt {
     Continue,
 }
 
+#[derive(Debug, Clone)]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: Span,
+}
+
+impl Expr {
+    pub fn new(kind: ExprKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub enum ExprKind {
     IntLit(i16),
     FixedLit(String),
     BoolLit(bool),

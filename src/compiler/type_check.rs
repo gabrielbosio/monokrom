@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::compiler::ast::{self, BinOp, Expr, TypeExpr, UnaryOp};
+use crate::compiler::ast::{self, BinOp, Expr, ExprKind, Span, TypeExpr, UnaryOp};
 use crate::compiler::error::CompileError;
 use crate::compiler::hir::*;
 
@@ -90,6 +90,10 @@ impl TypeCheckCtx {
         self.errors.push(CompileError::new(msg));
     }
 
+    fn error_at(&mut self, span: Span, msg: impl Into<String>) {
+        self.errors.push(CompileError::with_span(msg, span));
+    }
+
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
@@ -167,30 +171,31 @@ impl TypeCheckCtx {
     }
 
     fn check_expr(&mut self, expr: &Expr) -> HirExpr {
-        match expr {
-            Expr::IntLit(n) => HirExpr {
+        let span = expr.span;
+        match &expr.kind {
+            ExprKind::IntLit(n) => HirExpr {
                 kind: HirExprKind::IntLit(*n),
                 ty: HirType::Int,
             },
-            Expr::FixedLit(s) => {
+            ExprKind::FixedLit(s) => {
                 let val = parse_fixed(s);
                 HirExpr {
                     kind: HirExprKind::FixedLit(val),
                     ty: HirType::Fixed,
                 }
             }
-            Expr::BoolLit(b) => HirExpr {
+            ExprKind::BoolLit(b) => HirExpr {
                 kind: HirExprKind::BoolLit(*b),
                 ty: HirType::Bool,
             },
-            Expr::StrLit(s) => {
+            ExprKind::StrLit(s) => {
                 let idx = self.intern_string(s);
                 HirExpr {
                     kind: HirExprKind::StrLit(idx),
                     ty: HirType::Str,
                 }
             }
-            Expr::Ident(name) => {
+            ExprKind::Ident(name) => {
                 if let Some((ty, is_global)) = self.lookup_var(name) {
                     HirExpr {
                         kind: if is_global {
@@ -201,22 +206,22 @@ impl TypeCheckCtx {
                         ty,
                     }
                 } else {
-                    self.error(format!("undeclared variable: {name}"));
+                    self.error_at(span, format!("undeclared variable: {name}"));
                     HirExpr {
                         kind: HirExprKind::Var(name.clone()),
                         ty: HirType::Void,
                     }
                 }
             }
-            Expr::BinOp { op, lhs, rhs } => self.check_binop(*op, lhs, rhs),
-            Expr::UnaryOp { op, expr } => self.check_unaryop(*op, expr),
-            Expr::Call { func, args } => self.check_call(func, args),
-            Expr::Index { expr, index } => self.check_index(expr, index),
-            Expr::FieldAccess { expr, field } => self.check_field_access(expr, field),
+            ExprKind::BinOp { op, lhs, rhs } => self.check_binop(*op, lhs, rhs, span),
+            ExprKind::UnaryOp { op, expr: e } => self.check_unaryop(*op, e, span),
+            ExprKind::Call { func, args } => self.check_call(func, args, span),
+            ExprKind::Index { expr: e, index } => self.check_index(e, index, span),
+            ExprKind::FieldAccess { expr: e, field } => self.check_field_access(e, field, span),
         }
     }
 
-    fn check_binop(&mut self, op: BinOp, lhs: &Expr, rhs: &Expr) -> HirExpr {
+    fn check_binop(&mut self, op: BinOp, lhs: &Expr, rhs: &Expr, span: Span) -> HirExpr {
         let lhs_hir = self.check_expr(lhs);
         let rhs_hir = self.check_expr(rhs);
 
@@ -228,10 +233,10 @@ impl TypeCheckCtx {
 
         if is_logical {
             if lhs_hir.ty != HirType::Bool {
-                self.error(format!("expected bool, got {}", lhs_hir.ty));
+                self.error_at(span, format!("expected bool, got {}", lhs_hir.ty));
             }
             if rhs_hir.ty != HirType::Bool {
-                self.error(format!("expected bool, got {}", rhs_hir.ty));
+                self.error_at(span, format!("expected bool, got {}", rhs_hir.ty));
             }
             HirExpr {
                 kind: HirExprKind::BinOp {
@@ -243,14 +248,14 @@ impl TypeCheckCtx {
             }
         } else {
             if lhs_hir.ty != rhs_hir.ty {
-                self.error(format!("type mismatch: {} vs {}", lhs_hir.ty, rhs_hir.ty));
+                self.error_at(
+                    span,
+                    format!("type mismatch: {} vs {}", lhs_hir.ty, rhs_hir.ty),
+                );
             }
             let is_arithmetic = !is_comparison;
-            if is_arithmetic
-                && lhs_hir.ty != HirType::Int
-                && lhs_hir.ty != HirType::Fixed
-            {
-                self.error(format!("arithmetic on {}", lhs_hir.ty));
+            if is_arithmetic && lhs_hir.ty != HirType::Int && lhs_hir.ty != HirType::Fixed {
+                self.error_at(span, format!("arithmetic on {}", lhs_hir.ty));
             }
             let result_ty = if is_comparison {
                 HirType::Bool
@@ -268,12 +273,12 @@ impl TypeCheckCtx {
         }
     }
 
-    fn check_unaryop(&mut self, op: UnaryOp, expr: &Expr) -> HirExpr {
+    fn check_unaryop(&mut self, op: UnaryOp, expr: &Expr, span: Span) -> HirExpr {
         let inner = self.check_expr(expr);
         match op {
             UnaryOp::Neg => {
                 if inner.ty != HirType::Int && inner.ty != HirType::Fixed {
-                    self.error(format!("cannot negate {}", inner.ty));
+                    self.error_at(span, format!("cannot negate {}", inner.ty));
                 }
                 let ty = inner.ty.clone();
                 HirExpr {
@@ -286,7 +291,7 @@ impl TypeCheckCtx {
             }
             UnaryOp::Not => {
                 if inner.ty != HirType::Bool {
-                    self.error(format!("'not' requires bool, got {}", inner.ty));
+                    self.error_at(span, format!("'not' requires bool, got {}", inner.ty));
                 }
                 HirExpr {
                     kind: HirExprKind::UnaryOp {
@@ -299,32 +304,38 @@ impl TypeCheckCtx {
         }
     }
 
-    fn check_call(&mut self, func: &Expr, args: &[Expr]) -> HirExpr {
+    fn check_call(&mut self, func: &Expr, args: &[Expr], span: Span) -> HirExpr {
         // Check if it's an intrinsic or user function
-        if let Expr::Ident(name) = func {
+        if let ExprKind::Ident(name) = &func.kind {
             // Try intrinsic first
             if let Some(sig) = self.intrinsics.get(name) {
                 let op = sig.op;
                 let expected_params = sig.params.clone();
                 let ret = sig.ret.clone();
                 if args.len() != expected_params.len() {
-                    self.error(format!(
-                        "{name}: expected {} args, got {}",
-                        expected_params.len(),
-                        args.len()
-                    ));
+                    self.error_at(
+                        span,
+                        format!(
+                            "{name}: expected {} args, got {}",
+                            expected_params.len(),
+                            args.len()
+                        ),
+                    );
                 }
                 let mut hir_args = Vec::new();
                 for (i, arg) in args.iter().enumerate() {
                     let hir_arg = self.check_expr(arg);
                     if let Some(expected) = expected_params.get(i) {
                         if hir_arg.ty != *expected {
-                            self.error(format!(
-                                "{name} arg {}: expected {}, got {}",
-                                i + 1,
-                                expected,
-                                hir_arg.ty
-                            ));
+                            self.error_at(
+                                arg.span,
+                                format!(
+                                    "{name} arg {}: expected {}, got {}",
+                                    i + 1,
+                                    expected,
+                                    hir_arg.ty
+                                ),
+                            );
                         }
                     }
                     hir_args.push(hir_arg);
@@ -338,23 +349,29 @@ impl TypeCheckCtx {
             // Try user function
             if let Some((param_types, ret_type)) = self.functions.get(name).cloned() {
                 if args.len() != param_types.len() {
-                    self.error(format!(
-                        "{name}: expected {} args, got {}",
-                        param_types.len(),
-                        args.len()
-                    ));
+                    self.error_at(
+                        span,
+                        format!(
+                            "{name}: expected {} args, got {}",
+                            param_types.len(),
+                            args.len()
+                        ),
+                    );
                 }
                 let mut hir_args = Vec::new();
                 for (i, arg) in args.iter().enumerate() {
                     let hir_arg = self.check_expr(arg);
                     if let Some(expected) = param_types.get(i) {
                         if hir_arg.ty != *expected {
-                            self.error(format!(
-                                "{name} arg {}: expected {}, got {}",
-                                i + 1,
-                                expected,
-                                hir_arg.ty
-                            ));
+                            self.error_at(
+                                arg.span,
+                                format!(
+                                    "{name} arg {}: expected {}, got {}",
+                                    i + 1,
+                                    expected,
+                                    hir_arg.ty
+                                ),
+                            );
                         }
                     }
                     hir_args.push(hir_arg);
@@ -368,7 +385,7 @@ impl TypeCheckCtx {
                 };
             }
 
-            self.error(format!("unknown function: {name}"));
+            self.error_at(span, format!("unknown function: {name}"));
             let hir_args: Vec<HirExpr> = args.iter().map(|a| self.check_expr(a)).collect();
             return HirExpr {
                 kind: HirExprKind::Call {
@@ -380,7 +397,7 @@ impl TypeCheckCtx {
         }
 
         // Non-ident call (e.g. expr(), not supported but handle gracefully)
-        self.error("only named function calls are supported".to_string());
+        self.error_at(span, "only named function calls are supported".to_string());
         let hir_args: Vec<HirExpr> = args.iter().map(|a| self.check_expr(a)).collect();
         HirExpr {
             kind: HirExprKind::Call {
@@ -391,16 +408,16 @@ impl TypeCheckCtx {
         }
     }
 
-    fn check_index(&mut self, expr: &Expr, index: &Expr) -> HirExpr {
+    fn check_index(&mut self, expr: &Expr, index: &Expr, span: Span) -> HirExpr {
         let base = self.check_expr(expr);
         let idx = self.check_expr(index);
         if idx.ty != HirType::Int {
-            self.error(format!("index must be int, got {}", idx.ty));
+            self.error_at(span, format!("index must be int, got {}", idx.ty));
         }
         let elem_ty = match &base.ty {
             HirType::Array(elem, _) => *elem.clone(),
             other => {
-                self.error(format!("cannot index into {}", other));
+                self.error_at(span, format!("cannot index into {}", other));
                 HirType::Void
             }
         };
@@ -413,12 +430,12 @@ impl TypeCheckCtx {
         }
     }
 
-    fn check_field_access(&mut self, expr: &Expr, field: &str) -> HirExpr {
+    fn check_field_access(&mut self, expr: &Expr, field: &str, span: Span) -> HirExpr {
         let base = self.check_expr(expr);
         let struct_name = match &base.ty {
             HirType::Struct(name) => name.clone(),
             other => {
-                self.error(format!("cannot access field on {}", other));
+                self.error_at(span, format!("cannot access field on {}", other));
                 return HirExpr {
                     kind: HirExprKind::FieldAccess {
                         expr: Box::new(base),
@@ -442,7 +459,7 @@ impl TypeCheckCtx {
                     ty,
                 };
             }
-            self.error(format!("struct {struct_name} has no field '{field}'"));
+            self.error_at(span, format!("struct {struct_name} has no field '{field}'"));
         }
         HirExpr {
             kind: HirExprKind::FieldAccess {
@@ -455,13 +472,14 @@ impl TypeCheckCtx {
     }
 
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> HirStmt {
-        match stmt {
-            ast::Stmt::VarDecl { name, ty, value } => {
+        let span = stmt.span;
+        match &stmt.kind {
+            ast::StmtKind::VarDecl { name, ty, value } => {
                 let hir_ty = self.resolve_type(ty);
                 let hir_value = value.as_ref().map(|v| {
                     let hv = self.check_expr(v);
                     if hv.ty != hir_ty {
-                        self.error(format!("{name}: expected {}, got {}", hir_ty, hv.ty));
+                        self.error_at(span, format!("{name}: expected {}, got {}", hir_ty, hv.ty));
                     }
                     hv
                 });
@@ -472,9 +490,9 @@ impl TypeCheckCtx {
                     value: hir_value,
                 }
             }
-            ast::Stmt::Assign { target, value } => {
+            ast::StmtKind::Assign { target, value } => {
                 // Infer-declare: `y = 10` inside a function defines a new local
-                if let Expr::Ident(name) = target {
+                if let ExprKind::Ident(name) = &target.kind {
                     if self.lookup_var(name).is_none() {
                         let hir_value = self.check_expr(value);
                         let ty = hir_value.ty.clone();
@@ -489,14 +507,17 @@ impl TypeCheckCtx {
                 let hir_target = self.check_expr(target);
                 let hir_value = self.check_expr(value);
                 if hir_target.ty != hir_value.ty {
-                    self.error(format!("assign: {} vs {}", hir_target.ty, hir_value.ty));
+                    self.error_at(
+                        span,
+                        format!("assign: {} vs {}", hir_target.ty, hir_value.ty),
+                    );
                 }
                 HirStmt::Assign {
                     target: hir_target,
                     value: hir_value,
                 }
             }
-            ast::Stmt::If {
+            ast::StmtKind::If {
                 cond,
                 body,
                 else_ifs,
@@ -504,7 +525,7 @@ impl TypeCheckCtx {
             } => {
                 let hir_cond = self.check_expr(cond);
                 if hir_cond.ty != HirType::Bool {
-                    self.error(format!("if: expected bool, got {}", hir_cond.ty));
+                    self.error_at(cond.span, format!("if: expected bool, got {}", hir_cond.ty));
                 }
                 self.push_scope();
                 let hir_body = self.check_stmts(body);
@@ -514,7 +535,7 @@ impl TypeCheckCtx {
                     .map(|(c, b)| {
                         let hc = self.check_expr(c);
                         if hc.ty != HirType::Bool {
-                            self.error(format!("else if: expected bool, got {}", hc.ty));
+                            self.error_at(c.span, format!("else if: expected bool, got {}", hc.ty));
                         }
                         self.push_scope();
                         let hb = self.check_stmts(b);
@@ -532,10 +553,13 @@ impl TypeCheckCtx {
                     else_body: hir_else,
                 }
             }
-            ast::Stmt::While { cond, body } => {
+            ast::StmtKind::While { cond, body } => {
                 let hir_cond = self.check_expr(cond);
                 if hir_cond.ty != HirType::Bool {
-                    self.error(format!("while: expected bool, got {}", hir_cond.ty));
+                    self.error_at(
+                        cond.span,
+                        format!("while: expected bool, got {}", hir_cond.ty),
+                    );
                 }
                 self.push_scope();
                 let hir_body = self.check_stmts(body);
@@ -545,7 +569,7 @@ impl TypeCheckCtx {
                     body: hir_body,
                 }
             }
-            ast::Stmt::ForIn {
+            ast::StmtKind::ForIn {
                 index,
                 elem,
                 iter,
@@ -555,7 +579,7 @@ impl TypeCheckCtx {
                 let elem_ty = match &hir_iter.ty {
                     HirType::Array(elem, _) => *elem.clone(),
                     other => {
-                        self.error(format!("for-in: expected array, got {}", other));
+                        self.error_at(iter.span, format!("for-in: expected array, got {}", other));
                         HirType::Void
                     }
                 };
@@ -575,7 +599,7 @@ impl TypeCheckCtx {
                     body: hir_body,
                 }
             }
-            ast::Stmt::ForRange {
+            ast::StmtKind::ForRange {
                 var,
                 start,
                 end,
@@ -585,10 +609,16 @@ impl TypeCheckCtx {
                 let hir_start = self.check_expr(start);
                 let hir_end = self.check_expr(end);
                 if hir_start.ty != HirType::Int {
-                    self.error(format!("for: start must be int, got {}", hir_start.ty));
+                    self.error_at(
+                        start.span,
+                        format!("for: start must be int, got {}", hir_start.ty),
+                    );
                 }
                 if hir_end.ty != HirType::Int {
-                    self.error(format!("for: end must be int, got {}", hir_end.ty));
+                    self.error_at(
+                        end.span,
+                        format!("for: end must be int, got {}", hir_end.ty),
+                    );
                 }
                 self.push_scope();
                 self.define_local(var, HirType::Int);
@@ -602,16 +632,16 @@ impl TypeCheckCtx {
                     body: hir_body,
                 }
             }
-            ast::Stmt::Return(expr) => {
+            ast::StmtKind::Return(expr) => {
                 let hir_expr = expr.as_ref().map(|e| self.check_expr(e));
                 HirStmt::Return(hir_expr)
             }
-            ast::Stmt::Expression(expr) => {
+            ast::StmtKind::Expression(expr) => {
                 let hir_expr = self.check_expr(expr);
                 HirStmt::Expression(hir_expr)
             }
-            ast::Stmt::Break => HirStmt::Break,
-            ast::Stmt::Continue => HirStmt::Continue,
+            ast::StmtKind::Break => HirStmt::Break,
+            ast::StmtKind::Continue => HirStmt::Continue,
         }
     }
 
@@ -620,13 +650,14 @@ impl TypeCheckCtx {
     }
 
     fn check_global_stmt(&mut self, stmt: &ast::Stmt) -> Option<HirStmt> {
-        match stmt {
-            ast::Stmt::VarDecl { name, ty, value } => {
+        let span = stmt.span;
+        match &stmt.kind {
+            ast::StmtKind::VarDecl { name, ty, value } => {
                 let hir_ty = self.resolve_type(ty);
                 let hir_value = value.as_ref().map(|v| {
                     let hv = self.check_expr(v);
                     if hv.ty != hir_ty {
-                        self.error(format!("{name}: expected {}, got {}", hir_ty, hv.ty));
+                        self.error_at(span, format!("{name}: expected {}, got {}", hir_ty, hv.ty));
                     }
                     hv
                 });
@@ -638,9 +669,9 @@ impl TypeCheckCtx {
                 }
                 None
             }
-            ast::Stmt::Assign { target, value } => {
+            ast::StmtKind::Assign { target, value } => {
                 // Untyped global assignment: `x = 5`
-                if let Expr::Ident(name) = target {
+                if let ExprKind::Ident(name) = &target.kind {
                     if !self.globals.contains_key(name) {
                         // New global, infer type from RHS
                         let hir_value = self.check_expr(value);
@@ -655,7 +686,7 @@ impl TypeCheckCtx {
                 // Re-assignment to existing global, or complex target
                 Some(self.check_stmt(stmt))
             }
-            ast::Stmt::Expression(_) => Some(self.check_stmt(stmt)),
+            ast::StmtKind::Expression(_) => Some(self.check_stmt(stmt)),
             _ => Some(self.check_stmt(stmt)),
         }
     }
@@ -717,12 +748,15 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
     // Build HirGlobal list from registered globals
     for item in &module.items {
         if let ast::TopLevel::Global(stmt) = item {
-            let name = match stmt {
-                ast::Stmt::VarDecl { name, .. } => Some(name.clone()),
-                ast::Stmt::Assign {
-                    target: Expr::Ident(name),
-                    ..
-                } => Some(name.clone()),
+            let name = match &stmt.kind {
+                ast::StmtKind::VarDecl { name, .. } => Some(name.clone()),
+                ast::StmtKind::Assign { target, .. } => {
+                    if let ExprKind::Ident(name) = &target.kind {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             };
             if let Some(name) = name {
