@@ -20,3 +20,6 @@ directories = "5.0"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 quad-storage = "0.1"
 sapp-jsutils = "0.1"
+
+[patch.crates-io]
+miniquad = { git = "https://github.com/gabrielbosio/miniquad.git", branch = "fix-x11-clipboard-copy" }

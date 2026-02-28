@@ -604,8 +604,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 [[package]]
 name = "miniquad"
 version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb3e758e46dbc45716a8a49ca9edc54b15bcca826277e80b1f690708f67f9e3"
+source = "git+https://github.com/gabrielbosio/miniquad.git?branch=fix-x11-clipboard-copy#c37ef585e8ecf1ed8a3a615b819648f404f2b6d3"
 dependencies = [
  "libc",
  "ndk-sys",
