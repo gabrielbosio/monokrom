@@ -245,6 +245,13 @@ impl TypeCheckCtx {
             if lhs_hir.ty != rhs_hir.ty {
                 self.error(format!("type mismatch: {} vs {}", lhs_hir.ty, rhs_hir.ty));
             }
+            let is_arithmetic = !is_comparison;
+            if is_arithmetic
+                && lhs_hir.ty != HirType::Int
+                && lhs_hir.ty != HirType::Fixed
+            {
+                self.error(format!("arithmetic on {}", lhs_hir.ty));
+            }
             let result_ty = if is_comparison {
                 HirType::Bool
             } else {
