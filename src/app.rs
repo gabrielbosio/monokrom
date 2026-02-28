@@ -374,15 +374,23 @@ impl App {
                         &mut self.editor.history,
                     );
                 } else {
-                    for c in [' ', ' '] {
-                        operations::insert_char(
-                            &mut self.editor.buffer,
-                            &mut self.editor.cursor,
-                            &mut self.editor.selection,
-                            &mut self.editor.history,
-                            c,
-                        );
+                    self.editor
+                        .history
+                        .push(&self.editor.buffer, self.editor.cursor.position);
+                    if let Some((start, end)) = self.editor.selection.get_range(&self.editor.buffer)
+                    {
+                        if start != end {
+                            let (line, col) = self.editor.buffer.char_to_line_col(start);
+                            self.editor.buffer.delete_range(start, end);
+                            self.editor.cursor.set_position(line, col);
+                            self.editor.selection.clear();
+                        }
                     }
+                    let idx = self.editor.cursor.char_index(&self.editor.buffer);
+                    self.editor.buffer.insert(idx, "  ");
+                    self.editor
+                        .cursor
+                        .set_position(self.editor.cursor.line(), self.editor.cursor.col() + 2);
                 }
                 self.is_modified = true;
                 self.highlight_valid = false;
