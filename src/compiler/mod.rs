@@ -31,8 +31,166 @@ pub fn lower_lir(hir: &hir::HirModule) -> lir::LirModule {
     hir_to_lir::lower_to_lir(hir)
 }
 
+fn offset_to_line(source: &str, offset: usize) -> usize {
+    source[..offset.min(source.len())]
+        .bytes()
+        .filter(|&b| b == b'\n')
+        .count()
+        + 1
+}
+
+fn token_description(token: &lexer::Token) -> &str {
+    use lexer::Token::*;
+    match token {
+        Newline => "end of line",
+        Ident(_) => "identifier",
+        IntLit(_) => "number",
+        FixedLit(_) => "number",
+        StrLit(_) => "string",
+        Fn => "'fn'",
+        If => "'if'",
+        Else => "'else'",
+        While => "'while'",
+        For => "'for'",
+        In => "'in'",
+        End => "'end'",
+        Return => "'return'",
+        Struct => "'struct'",
+        True => "'true'",
+        False => "'false'",
+        And => "'and'",
+        Or => "'or'",
+        Not => "'not'",
+        Break => "'break'",
+        Continue => "'continue'",
+        Array => "'array'",
+        Of => "'of'",
+        Int => "'int'",
+        Fixed => "'fixed'",
+        Bool => "'bool'",
+        Str => "'str'",
+        Void => "'void'",
+        Pi => "'PI'",
+        Euler => "'E'",
+        Eq => "'=='",
+        Neq => "'!='",
+        Leq => "'<='",
+        Geq => "'>='",
+        Plus => "'+'",
+        Minus => "'-'",
+        Star => "'*'",
+        Slash => "'/'",
+        Percent => "'%'",
+        Assign => "'='",
+        Lt => "'<'",
+        Gt => "'>'",
+        LParen => "'('",
+        RParen => "')'",
+        LBracket => "'['",
+        RBracket => "']'",
+        Comma => "','",
+        Colon => "':'",
+        DotDotEq => "'..='",
+        DotDot => "'..'",
+        Dot => "'.'",
+        LineComment | BlockComment => "comment",
+    }
+}
+
+fn simplify_expected(expected: &[String]) -> String {
+    // Expression-start tokens in lalrpop grammar names
+    const EXPR_TOKENS: &[&str] = &[
+        "INT",
+        "FIXED",
+        "STRING",
+        "IDENT",
+        "\"(\"",
+        "\"true\"",
+        "\"false\"",
+        "\"not\"",
+        "\"-\"",
+        "\"PI\"",
+        "\"E\"",
+    ];
+
+    let expr_count = expected
+        .iter()
+        .filter(|e| EXPR_TOKENS.contains(&e.as_str()))
+        .count();
+    if expr_count >= 4 {
+        // Most expression-start tokens present, so summarize
+        let extras: Vec<_> = expected
+            .iter()
+            .filter(|e| !EXPR_TOKENS.contains(&e.as_str()))
+            .map(|e| grammar_name_to_readable(e))
+            .collect();
+        if extras.is_empty() {
+            return "expression".to_string();
+        }
+        let mut parts = vec!["expression".to_string()];
+        parts.extend(extras);
+        return parts.join(", ");
+    }
+
+    let readable: Vec<_> = expected
+        .iter()
+        .map(|e| grammar_name_to_readable(e))
+        .collect();
+    readable.join(", ")
+}
+
+fn grammar_name_to_readable(name: &str) -> String {
+    match name {
+        "NL" => "end of line".to_string(),
+        "INT" | "FIXED" => "number".to_string(),
+        "STRING" => "string".to_string(),
+        "IDENT" => "identifier".to_string(),
+        s if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 => {
+            // e.g. "\"fn\"" -> 'fn'
+            let inner = &s[1..s.len() - 1];
+            format!("'{inner}'")
+        }
+        s => s.to_string(),
+    }
+}
+
+fn format_parse_error(
+    source: &str,
+    error: &lalrpop_util::ParseError<usize, lexer::Token, lexer::LexicalError>,
+) -> String {
+    use lalrpop_util::ParseError::*;
+    match error {
+        UnrecognizedToken {
+            token: (offset, token, _),
+            expected,
+        } => {
+            let line = offset_to_line(source, *offset);
+            let desc = token_description(token);
+            let exp = simplify_expected(expected);
+            format!("line {line}: unexpected {desc}, expected {exp}")
+        }
+        UnrecognizedEof { location, expected } => {
+            let line = offset_to_line(source, *location);
+            let exp = simplify_expected(expected);
+            format!("line {line}: unexpected end of file, expected {exp}")
+        }
+        InvalidToken { location } => {
+            let line = offset_to_line(source, *location);
+            format!("line {line}: unexpected character")
+        }
+        ExtraToken {
+            token: (offset, token, _),
+        } => {
+            let line = offset_to_line(source, *offset);
+            let desc = token_description(token);
+            format!("line {line}: unexpected {desc}")
+        }
+        User { error } => format!("{error}"),
+    }
+}
+
 pub fn compile(source: &str) -> Result<bytecode::Bytecode, Vec<String>> {
-    let ast = parse(source).map_err(|e| vec![format!("parse error: {e:?}")])?;
+    let ast = parse(source).map_err(|e| vec![format_parse_error(source, &e)])?;
     let hir =
         lower(&ast).map_err(|errs| errs.iter().map(|e| format!("{e}")).collect::<Vec<_>>())?;
     let mut lir = lower_lir(&hir);
@@ -420,7 +578,7 @@ mod tests {
     #[test]
     fn compile_parse_error() {
         let errs = super::compile("fn 123").unwrap_err();
-        assert!(errs[0].contains("parse error"));
+        assert!(errs[0].contains("unexpected number"));
     }
 
     #[test]
