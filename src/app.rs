@@ -747,8 +747,11 @@ impl App {
         if let Some(result) = self.file_picker.update() {
             match result {
                 FilePickerResult::Open(filename) => {
-                    self.open_file(&filename);
-                    self.mode = AppMode::Editing;
+                    if self.open_file(&filename) {
+                        self.mode = AppMode::Editing;
+                    } else {
+                        self.show_message("Error: Could not open file");
+                    }
                 }
                 FilePickerResult::Duplicate(filename) => {
                     // Duplicate the file and refresh the picker
@@ -843,9 +846,13 @@ impl App {
         let action = std::mem::take(&mut self.pending_action);
         match action {
             PendingAction::OpenNamed(name) => {
-                self.open_file(&name);
-                self.terminal.push_output(&format!("opened {name}"));
-                self.mode = AppMode::Editing;
+                if self.open_file(&name) {
+                    self.terminal.push_output(&format!("opened {name}"));
+                    self.mode = AppMode::Editing;
+                } else {
+                    self.terminal
+                        .push_output(&format!("error: could not open {name}"));
+                }
             }
             PendingAction::OpenFile => match filesystem::list_files() {
                 Ok(files) => {
@@ -1161,14 +1168,13 @@ impl App {
         self.highlight_valid = false;
     }
 
-    fn open_file(&mut self, filename: &str) {
+    fn open_file(&mut self, filename: &str) -> bool {
         match filesystem::read_file(filename) {
             Ok(content) => {
                 self.reset_editor(TextBuffer::from_str(&content), Some(filename.to_string()));
+                true
             }
-            Err(_) => {
-                self.show_message("Error: Could not open file");
-            }
+            Err(_) => false,
         }
     }
 
@@ -1305,10 +1311,12 @@ impl App {
                     self.pending_action = PendingAction::OpenNamed(name);
                     self.mode = AppMode::CloseConfirm;
                     self.confirm_dialog.show("Save changes?");
-                } else {
-                    self.open_file(&name);
+                } else if self.open_file(&name) {
                     self.terminal.push_output(&format!("opened {name}"));
                     self.mode = AppMode::Editing;
+                } else {
+                    self.terminal
+                        .push_output(&format!("error: could not open {name}"));
                 }
             }
             TerminalCommand::Rm(name) => match filesystem::delete_file(&name) {
