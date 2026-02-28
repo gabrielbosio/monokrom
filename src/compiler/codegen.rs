@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::compiler::ast::{BinOp, UnaryOp};
 use crate::compiler::bytecode::*;
@@ -18,12 +18,27 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
         .map(|(i, f)| (f.name.as_str(), i as u16))
         .collect();
 
+    let void_funcs: HashSet<&str> = module
+        .functions
+        .iter()
+        .filter(|f| {
+            f.blocks
+                .iter()
+                .flat_map(|b| match &b.terminator {
+                    Terminator::Return(v) => Some(v),
+                    _ => None,
+                })
+                .all(|v| v.is_none())
+        })
+        .map(|f| f.name.as_str())
+        .collect();
+
     for func in &module.functions {
         let code_offset = bc.pos();
         let n_params = func.params.len() as u8;
         let n_locals = count_locals(func);
 
-        emit_function(&mut bc, func, &func_indices)?;
+        emit_function(&mut bc, func, &func_indices, &void_funcs)?;
 
         bc.functions.push(FuncInfo {
             name: func.name.clone(),
@@ -153,6 +168,7 @@ fn emit_function(
     bc: &mut Bytecode,
     func: &LirFunc,
     func_indices: &HashMap<&str, u16>,
+    void_funcs: &HashSet<&str>,
 ) -> Result<(), CompileError> {
     let uses = count_uses(func);
 
@@ -167,7 +183,7 @@ fn emit_function(
             if matches!(inst, LirInst::Phi(_)) {
                 continue;
             }
-            emit_instruction(bc, *val, inst, &uses, func_indices)?;
+            emit_instruction(bc, *val, inst, &uses, func_indices, void_funcs)?;
         }
 
         emit_terminator(bc, block.id, &block.terminator, func, &mut patches);
@@ -189,6 +205,7 @@ fn emit_instruction(
     inst: &LirInst,
     uses: &HashMap<Value, u32>,
     func_indices: &HashMap<&str, u16>,
+    void_funcs: &HashSet<&str>,
 ) -> Result<(), CompileError> {
     let used = uses.get(&val).copied().unwrap_or(0) > 0;
 
@@ -275,7 +292,7 @@ fn emit_instruction(
             if used {
                 bc.emit_op(STORE_LOCAL);
                 bc.emit_u16(val.0 as u16);
-            } else {
+            } else if !void_funcs.contains(name.as_str()) {
                 bc.emit_op(POP);
             }
         }
@@ -495,5 +512,19 @@ mod tests {
     fn entry_point_no_main() {
         let bc = compile("fn f()\nend");
         assert!(bc.entry_point.is_none());
+    }
+
+    #[test]
+    fn void_call_no_pop() {
+        let bc = compile(
+            "buf: array[128] of int\nfn mutate(idx: int)\n  buf[idx] = 0\nend\nfn main()\n  mutate(1)\nend",
+        );
+        // Find the CALL in main's code and verify no POP follows it
+        let main_info = bc.functions.iter().find(|f| f.name == "main").unwrap();
+        let code = &bc.code[main_info.code_offset..];
+        let call_pos = code.windows(1).position(|w| w[0] == CALL).unwrap();
+        // CALL is followed by u16 func_idx + u8 n_args = 3 bytes
+        let after_call = call_pos + 1 + 3;
+        assert_ne!(code[after_call], POP, "void call should not emit POP");
     }
 }
