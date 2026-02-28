@@ -70,11 +70,11 @@ pub fn simplify(func: &mut LirFunc) {
                         op,
                         lhs,
                         rhs,
+                        is_fixed,
                         &consts,
                         &bools,
                         &mut func.blocks[block_idx].insts,
                         inst_idx,
-                        val,
                     ) {
                         match new {
                             Simplified::Replace(target) => {
@@ -202,21 +202,22 @@ enum Simplified {
     ConstBool(bool),
 }
 
-#[allow(clippy::too_many_arguments)]
 fn algebraic_simplify(
     op: BinOp,
     lhs: Value,
     rhs: Value,
+    is_fixed: bool,
     consts: &HashMap<Value, i16>,
     bools: &HashMap<Value, bool>,
     insts: &mut [(Value, LirInst)],
     inst_idx: usize,
-    val: Value,
 ) -> Option<Simplified> {
     let l_const = consts.get(&lhs).copied();
     let r_const = consts.get(&rhs).copied();
     let l_bool = bools.get(&lhs).copied();
     let r_bool = bools.get(&rhs).copied();
+
+    let one = if is_fixed { 128 } else { 1 };
 
     match op {
         // x + 0, 0 + x -> x
@@ -236,10 +237,10 @@ fn algebraic_simplify(
         }
         // x * 1, 1 * x -> x. x * 0, 0 * x -> 0
         BinOp::Mul => {
-            if r_const == Some(1) {
+            if r_const == Some(one) {
                 return Some(Simplified::Replace(lhs));
             }
-            if l_const == Some(1) {
+            if l_const == Some(one) {
                 return Some(Simplified::Replace(rhs));
             }
             if r_const == Some(0) {
@@ -253,7 +254,7 @@ fn algebraic_simplify(
         }
         // x / 1 -> x
         BinOp::Div => {
-            if r_const == Some(1) {
+            if r_const == Some(one) {
                 return Some(Simplified::Replace(lhs));
             }
         }
@@ -293,9 +294,6 @@ fn algebraic_simplify(
         }
         _ => {}
     }
-
-    // Suppress unused warning for val, it's used through insts[inst_idx].0
-    let _ = val;
 
     None
 }
