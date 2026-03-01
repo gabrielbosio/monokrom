@@ -1068,7 +1068,7 @@ mod tests {
     #[test]
     fn fixed_point_conversion() {
         let hir = lower("x = 1.5");
-        // 1.5 * 256 = 384
+        // 1.5 * 128 = 192
         // The global should be of Fixed type
         assert_eq!(hir.globals[0].ty, HirType::Fixed);
     }
