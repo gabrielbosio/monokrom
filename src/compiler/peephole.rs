@@ -90,7 +90,7 @@ pub fn optimize(bc: &mut Bytecode) {
     // Recount n_locals with corrected offsets
     for fi in 0..bc.functions.len() {
         let start = bc.functions[fi].code_offset;
-        let end = func_end_new(bc, fi);
+        let end = func_end(bc, fi);
         let mut max_slot: Option<u16> = None;
         let insts = parse_insts(&bc.code, start, end);
         for &(off, op, _) in &insts {
@@ -113,14 +113,6 @@ pub fn optimize(bc: &mut Bytecode) {
 }
 
 fn func_end(bc: &Bytecode, fi: usize) -> usize {
-    if fi + 1 < bc.functions.len() {
-        bc.functions[fi + 1].code_offset
-    } else {
-        bc.code.len()
-    }
-}
-
-fn func_end_new(bc: &Bytecode, fi: usize) -> usize {
     if fi + 1 < bc.functions.len() {
         bc.functions[fi + 1].code_offset
     } else {

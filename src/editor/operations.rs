@@ -9,6 +9,27 @@ pub type Clipboard = Option<arboard::Clipboard>;
 #[cfg(target_arch = "wasm32")]
 pub type Clipboard = Option<String>;
 
+/// If a selection is active, save undo state, delete the selected range, reposition cursor, and
+/// clear the selection. Returns true if a selection was deleted.
+fn delete_selection(
+    buffer: &mut TextBuffer,
+    cursor: &mut Cursor,
+    selection: &mut Selection,
+    history: &mut History,
+) -> bool {
+    if let Some((start, end)) = selection.get_range(buffer) {
+        if start != end {
+            history.push(buffer, cursor.position);
+            let (line, col) = buffer.char_to_line_col(start);
+            buffer.delete_range(start, end);
+            cursor.set_position(line, col);
+            selection.clear();
+            return true;
+        }
+    }
+    false
+}
+
 /// Insert a character at the cursor position
 pub fn insert_char(
     buffer: &mut TextBuffer,
@@ -17,17 +38,8 @@ pub fn insert_char(
     history: &mut History,
     c: char,
 ) {
-    // Save state before change
-    history.push(buffer, cursor.position);
-
-    // Delete selection if active
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-        }
+    if !delete_selection(buffer, cursor, selection, history) {
+        history.push(buffer, cursor.position);
     }
 
     // Insert character
@@ -49,15 +61,8 @@ pub fn insert_newline(
     selection: &mut Selection,
     history: &mut History,
 ) {
-    history.push(buffer, cursor.position);
-
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-        }
+    if !delete_selection(buffer, cursor, selection, history) {
+        history.push(buffer, cursor.position);
     }
 
     let indent: String = buffer
@@ -79,16 +84,8 @@ pub fn delete_before(
     selection: &mut Selection,
     history: &mut History,
 ) {
-    // If there's a selection, delete it
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            history.push(buffer, cursor.position);
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-            return;
-        }
+    if delete_selection(buffer, cursor, selection, history) {
+        return;
     }
 
     // No selection, delete char before cursor
@@ -119,16 +116,8 @@ pub fn delete_word_before(
     selection: &mut Selection,
     history: &mut History,
 ) {
-    // If there's a selection, delete it
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            history.push(buffer, cursor.position);
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-            return;
-        }
+    if delete_selection(buffer, cursor, selection, history) {
+        return;
     }
 
     if cursor.line() == 0 && cursor.col() == 0 {
@@ -138,7 +127,6 @@ pub fn delete_word_before(
     history.push(buffer, cursor.position);
 
     let end_idx = cursor.char_index(buffer);
-    // Move cursor to word boundary (same logic as move_word_left)
     cursor.move_word_left(buffer);
     let start_idx = cursor.char_index(buffer);
 
@@ -156,16 +144,8 @@ pub fn delete_word_after(
     selection: &mut Selection,
     history: &mut History,
 ) {
-    // If there's a selection, delete it
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            history.push(buffer, cursor.position);
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-            return;
-        }
+    if delete_selection(buffer, cursor, selection, history) {
+        return;
     }
 
     let last_line = buffer.line_count().saturating_sub(1);
@@ -286,16 +266,8 @@ pub fn delete_at(
     selection: &mut Selection,
     history: &mut History,
 ) {
-    // If there's a selection, delete it
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            history.push(buffer, cursor.position);
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-            return;
-        }
+    if delete_selection(buffer, cursor, selection, history) {
+        return;
     }
 
     // No selection, delete char at cursor
@@ -361,16 +333,7 @@ pub fn cut_selection(
         true
     };
 
-    // Delete the selection
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            history.push(buffer, cursor.position);
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-            selection.clear();
-        }
-    }
+    delete_selection(buffer, cursor, selection, history);
 
     (Some(text), clipboard_ok)
 }
@@ -387,15 +350,8 @@ pub fn paste(
         return;
     }
 
-    history.push(buffer, cursor.position);
-
-    // Delete selection if active
-    if let Some((start, end)) = selection.get_range(buffer) {
-        if start != end {
-            let (line, col) = buffer.char_to_line_col(start);
-            buffer.delete_range(start, end);
-            cursor.set_position(line, col);
-        }
+    if !delete_selection(buffer, cursor, selection, history) {
+        history.push(buffer, cursor.position);
     }
 
     // Insert pasted text

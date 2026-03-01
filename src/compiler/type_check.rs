@@ -686,7 +686,6 @@ impl TypeCheckCtx {
                 // Re-assignment to existing global, or complex target
                 Some(self.check_stmt(stmt))
             }
-            ast::StmtKind::Expression(_) => Some(self.check_stmt(stmt)),
             _ => Some(self.check_stmt(stmt)),
         }
     }

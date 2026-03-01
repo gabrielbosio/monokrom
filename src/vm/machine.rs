@@ -371,8 +371,7 @@ impl Vm {
                 self.pc = code_offset;
             }
             RET => {
-                let frame = self.call_stack.pop()
-                    .ok_or(VmError::CallStackUnderflow)?;
+                let frame = self.call_stack.pop().ok_or(VmError::CallStackUnderflow)?;
                 if frame.return_pc == usize::MAX {
                     self.halted = true;
                     return Ok(VmResult::Halted);

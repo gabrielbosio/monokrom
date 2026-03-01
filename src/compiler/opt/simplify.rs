@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::compiler::ast::{BinOp, UnaryOp};
 use crate::compiler::lir::{LirFunc, LirInst, Value};
 
-use super::apply_replacements;
+use super::{apply_replacements, resolve};
 
 pub fn simplify(func: &mut LirFunc) {
     let mut consts: HashMap<Value, i16> = HashMap::new();
@@ -28,8 +28,8 @@ pub fn simplify(func: &mut LirFunc) {
                     rhs,
                     is_fixed,
                 } => {
-                    let lhs = resolve_val(&replace, lhs);
-                    let rhs = resolve_val(&replace, rhs);
+                    let lhs = resolve(&replace, lhs);
+                    let rhs = resolve(&replace, rhs);
 
                     // Try constant fold
                     let l_const = consts.get(&lhs).copied();
@@ -96,7 +96,7 @@ pub fn simplify(func: &mut LirFunc) {
                     }
                 }
                 LirInst::UnaryOp { op, val: operand } => {
-                    let operand = resolve_val(&replace, operand);
+                    let operand = resolve(&replace, operand);
                     match op {
                         UnaryOp::Neg => {
                             if let Some(&n) = consts.get(&operand) {
@@ -116,7 +116,7 @@ pub fn simplify(func: &mut LirFunc) {
                 LirInst::Phi(entries) => {
                     let resolved: Vec<Value> = entries
                         .iter()
-                        .map(|(_, v)| resolve_val(&replace, *v))
+                        .map(|(_, v)| resolve(&replace, *v))
                         .filter(|v| *v != val)
                         .collect();
 
@@ -137,13 +137,6 @@ pub fn simplify(func: &mut LirFunc) {
     }
 
     apply_replacements(func, &replace);
-}
-
-fn resolve_val(replace: &HashMap<Value, Value>, mut v: Value) -> Value {
-    while let Some(&next) = replace.get(&v) {
-        v = next;
-    }
-    v
 }
 
 fn is_comparison(op: BinOp) -> bool {
