@@ -17,6 +17,7 @@ pub enum VmError {
     OutOfBounds(String),
     NoEntryPoint,
     CallStackOverflow,
+    CallStackUnderflow,
     UnknownOpcode(u8),
     CycleLimit,
 }
@@ -30,6 +31,7 @@ impl std::fmt::Display for VmError {
             Self::OutOfBounds(msg) => write!(f, "out of bounds: {msg}"),
             Self::NoEntryPoint => write!(f, "no main() function"),
             Self::CallStackOverflow => write!(f, "call stack overflow"),
+            Self::CallStackUnderflow => write!(f, "call stack underflow"),
             Self::UnknownOpcode(op) => write!(f, "unknown opcode 0x{op:02X}"),
             Self::CycleLimit => write!(f, "cycle limit exceeded"),
         }
@@ -369,7 +371,8 @@ impl Vm {
                 self.pc = code_offset;
             }
             RET => {
-                let frame = self.call_stack.pop().unwrap();
+                let frame = self.call_stack.pop()
+                    .ok_or(VmError::CallStackUnderflow)?;
                 if frame.return_pc == usize::MAX {
                     self.halted = true;
                     return Ok(VmResult::Halted);

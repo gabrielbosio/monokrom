@@ -249,28 +249,12 @@ impl<'a> LowerCtx<'a> {
 
     // --- Type helpers ---
 
-    fn type_size(&self, ty: &HirType) -> u8 {
+    fn type_size(&self, ty: &HirType) -> u16 {
         match ty {
             HirType::Int | HirType::Fixed | HirType::Str => 2,
             HirType::Bool => 1,
             HirType::Void => 0,
-            HirType::Array(elem, count) => (self.type_size(elem) as u16 * (*count as u16)) as u8,
-            HirType::Struct(name) => self
-                .module
-                .structs
-                .iter()
-                .find(|s| s.name == *name)
-                .map(|s| s.size as u8)
-                .unwrap_or(0),
-        }
-    }
-
-    fn type_size_u16(&self, ty: &HirType) -> u16 {
-        match ty {
-            HirType::Int | HirType::Fixed | HirType::Str => 2,
-            HirType::Bool => 1,
-            HirType::Void => 0,
-            HirType::Array(elem, count) => self.type_size_u16(elem) * (*count as u16),
+            HirType::Array(elem, count) => self.type_size(elem) * (*count as u16),
             HirType::Struct(name) => self
                 .module
                 .structs
@@ -288,22 +272,14 @@ impl<'a> LowerCtx<'a> {
         )
     }
 
+    // Globals are validated by the type-checker, so a missing name here is a compiler bug.
     fn find_global_addr(&self, name: &str) -> u16 {
         self.module
             .globals
             .iter()
             .find(|g| g.name == name)
-            .map(|g| g.address)
-            .unwrap_or(0)
-    }
-
-    fn find_global_type(&self, name: &str) -> &HirType {
-        self.module
-            .globals
-            .iter()
-            .find(|g| g.name == name)
-            .map(|g| &g.ty)
-            .unwrap_or(&HirType::Void)
+            .expect("unknown global in lowering")
+            .address
     }
 
     // --- Lowering expressions ---
@@ -331,7 +307,7 @@ impl<'a> LowerCtx<'a> {
                 let addr = self.find_global_addr(name);
                 let addr_val = self.emit(LirInst::GlobalAddr(addr));
                 if self.is_scalar(&expr.ty) {
-                    let size = self.type_size(&expr.ty);
+                    let size = self.type_size(&expr.ty) as u8;
                     self.emit(LirInst::Load {
                         addr: addr_val,
                         size,
@@ -376,7 +352,7 @@ impl<'a> LowerCtx<'a> {
             HirExprKind::Index { expr: base, index } => {
                 let addr = self.lower_addr_index(base, index, &expr.ty);
                 if self.is_scalar(&expr.ty) {
-                    let size = self.type_size(&expr.ty);
+                    let size = self.type_size(&expr.ty) as u8;
                     self.emit(LirInst::Load { addr, size })
                 } else {
                     addr
@@ -395,7 +371,7 @@ impl<'a> LowerCtx<'a> {
                     is_fixed: false,
                 });
                 if self.is_scalar(&expr.ty) {
-                    let size = self.type_size(&expr.ty);
+                    let size = self.type_size(&expr.ty) as u8;
                     self.emit(LirInst::Load { addr, size })
                 } else {
                     addr
@@ -441,7 +417,7 @@ impl<'a> LowerCtx<'a> {
     fn lower_addr_index(&mut self, base: &HirExpr, index: &HirExpr, elem_ty: &HirType) -> Value {
         let base_addr = self.lower_addr_of(base);
         let idx = self.lower_expr(index);
-        let elem_size = self.type_size_u16(elem_ty);
+        let elem_size = self.type_size(elem_ty);
         let size_val = self.emit(LirInst::Const(elem_size as i16));
         let offset = self.emit(LirInst::BinOp {
             op: BinOp::Mul,
@@ -507,7 +483,7 @@ impl<'a> LowerCtx<'a> {
                     _ => {
                         let addr = self.lower_addr_of(target);
                         let val = self.lower_expr(value);
-                        let size = self.type_size(&target.ty);
+                        let size = self.type_size(&target.ty) as u8;
                         self.emit(LirInst::Store { addr, val, size });
                     }
                 }
@@ -847,7 +823,7 @@ impl<'a> LowerCtx<'a> {
         if elem_var != "_" {
             let cur_idx = self.read_variable(index_var, self.current_block);
             let base_addr = self.lower_addr_of(iter);
-            let elem_size = self.type_size_u16(&elem_ty);
+            let elem_size = self.type_size(&elem_ty);
             let size_val = self.emit(LirInst::Const(elem_size as i16));
             let offset = self.emit(LirInst::BinOp {
                 op: BinOp::Mul,
@@ -862,7 +838,7 @@ impl<'a> LowerCtx<'a> {
                 is_fixed: false,
             });
             if self.is_scalar(&elem_ty) {
-                let size = self.type_size(&elem_ty);
+                let size = self.type_size(&elem_ty) as u8;
                 let elem_val = self.emit(LirInst::Load {
                     addr: elem_addr,
                     size,
@@ -922,7 +898,7 @@ fn alloc_compound_locals(ctx: &mut LowerCtx, func: &HirFunc) {
     for (name, ty) in &func.locals {
         if !ctx.is_scalar(ty) {
             let addr = ctx.next_compound_addr;
-            ctx.next_compound_addr += ctx.type_size_u16(ty);
+            ctx.next_compound_addr += ctx.type_size(ty);
             ctx.compound_local_addrs.insert(name.clone(), addr);
         }
     }
@@ -950,7 +926,7 @@ fn lower_function(module: &HirModule, func: &HirFunc, globals_size: u16) -> (Lir
             if let Some(init) = &g.init {
                 let val = ctx.lower_expr(init);
                 let addr = ctx.emit(LirInst::GlobalAddr(g.address));
-                let size = ctx.type_size(&g.ty);
+                let size = ctx.type_size(&g.ty) as u8;
                 ctx.emit(LirInst::Store { addr, val, size });
             }
         }
