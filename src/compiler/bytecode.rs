@@ -147,9 +147,8 @@ pub fn intrinsic_has_return_value(op: Intrinsic) -> bool {
     )
 }
 
-/// Decode an opcode byte back to its name (for tests/debugging).
-/// Returns None for unknown bytes.
-pub fn op_name(b: u8) -> Option<&'static str> {
+#[cfg(test)]
+fn op_name(b: u8) -> Option<&'static str> {
     match b {
         PUSH0 => Some("Push0"),
         PUSH1 => Some("Push1"),
@@ -222,8 +221,8 @@ pub fn op_name(b: u8) -> Option<&'static str> {
     }
 }
 
-/// All valid opcode byte values.
-pub const ALL_OPCODES: [u8; 67] = [
+#[cfg(test)]
+const ALL_OPCODES: [u8; 67] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -295,7 +294,6 @@ pub const ALL_OPCODES: [u8; 67] = [
 
 #[derive(Debug)]
 pub struct FuncInfo {
-    pub name: String,
     pub code_offset: usize,
     pub n_params: u8,
     pub n_locals: u16,
@@ -352,69 +350,6 @@ impl Bytecode {
     pub fn pos(&self) -> usize {
         self.code.len()
     }
-}
-
-pub fn disassemble(bc: &Bytecode) -> Vec<String> {
-    let mut lines = Vec::new();
-
-    for (fi, func) in bc.functions.iter().enumerate() {
-        lines.push(format!(
-            "--- {} (offset={}, params={}, locals={}) ---",
-            func.name, func.code_offset, func.n_params, func.n_locals
-        ));
-
-        let end = if fi + 1 < bc.functions.len() {
-            bc.functions[fi + 1].code_offset
-        } else {
-            bc.code.len()
-        };
-
-        let mut pc = func.code_offset;
-        while pc < end {
-            let op = bc.code[pc];
-            let name = op_name(op).unwrap_or("???");
-            match op {
-                PUSH_I8 => {
-                    let v = bc.code[pc + 1] as i8;
-                    lines.push(format!("{pc:04X}: {name} {v}"));
-                    pc += 2;
-                }
-                PUSH_I16 => {
-                    let v = i16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
-                    lines.push(format!("{pc:04X}: {name} {v}"));
-                    pc += 3;
-                }
-                LOAD_LOCAL | STORE_LOCAL => {
-                    let slot = u16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
-                    lines.push(format!("{pc:04X}: {name} {slot}"));
-                    pc += 3;
-                }
-                JUMP | JUMP_IF_FALSE => {
-                    let off = i16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
-                    let sign = if off >= 0 { "+" } else { "" };
-                    lines.push(format!("{pc:04X}: {name} {sign}{off}"));
-                    pc += 3;
-                }
-                CALL => {
-                    let fidx = u16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
-                    let argc = bc.code[pc + 3];
-                    lines.push(format!("{pc:04X}: {name} #{fidx} ({argc} args)"));
-                    pc += 4;
-                }
-                _ => {
-                    lines.push(format!("{pc:04X}: {name}"));
-                    pc += 1;
-                }
-            }
-        }
-    }
-
-    lines.push(format!(
-        "{} bytes, {} fn",
-        bc.code.len(),
-        bc.functions.len()
-    ));
-    lines
 }
 
 #[cfg(test)]

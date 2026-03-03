@@ -41,7 +41,6 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
         emit_function(&mut bc, func, &func_indices, &void_funcs)?;
 
         bc.functions.push(FuncInfo {
-            name: func.name.clone(),
             code_offset,
             n_params,
             n_locals,
@@ -450,7 +449,6 @@ mod tests {
     fn empty_function() {
         let bc = compile("fn f()\nend");
         assert!(!bc.functions.is_empty());
-        assert_eq!(bc.functions[0].name, "f");
         assert!(has_opcode(&bc.code, RET));
     }
 
@@ -520,7 +518,7 @@ mod tests {
             "buf: array[128] of int\nfn mutate(idx: int)\n  buf[idx] = 0\nend\nfn main()\n  mutate(1)\nend",
         );
         // Find the CALL in main's code and verify no POP follows it
-        let main_info = bc.functions.iter().find(|f| f.name == "main").unwrap();
+        let main_info = bc.functions.last().unwrap();
         let code = &bc.code[main_info.code_offset..];
         let call_pos = code.windows(1).position(|w| w[0] == CALL).unwrap();
         // CALL is followed by u16 func_idx + u8 n_args = 3 bytes

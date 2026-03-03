@@ -17,24 +17,9 @@ impl Selection {
         }
     }
 
-    /// Check if there is an active selection
-    #[allow(dead_code)] // Used in tests
-    pub fn is_active(&self) -> bool {
-        self.anchor.is_some()
-    }
-
     /// Start a new selection at the current cursor position
     pub fn start(&mut self, cursor: CursorPosition) {
         self.anchor = Some(cursor);
-        self.cursor = cursor;
-    }
-
-    /// Extend selection to the given cursor position
-    #[allow(dead_code)] // Used in tests
-    pub fn extend_to(&mut self, cursor: CursorPosition) {
-        if self.anchor.is_none() {
-            self.anchor = Some(self.cursor);
-        }
         self.cursor = cursor;
     }
 
@@ -85,17 +70,6 @@ impl Selection {
         Some(buffer.get_range(start, end))
     }
 
-    /// Check if a given line/col is within the selection
-    #[allow(dead_code)] // Used in tests
-    pub fn contains(&self, line: usize, col: usize, buffer: &TextBuffer) -> bool {
-        if let Some((start, end)) = self.get_range(buffer) {
-            let idx = buffer.line_col_to_char(line, col);
-            idx >= start && idx < end
-        } else {
-            false
-        }
-    }
-
     /// Get selection info for a specific line (start_col, end_col within the line)
     pub fn get_line_selection(&self, line: usize, buffer: &TextBuffer) -> Option<(usize, usize)> {
         let (start_pos, end_pos) = self.get_ordered_positions()?;
@@ -124,6 +98,29 @@ impl Selection {
         }
 
         Some((start_col, end_col))
+    }
+}
+
+#[cfg(test)]
+impl Selection {
+    pub fn is_active(&self) -> bool {
+        self.anchor.is_some()
+    }
+
+    pub fn extend_to(&mut self, cursor: CursorPosition) {
+        if self.anchor.is_none() {
+            self.anchor = Some(self.cursor);
+        }
+        self.cursor = cursor;
+    }
+
+    pub fn contains(&self, line: usize, col: usize, buffer: &TextBuffer) -> bool {
+        if let Some((start, end)) = self.get_range(buffer) {
+            let idx = buffer.line_col_to_char(line, col);
+            idx >= start && idx < end
+        } else {
+            false
+        }
     }
 }
 

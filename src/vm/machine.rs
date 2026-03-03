@@ -723,7 +723,6 @@ mod tests {
         Bytecode {
             entry_point: Some(0),
             functions: vec![FuncInfo {
-                name: "main".into(),
                 code_offset: 0,
                 n_params: 0,
                 n_locals,
@@ -966,13 +965,11 @@ mod tests {
             entry_point: Some(main_offset),
             functions: vec![
                 FuncInfo {
-                    name: "add".into(),
                     code_offset: 0,
                     n_params: 2,
                     n_locals: 2,
                 },
                 FuncInfo {
-                    name: "main".into(),
                     code_offset: main_offset,
                     n_params: 0,
                     n_locals: 1,

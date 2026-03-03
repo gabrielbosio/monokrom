@@ -138,21 +138,9 @@ impl TextBuffer {
         }
     }
 
-    /// Check if buffer is empty
-    #[allow(dead_code)] // Used in tests
-    pub fn is_empty(&self) -> bool {
-        self.rope.len_chars() == 0
-    }
-
     /// Get total character count
     pub fn len_chars(&self) -> usize {
         self.rope.len_chars()
-    }
-
-    /// Clear the buffer
-    #[allow(dead_code)] // Used in tests
-    pub fn clear(&mut self) {
-        self.rope = Rope::new();
     }
 
     /// Clone the underlying rope for undo snapshots
@@ -165,6 +153,17 @@ impl TextBuffer {
     /// Restore from a snapshot
     pub fn restore(&mut self, snapshot: &Self) {
         self.rope = snapshot.rope.clone();
+    }
+}
+
+#[cfg(test)]
+impl TextBuffer {
+    pub fn is_empty(&self) -> bool {
+        self.rope.len_chars() == 0
+    }
+
+    pub fn clear(&mut self) {
+        self.rope = Rope::new();
     }
 }
 

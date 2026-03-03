@@ -11,8 +11,11 @@ impl CursorPosition {
         Self { line, col }
     }
 
+}
+
+#[cfg(test)]
+impl CursorPosition {
     /// Clamp cursor position to valid buffer bounds
-    #[allow(dead_code)] // Used in tests
     pub fn clamp(&self, buffer: &TextBuffer) -> Self {
         let line = self.line.min(buffer.line_count().saturating_sub(1).max(0));
         let col = self.col.min(buffer.line_len(line));
