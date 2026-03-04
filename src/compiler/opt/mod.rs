@@ -55,42 +55,8 @@ fn apply_replacements(func: &mut LirFunc, map: &HashMap<Value, Value>) {
     }
     for block in &mut func.blocks {
         for (_, inst) in &mut block.insts {
-            match inst {
-                LirInst::BinOp { lhs, rhs, .. } => {
-                    *lhs = resolve(map, *lhs);
-                    *rhs = resolve(map, *rhs);
-                }
-                LirInst::UnaryOp { val, .. } => {
-                    *val = resolve(map, *val);
-                }
-                LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => {
-                    for a in args.iter_mut() {
-                        *a = resolve(map, *a);
-                    }
-                }
-                LirInst::Load { addr, .. } => {
-                    *addr = resolve(map, *addr);
-                }
-                LirInst::Store { addr, val, .. } => {
-                    *addr = resolve(map, *addr);
-                    *val = resolve(map, *val);
-                }
-                LirInst::Phi(entries) => {
-                    for (_, v) in entries.iter_mut() {
-                        *v = resolve(map, *v);
-                    }
-                }
-                LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => {}
-            }
+            inst.replace_values(|v| resolve(map, v));
         }
-        match &mut block.terminator {
-            Terminator::Branch { cond, .. } => {
-                *cond = resolve(map, *cond);
-            }
-            Terminator::Return(Some(v)) => {
-                *v = resolve(map, *v);
-            }
-            Terminator::Jump(_) | Terminator::Return(None) => {}
-        }
+        block.terminator.replace_values(|v| resolve(map, v));
     }
 }
