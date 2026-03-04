@@ -987,16 +987,13 @@ mod tests {
     use super::*;
     use crate::compiler::hir::Intrinsic;
     use crate::compiler::lir::*;
+    use crate::compiler::test_helpers::find_func;
     use crate::compiler::{lower, parse};
 
     fn lir(src: &str) -> LirModule {
         let ast = parse(src).unwrap();
         let hir = lower(&ast).unwrap();
         lower_to_lir(&hir)
-    }
-
-    fn find_func<'a>(m: &'a LirModule, name: &str) -> &'a LirFunc {
-        m.functions.iter().find(|f| f.name == name).unwrap()
     }
 
     #[test]

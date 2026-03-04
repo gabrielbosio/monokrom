@@ -79,20 +79,7 @@ pub fn eliminate(func: &mut LirFunc) {
 #[cfg(test)]
 mod tests {
     use crate::compiler::lir::*;
-    use crate::compiler::opt::optimize;
-    use crate::compiler::{lower, parse};
-
-    fn optimized_lir(src: &str) -> LirModule {
-        let ast = parse(src).unwrap();
-        let hir = lower(&ast).unwrap();
-        let mut module = crate::compiler::hir_to_lir::lower_to_lir(&hir);
-        optimize(&mut module);
-        module
-    }
-
-    fn find_func<'a>(m: &'a LirModule, name: &str) -> &'a LirFunc {
-        m.functions.iter().find(|f| f.name == name).unwrap()
-    }
+    use crate::compiler::test_helpers::*;
 
     #[test]
     fn eliminate_duplicate() {

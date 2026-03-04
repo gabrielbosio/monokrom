@@ -210,6 +210,31 @@ pub fn compile(source: &str) -> Result<bytecode::Bytecode, Vec<String>> {
 }
 
 #[cfg(test)]
+pub(crate) mod test_helpers {
+    use super::lir::*;
+    use super::opt::optimize;
+    use super::{lower, parse};
+
+    pub fn optimized_lir(src: &str) -> LirModule {
+        let ast = parse(src).unwrap();
+        let hir = lower(&ast).unwrap();
+        let mut module = super::hir_to_lir::lower_to_lir(&hir);
+        optimize(&mut module);
+        module
+    }
+
+    pub fn find_func<'a>(m: &'a LirModule, name: &str) -> &'a LirFunc {
+        m.functions.iter().find(|f| f.name == name).unwrap()
+    }
+
+    pub fn has_inst(f: &LirFunc, pred: impl Fn(&LirInst) -> bool) -> bool {
+        f.blocks
+            .iter()
+            .any(|b| b.insts.iter().any(|(_, inst)| pred(inst)))
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::ast::*;
     use super::*;
