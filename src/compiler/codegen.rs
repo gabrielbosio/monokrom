@@ -118,6 +118,15 @@ fn terminator_operands(term: &Terminator) -> Vec<Value> {
     }
 }
 
+fn emit_store_or_pop(bc: &mut Bytecode, val: Value, used: bool) {
+    if used {
+        bc.emit_op(STORE_LOCAL);
+        bc.emit_u16(val.0 as u16);
+    } else {
+        bc.emit_op(POP);
+    }
+}
+
 fn emit_const(bc: &mut Bytecode, n: i16) {
     match n {
         0 => bc.emit_op(PUSH0),
@@ -211,12 +220,7 @@ fn emit_instruction(
     match inst {
         LirInst::Const(n) => {
             emit_const(bc, *n);
-            if used {
-                bc.emit_op(STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else {
-                bc.emit_op(POP);
-            }
+            emit_store_or_pop(bc, val, used);
         }
         LirInst::ConstBool(b) => {
             if *b {
@@ -224,21 +228,11 @@ fn emit_instruction(
             } else {
                 bc.emit_op(PUSH0);
             }
-            if used {
-                bc.emit_op(STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else {
-                bc.emit_op(POP);
-            }
+            emit_store_or_pop(bc, val, used);
         }
         LirInst::GlobalAddr(addr) => {
             emit_const(bc, *addr as i16);
-            if used {
-                bc.emit_op(STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else {
-                bc.emit_op(POP);
-            }
+            emit_store_or_pop(bc, val, used);
         }
         LirInst::BinOp {
             op,
@@ -259,23 +253,13 @@ fn emit_instruction(
             } else {
                 bc.emit_op(binop_opcode(*op));
             }
-            if used {
-                bc.emit_op(STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else {
-                bc.emit_op(POP);
-            }
+            emit_store_or_pop(bc, val, used);
         }
         LirInst::UnaryOp { op, val: operand } => {
             bc.emit_op(LOAD_LOCAL);
             bc.emit_u16(operand.0 as u16);
             bc.emit_op(unaryop_opcode(*op));
-            if used {
-                bc.emit_op(STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else {
-                bc.emit_op(POP);
-            }
+            emit_store_or_pop(bc, val, used);
         }
         LirInst::Call { name, args } => {
             for arg in args {
@@ -302,12 +286,7 @@ fn emit_instruction(
             }
             bc.emit_op(intrinsic_opcode(*op));
             if intrinsic_has_return_value(*op) {
-                if used {
-                    bc.emit_op(STORE_LOCAL);
-                    bc.emit_u16(val.0 as u16);
-                } else {
-                    bc.emit_op(POP);
-                }
+                emit_store_or_pop(bc, val, used);
             }
         }
         LirInst::Load { addr, size } => {
@@ -317,12 +296,7 @@ fn emit_instruction(
                 1 => bc.emit_op(LOAD1),
                 _ => bc.emit_op(LOAD2),
             }
-            if used {
-                bc.emit_op(STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else {
-                bc.emit_op(POP);
-            }
+            emit_store_or_pop(bc, val, used);
         }
         LirInst::Store {
             addr,

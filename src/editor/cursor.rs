@@ -10,7 +10,6 @@ impl CursorPosition {
     pub fn new(line: usize, col: usize) -> Self {
         Self { line, col }
     }
-
 }
 
 #[cfg(test)]
