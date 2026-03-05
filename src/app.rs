@@ -1407,8 +1407,7 @@ impl App {
                 self.terminal.push_output("  open <name> open file");
                 self.terminal.push_output("  rm <name>   remove file");
                 self.terminal.push_output("  cp <s> <d>  copy file");
-                self.terminal.push_output("  example     list examples");
-                self.terminal.push_output("  example <n> load example");
+                self.terminal.push_output("  example     list/load example");
                 self.terminal.push_output("  run         run program");
                 self.terminal.push_output("  stat        bytecode size");
                 self.terminal.push_output("  clear       clear screen");
