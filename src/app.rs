@@ -17,6 +17,8 @@ use crate::ui::{
 };
 use crate::vm::Vm;
 
+const EXAMPLES: &[(&str, &str)] = &[("tictactoe", include_str!("../examples/tictactoe.mkr"))];
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 enum PendingAction {
     #[default]
@@ -1344,6 +1346,35 @@ impl App {
                     Err(e) => self.terminal.push_output(&format!("error: {e}")),
                 }
             }
+            TerminalCommand::Example(name) => match name {
+                None => {
+                    for (name, _) in EXAMPLES {
+                        self.terminal.push_output(&format!("  {name}"));
+                    }
+                }
+                Some(name) => match EXAMPLES.iter().find(|(n, _)| *n == name) {
+                    Some((_, content)) => {
+                        let filename = format!("{name}.mkr");
+                        match filesystem::write_file(&filename, content) {
+                            Ok(()) => {
+                                if self.is_modified {
+                                    self.pending_action = PendingAction::OpenNamed(filename);
+                                    self.mode = AppMode::CloseConfirm;
+                                    self.confirm_dialog.show("Save changes?");
+                                } else {
+                                    self.open_file(&filename);
+                                    self.terminal.push_output(&format!("opened {filename}"));
+                                    self.mode = AppMode::Editing;
+                                }
+                            }
+                            Err(e) => self.terminal.push_output(&format!("error: {e}")),
+                        }
+                    }
+                    None => self
+                        .terminal
+                        .push_output(&format!("unknown example: {name}")),
+                },
+            },
             TerminalCommand::Run => self.run_program(),
             TerminalCommand::Stat => {
                 let source = self.editor.buffer.to_string();
@@ -1376,6 +1407,8 @@ impl App {
                 self.terminal.push_output("  open <name> open file");
                 self.terminal.push_output("  rm <name>   remove file");
                 self.terminal.push_output("  cp <s> <d>  copy file");
+                self.terminal.push_output("  example     list examples");
+                self.terminal.push_output("  example <n> load example");
                 self.terminal.push_output("  run         run program");
                 self.terminal.push_output("  stat        bytecode size");
                 self.terminal.push_output("  clear       clear screen");

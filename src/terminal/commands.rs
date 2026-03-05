@@ -1,5 +1,5 @@
 pub const COMMAND_NAMES: &[&str] = &[
-    "clear", "cp", "help", "ls", "new", "open", "rm", "run", "save", "stat",
+    "clear", "cp", "example", "help", "ls", "new", "open", "rm", "run", "save", "stat",
 ];
 
 pub enum TerminalCommand {
@@ -9,6 +9,7 @@ pub enum TerminalCommand {
     Open(String),
     Rm(String),
     Cp(String, String),
+    Example(Option<String>),
     Run,
     Stat,
     Clear,
@@ -68,6 +69,7 @@ pub fn parse_command(input: &str) -> TerminalCommand {
             },
             _ => TerminalCommand::Unknown("cp: usage: cp <src> <dst>".to_string()),
         },
+        "example" => TerminalCommand::Example(arg.map(|(s, _)| s.to_string())),
         "run" => TerminalCommand::Run,
         "stat" => TerminalCommand::Stat,
         "clear" => TerminalCommand::Clear,
@@ -289,6 +291,22 @@ mod tests {
                 assert_eq!(d, "dst");
             }
             _ => panic!("expected Cp"),
+        }
+    }
+
+    #[test]
+    fn parse_example_list() {
+        assert!(matches!(
+            parse_command("example"),
+            TerminalCommand::Example(None)
+        ));
+    }
+
+    #[test]
+    fn parse_example_with_name() {
+        match parse_command("example tictactoe") {
+            TerminalCommand::Example(Some(name)) => assert_eq!(name, "tictactoe"),
+            _ => panic!("expected Example(Some)"),
         }
     }
 

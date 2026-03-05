@@ -1,0 +1,231 @@
+// Tic-Tac-Toe
+
+// Because Monokrom only allows
+// keyboard input we use a cursor to
+// enable players select what board
+// cell to mark.
+struct Cursor
+  x: int
+  y: int
+end
+
+// Game state
+struct Game
+  cursor: Cursor
+  turn: int
+  board: array[9] of int
+  finished: bool
+end
+
+// The main function is the entrypoint
+// Monokrom uses to start executing a
+// game. This is the first function
+// that is going to be executed when
+// running the game.
+fn main()
+  // Instantiate Game struct with all
+  // its fields set at their default
+  // values.
+  game: Game
+  // Call reset function to initialize
+  // the game instance.
+  reset(game)
+
+  // Basic game loop divided in
+  // game logic and drawing logic
+  while true
+    update(game)
+    draw(game)
+  end
+end
+
+// Game logic mainly consists of
+// handling player input. How the game
+// reacts to player input depends if
+// the game is finished or not.
+fn update(game: Game)
+  // The game state machine only
+  // consists of 2 states and it
+  // changes wether the game is
+  // finished or not. THe game will be
+  // considered finished if a player
+  // wins or if there is a draw.
+  if game.finished
+    // On a game finished, press Z to
+    // restart.
+    if btnp(4)
+      reset(game)
+    end
+  else
+    // If the game is not finished yet
+    // handle the player input and
+    // update the game struct
+    // accordingly
+    handle_input(game)
+  end
+end
+
+// Given player input, change the
+// game struct and check for winners
+// or if the game ends in a draw.
+fn handle_input(game: Game)
+  // Alias to reduce line length
+  cursor = game.cursor
+
+  // Press Left key to move the cursor
+  // to the left, if possible
+  if btnp(0) and not btnp(1)
+    cursor.x = max(cursor.x - 1, 0)
+  // Press Right key to move the
+  // cursor to the right, if possible
+  else if btnp(1) and not btnp(0)
+    cursor.x = min(cursor.x + 1, 2)
+  end
+
+  // Press Up key to move the cursor
+  // up, if possible
+  if btnp(2) and not btnp(3)
+    cursor.y = max(cursor.y - 1, 0)
+  // Press Down key to move the cursor
+  // down, if possible
+  else if btnp(3) and not btnp(2)
+    cursor.y = min(cursor.y + 1, 2)
+  end
+
+  // We have to convert the
+  // two-dimensional representation of
+  // the board to the one-dimensional
+  // data structure used.
+  cell_idx = cursor.x + cursor.y * 3
+  empty_cell = game.board[cell_idx] == 0
+  // Press Z if the cursor is
+  // positioned in an empty cell to
+  // insert your mark (X or O).
+  if btnp(4) and empty_cell
+    game.board[cell_idx] = game.turn
+    // Check if adding a mark in the
+    // board makes a player win the
+    // game
+    winner = check_winner(game)
+    // If there is a winner, we change
+    // the game state.
+    if winner > 0
+      game.finished = true
+    // If there is not a winner yet,
+    // we end the current player's
+    // turn.
+    else if game.turn == 1
+      game.turn = 2
+    else
+      game.turn = 1
+    end
+  end
+end
+
+// Given the current game board,
+// returns:
+// - 0 if there is no winner yet
+// - 1 if the player 1 won
+// - 2 if the player 2 won
+fn check_winner(game: Game): int
+  /*
+  Board:
+  0 1 2
+  3 4 5
+  6 7 8
+  */
+  turn = game.turn
+  board = game.board
+
+  // Check horizontals and verticals
+  for i in 0..3
+    if ((board[0 + i*3] == turn and
+        board[1 + i*3] == turn and
+        board[2 + i*3] == turn) or
+        (board[i] == turn and
+        board[i + 3] == turn and
+        board[i + 6] == turn))
+      return turn
+    end
+  end
+
+  // Check diagonals
+  if (board[0] == board[4] and
+    board[0] == board[8])
+    return board[0]
+  end
+  if (board[2] == board[4] and
+    board[2] == board[6])
+    return board[2]
+  end
+
+  return 0
+end
+
+// Draw the game board and the marks
+// the players have done at the moment
+fn draw(game: Game)
+  cls(0)
+  // Draw board
+  line(20 + 40, 12, 20 + 40, 12 + 120, 1)
+  line(20 + 80, 12, 20 + 80, 12 + 120, 1)
+  line(20, 12 + 40, 20 + 120, 12 + 40, 1)
+  line(20, 12 + 80, 20 + 120, 12 + 80, 1)
+  // Draw marks
+  for i, cell in game.board
+    cell_x = i % 3
+    cell_y = i / 3
+    if cell == 1
+      // Draw X
+      line(20 + 16 + cell_x * 40, 12 + 16 + cell_y * 40, 20 + 16 + 8 + cell_x * 40, 12 + 16 + 8 + cell_y * 40, 3)
+      line(20 + 16 + cell_x * 40, 12 + 16 + 8 + cell_y * 40, 20 + 16 + 8 + cell_x * 40, 12 + 16 + cell_y * 40, 3)
+    else if cell == 2
+      // Draw O
+      circ(20 + 16 + 4 + cell_x * 40, 12 + 16 + 4 + cell_y * 40, 5, 3)
+      circ(20 + 16 + 4 + cell_x * 40, 12 + 16 + 4 + cell_y * 40, 4, 0)
+    end
+  end
+
+  // If the game is finished, is not
+  // necessary to draw the cursor
+  // since players cannot move it.
+  // Instead we draw a message noting
+  // which player won.
+  if game.finished
+    // Draw the following message:
+    // "PLAYER 1 WINS" if player 1 won
+    // or "PLAYER 2 WINS" if player 2
+    // won.
+    prints("PLAYER ", 55, 135, 3)
+    printn(game.turn, 55 + 28, 135, 3)
+    prints(" WINS", 55 + 28 + 4, 135, 3)
+  else
+    // Draw cursor
+    x = game.cursor.x
+    y = game.cursor.y
+    line(20 + x * 40, 12 + y * 40, 20 + 40 + x * 40, 12 + y * 40, 2)
+    line(20 + 40 + x * 40, 12 + y * 40, 20 + 40 + x * 40, 12 + 40 + y * 40, 2)
+    line(20 + 40 + x * 40, 12 + 40 + y * 40, 20 + x * 40, 12 + 40 + y * 40, 2)
+    line(20 + x * 40, 12 + 40 + y * 40, 20 + x * 40, 12 + y * 40, 2)
+  end
+
+  // Once we store everything we need
+  // in the frame buffer we tell
+  // Monokrom to show it in the screen
+  // and sleep the process enough time
+  // to keep framerate stable.
+  flip()
+end
+
+// Resets game state. Cleans game
+// board. Useful to restart the game
+// once finished.
+fn reset(game: Game)
+  game.cursor.x = 0
+  game.cursor.y = 0
+  game.turn = 1
+  game.finished = false
+  for i, _ in game.board
+    game.board[i] = 0
+  end
+end
