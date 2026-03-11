@@ -47,6 +47,8 @@ Monokrom boots into a terminal. Press Escape to toggle between terminal and edit
 - `ls`, list files
 - `cp <src> <dst>`, copy file
 - `rm <file>`, remove file
+- `example`, list built-in examples
+- `example <name>`, load an example into the editor (e.g. `example tictactoe`)
 
 ### Editor hotkeys
 
