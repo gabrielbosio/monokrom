@@ -49,6 +49,14 @@ Monokrom boots into a terminal. Press Escape to toggle between terminal and edit
 - `rm <file>`, remove file
 - `example`, list built-in examples
 - `example <name>`, load an example into the editor (e.g. `example tictactoe`)
+- `export <name>`: export game as a standalone binary
+
+### Exporting
+
+The `export` command bundles your game with the Monokrom engine so it can run directly without the editor.
+
+- **Native**: `export mygame` creates a self-contained executable in the current directory. Run it with `./mygame`.
+- **WASM**: `export mygame` downloads `mygame.html`. Serve it alongside the runtime files (`gl.js`, `sapp_jsutils.js`, `quad-storage.js`, `monokrom.js`, `monokrom.wasm`).
 
 ### Editor hotkeys
 
