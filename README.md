@@ -10,7 +10,7 @@ Built in Rust with Macroquad.
 - Palette: 4-color monochrome (black, dark gray, light gray, white)
 - Bytecode limit: 32KB
 - Runtime memory: 16KB flat
-- Sprites: 8x8
+- Sprites: 256 sprites, 8x8 pixels, 2bpp (4 colors), memory-mapped at 0x3000
 
 ## Language
 
@@ -60,7 +60,7 @@ The `export` command bundles your game with the Monokrom engine so it can run di
 
 ### Editor hotkeys
 
-On the WASM build, all Ctrl shortcuts use Alt instead (browsers intercept Ctrl combos).
+On macOS, word operations use Option instead of Ctrl (Ctrl+Arrow is intercepted by the OS). On WASM, all Ctrl shortcuts use Alt instead (browsers intercept Ctrl combos).
 
 - **Ctrl+S** save, **Ctrl+O** open, **Ctrl+N** new file
 - **Ctrl+Enter** run program
@@ -68,10 +68,22 @@ On the WASM build, all Ctrl shortcuts use Alt instead (browsers intercept Ctrl c
 - **Ctrl+X/C/V** cut, copy, paste
 - **Ctrl+A** select all
 - **Ctrl+F** find, **Ctrl+R** replace, **Ctrl+L** go to line
-- **Ctrl+Left/Right** word movement, **Ctrl+Backspace** word delete
-- **Ctrl+Up/Down** scroll viewport one line
+- **Ctrl+Left/Right** word movement, **Ctrl+Backspace** word delete (macOS: Option instead of Ctrl)
+- **Ctrl+Up/Down** scroll viewport one line (macOS: Option instead of Ctrl)
 - **Shift+arrows** selection, **Shift+Home/End** select to line start/end
-- **Ctrl+Shift+Left/Right** select by word
+- **Ctrl+Shift+Left/Right** select by word (macOS: Option+Shift)
 - **PageUp/PageDown** move cursor by page
 - **Tab/Shift+Tab** indent/dedent (block indent when multi-line selected)
-- **Escape** toggle terminal/editor
+- **Escape** cycle between terminal, editor, and sprite editor
+
+### Sprite editor
+
+Press Escape from the code editor to enter the sprite editor.
+
+- **Arrow keys** move cursor on the 8x8 pixel grid
+- **Z** paint pixel with current color
+- **X** cycle color (0–3, color 0 is transparent)
+- **Enter** next sprite, **Right Shift** previous sprite
+- **Escape** return to terminal
+
+Sprite data is saved alongside source code in `.mkr` files and included in exports.
