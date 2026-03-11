@@ -1,4 +1,5 @@
 use crate::compiler::bytecode::*;
+use crate::config::{SPRITE_COUNT, SPRITE_REGION_START, SPRITE_SIZE};
 use crate::render::font::FONT_DATA;
 
 const STACK_LIMIT: usize = 256;
@@ -425,10 +426,10 @@ impl Vm {
                 self.fb_circ(x as i32, y as i32, r as i32, col as u8);
             }
             OP_SPR => {
-                // stub: pop 3 args, no-op
-                self.pop()?;
-                self.pop()?;
-                self.pop()?;
+                let y = self.pop()?;
+                let x = self.pop()?;
+                let n = self.pop()?;
+                self.fb_spr(n as u16, x as i32, y as i32);
             }
             OP_PRINTS => {
                 let col = self.pop()?;
@@ -681,6 +682,29 @@ impl Vm {
     fn fb_hline(&mut self, x0: i32, x1: i32, y: i32, col: u8) {
         for px in x0..=x1 {
             self.fb_pset(px, y, col);
+        }
+    }
+
+    fn fb_spr(&mut self, n: u16, x: i32, y: i32) {
+        if n as usize >= SPRITE_COUNT {
+            return;
+        }
+        let base = SPRITE_REGION_START + n as usize * SPRITE_SIZE;
+        for row in 0..8i32 {
+            let b0 = self.memory[base + row as usize * 2];
+            let b1 = self.memory[base + row as usize * 2 + 1];
+            for col in 0..4i32 {
+                let c0 = (b0 >> (6 - col * 2)) & 3;
+                if c0 != 0 {
+                    self.fb_pset(x + col, y + row, c0);
+                }
+            }
+            for col in 0..4i32 {
+                let c1 = (b1 >> (6 - col * 2)) & 3;
+                if c1 != 0 {
+                    self.fb_pset(x + 4 + col, y + row, c1);
+                }
+            }
         }
     }
 
@@ -1081,5 +1105,34 @@ mod tests {
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "12");
+    }
+
+    #[test]
+    fn spr_renders_pixels() {
+        // Manually poke sprite 0 data and call spr(0, 10, 20)
+        let src =
+            "fn main()\n  poke(12288, 0xFF)\n  poke(12289, 0x00)\n  spr(0, 10, 20)\n  flip()\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        let result = vm.run_until_flip().unwrap();
+        assert_eq!(result, VmResult::Flip);
+        // First byte 0xFF = four pixels of color 3 (columns 0-3, row 0)
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 3); // (10,20) = color 3
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 11], 3); // (11,20) = color 3
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 12], 3); // (12,20) = color 3
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 13], 3); // (13,20) = color 3
+                                                           // Second byte 0x00 = four transparent pixels (columns 4-7)
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 14], 0); // (14,20) = transparent
+    }
+
+    #[test]
+    fn spr_transparency() {
+        // Color 0 should not overwrite existing pixels
+        let src = "fn main()\n  cls(0)\n  pset(10, 20, 2)\n  poke(12288, 0x00)\n  spr(0, 10, 20)\n  flip()\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        // pset drew color 2, sprite has color 0, so should not overwrite
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 2);
     }
 }

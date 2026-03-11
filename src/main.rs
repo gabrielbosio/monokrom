@@ -40,16 +40,33 @@ fn detect_embedded_game() -> Option<vm::Vm> {
         return None;
     }
     let payload_start = data.len() - 8 - payload_len;
-    let bc =
-        compiler::bytecode::Bytecode::deserialize(&data[payload_start..data.len() - 8]).ok()?;
-    vm::Vm::new(&bc, 0.0).ok()
+    let payload = &data[payload_start..data.len() - 8];
+    if payload.len() < 4 {
+        return None;
+    }
+    let bc_len = u32::from_le_bytes(payload[..4].try_into().ok()?) as usize;
+    if payload.len() < 4 + bc_len {
+        return None;
+    }
+    let bc = compiler::bytecode::Bytecode::deserialize(&payload[4..4 + bc_len]).ok()?;
+    let mut vm = vm::Vm::new(&bc, 0.0).ok()?;
+    let spr_start = 4 + bc_len;
+    if payload.len() >= spr_start + 4096 {
+        vm.memory[config::SPRITE_REGION_START..config::SPRITE_REGION_START + 4096]
+            .copy_from_slice(&payload[spr_start..spr_start + 4096]);
+    }
+    Some(vm)
 }
 
 #[cfg(target_arch = "wasm32")]
 fn detect_embedded_game() -> Option<vm::Vm> {
-    let source = filesystem::web_io::get_embedded_source()?;
-    let bc = compiler::compile(&source).ok()?;
-    vm::Vm::new(&bc, 0.0).ok()
+    let full_source = filesystem::web_io::get_embedded_source()?;
+    let (source, spr) = app::split_sprite_section(&full_source);
+    let bc = compiler::compile(source).ok()?;
+    let mut vm = vm::Vm::new(&bc, 0.0).ok()?;
+    vm.memory[config::SPRITE_REGION_START..config::SPRITE_REGION_START + 4096]
+        .copy_from_slice(&spr);
+    Some(vm)
 }
 
 #[macroquad::main(window_conf)]

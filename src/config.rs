@@ -30,3 +30,8 @@ pub const EDITOR_TILES_Y: u32 = SCREEN_TILES_Y - 1; // 23 tiles for text, 1 for 
 
 // Terminal
 pub const TERMINAL_MAX_SCROLLBACK: usize = 200;
+
+// Sprites
+pub const SPRITE_COUNT: usize = 256;
+pub const SPRITE_SIZE: usize = 16; // bytes per sprite (8x8, 2bpp)
+pub const SPRITE_REGION_START: usize = 0x3000; // 12288

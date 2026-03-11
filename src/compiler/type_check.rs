@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::compiler::ast::{self, BinOp, Expr, ExprKind, Span, TypeExpr, UnaryOp};
 use crate::compiler::error::CompileError;
 use crate::compiler::hir::*;
+use crate::config::SPRITE_REGION_START;
 
 struct IntrinsicSig {
     op: Intrinsic,
@@ -167,6 +168,12 @@ impl TypeCheckCtx {
     fn alloc_global(&mut self, ty: &HirType) -> u16 {
         let addr = self.next_global_addr;
         self.next_global_addr += self.type_size(ty);
+        if self.next_global_addr as usize > SPRITE_REGION_START {
+            self.error(format!(
+                "global variables exceed memory limit (0x{:04X} > 0x{:04X})",
+                self.next_global_addr, SPRITE_REGION_START
+            ));
+        }
         addr
     }
 

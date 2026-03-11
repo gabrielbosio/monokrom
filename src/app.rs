@@ -4,7 +4,7 @@ use crate::compiler;
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
     EDITOR_TILES_Y, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH,
-    TILE_HEIGHT, TILE_WIDTH,
+    SPRITE_REGION_START, SPRITE_SIZE, TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
@@ -71,6 +71,8 @@ pub enum AppMode {
     Message,
     /// Running a program
     Running,
+    /// Sprite editor
+    SpriteEditor,
 }
 
 pub struct App {
@@ -110,6 +112,13 @@ pub struct App {
     // VM
     run_state: Option<Vm>,
     player_mode: bool,
+
+    // Sprites
+    sprite_data: [u8; 4096],
+    sprite_selected: u8,
+    sprite_cursor_x: u8,
+    sprite_cursor_y: u8,
+    sprite_color: u8,
 }
 
 impl App {
@@ -172,6 +181,12 @@ impl App {
 
             run_state: None,
             player_mode: false,
+
+            sprite_data: [0; 4096],
+            sprite_selected: 0,
+            sprite_cursor_x: 0,
+            sprite_cursor_y: 0,
+            sprite_color: 1,
         }
     }
 
@@ -228,6 +243,12 @@ impl App {
 
             run_state: Some(vm),
             player_mode: true,
+
+            sprite_data: [0; 4096],
+            sprite_selected: 0,
+            sprite_cursor_x: 0,
+            sprite_cursor_y: 0,
+            sprite_color: 1,
         }
     }
 
@@ -261,6 +282,10 @@ impl App {
             self.update_running();
             return;
         }
+        if self.mode == AppMode::SpriteEditor {
+            self.update_sprite_editor();
+            return;
+        }
 
         // Update cursor blink
         self.cursor_blink_timer += get_frame_time() as f64;
@@ -279,7 +304,7 @@ impl App {
             AppMode::ReplaceDialog => self.update_replace_dialog(),
             AppMode::GoToLineDialog => self.update_goto_line_dialog(),
             AppMode::Message => self.update_message_dialog(),
-            AppMode::Running => unreachable!(),
+            AppMode::Running | AppMode::SpriteEditor => unreachable!(),
         }
 
         // Update scrollbar state
@@ -372,7 +397,7 @@ impl App {
                         self.search.is_replacing = false;
                         self.editor.selection.clear();
                     } else {
-                        self.mode = AppMode::Terminal;
+                        self.mode = AppMode::SpriteEditor;
                     }
                 }
                 _ => {}
@@ -699,7 +724,9 @@ impl App {
         } else {
             match compiler::compile(&source) {
                 Ok(bc) => match Vm::new(&bc, get_time()) {
-                    Ok(vm) => {
+                    Ok(mut vm) => {
+                        vm.memory[SPRITE_REGION_START..SPRITE_REGION_START + 4096]
+                            .copy_from_slice(&self.sprite_data);
                         self.run_state = Some(vm);
                         self.mode = AppMode::Running;
                     }
@@ -733,7 +760,11 @@ impl App {
                 return;
             }
         };
-        let payload = bc.serialize();
+        let bc_bytes = bc.serialize();
+        let mut payload = Vec::new();
+        payload.extend(&(bc_bytes.len() as u32).to_le_bytes());
+        payload.extend(&bc_bytes);
+        payload.extend(&self.sprite_data);
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.export_native(name, &payload);
@@ -790,7 +821,16 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     fn export_wasm(&mut self, name: &str, source: &str) {
         use crate::filesystem::web_io;
-        let escaped = source
+        let mut full_source = source.to_string();
+        if self.sprite_data.iter().any(|&b| b != 0) {
+            full_source.push_str("\n__spr__\n");
+            for row in self.sprite_data.chunks(16) {
+                let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
+                full_source.push_str(&hex);
+                full_source.push('\n');
+            }
+        }
+        let escaped = full_source
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('\n', "\\n")
@@ -1306,7 +1346,15 @@ impl App {
 
     fn save_current_file(&mut self) -> bool {
         if let Some(ref filename) = self.current_filename {
-            let content = self.editor.buffer.to_string();
+            let mut content = self.editor.buffer.to_string();
+            if self.sprite_data.iter().any(|&b| b != 0) {
+                content.push_str("\n__spr__\n");
+                for row in self.sprite_data.chunks(16) {
+                    let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
+                    content.push_str(&hex);
+                    content.push('\n');
+                }
+            }
             match filesystem::write_file(filename, &content) {
                 Ok(()) => {
                     self.is_modified = false;
@@ -1337,7 +1385,9 @@ impl App {
     fn open_file(&mut self, filename: &str) -> bool {
         match filesystem::read_file(filename) {
             Ok(content) => {
-                self.reset_editor(TextBuffer::from_str(&content), Some(filename.to_string()));
+                let (source, spr) = split_sprite_section(&content);
+                self.sprite_data = spr;
+                self.reset_editor(TextBuffer::from_str(source), Some(filename.to_string()));
                 true
             }
             Err(_) => false,
@@ -1466,7 +1516,16 @@ impl App {
                     self.terminal.push_output("error: invalid filename");
                     return;
                 }
-                match filesystem::write_file(&name, &self.editor.buffer.to_string()) {
+                let mut content = self.editor.buffer.to_string();
+                if self.sprite_data.iter().any(|&b| b != 0) {
+                    content.push_str("\n__spr__\n");
+                    for row in self.sprite_data.chunks(16) {
+                        let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
+                        content.push_str(&hex);
+                        content.push('\n');
+                    }
+                }
+                match filesystem::write_file(&name, &content) {
                     Ok(()) => {
                         self.current_filename = Some(name.clone());
                         self.is_modified = false;
@@ -1626,6 +1685,166 @@ impl App {
         }
     }
 
+    fn update_sprite_editor(&mut self) {
+        while get_char_pressed().is_some() {}
+
+        if is_key_pressed(KeyCode::Escape) {
+            self.mode = AppMode::Terminal;
+            return;
+        }
+
+        // Uses the same button layout as the game runtime:
+        // Arrows: move cursor, Z: paint, X: cycle color,
+        // Enter: next sprite, RShift: prev sprite
+        if is_key_pressed(KeyCode::Left) {
+            self.sprite_cursor_x = self.sprite_cursor_x.wrapping_sub(1) & 7;
+        }
+        if is_key_pressed(KeyCode::Right) {
+            self.sprite_cursor_x = (self.sprite_cursor_x + 1) & 7;
+        }
+        if is_key_pressed(KeyCode::Up) {
+            self.sprite_cursor_y = self.sprite_cursor_y.wrapping_sub(1) & 7;
+        }
+        if is_key_pressed(KeyCode::Down) {
+            self.sprite_cursor_y = (self.sprite_cursor_y + 1) & 7;
+        }
+
+        if is_key_pressed(KeyCode::Z) {
+            self.set_sprite_pixel(
+                self.sprite_selected,
+                self.sprite_cursor_x,
+                self.sprite_cursor_y,
+                self.sprite_color,
+            );
+            self.is_modified = true;
+        }
+        if is_key_pressed(KeyCode::X) {
+            self.sprite_color = (self.sprite_color + 1) & 3;
+        }
+        if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
+            self.sprite_selected = self.sprite_selected.wrapping_add(1);
+        }
+        if is_key_pressed(KeyCode::RightShift) {
+            self.sprite_selected = self.sprite_selected.wrapping_sub(1);
+        }
+    }
+
+    fn get_sprite_pixel(&self, sprite: u8, x: u8, y: u8) -> u8 {
+        let base = sprite as usize * SPRITE_SIZE + y as usize * 2;
+        let byte_idx = x as usize / 4;
+        let bit_shift = 6 - (x as usize % 4) * 2;
+        (self.sprite_data[base + byte_idx] >> bit_shift) & 3
+    }
+
+    fn set_sprite_pixel(&mut self, sprite: u8, x: u8, y: u8, color: u8) {
+        let base = sprite as usize * SPRITE_SIZE + y as usize * 2;
+        let byte_idx = x as usize / 4;
+        let bit_shift = 6 - (x as usize % 4) * 2;
+        let mask = !(3 << bit_shift);
+        self.sprite_data[base + byte_idx] =
+            (self.sprite_data[base + byte_idx] & mask) | ((color & 3) << bit_shift);
+    }
+
+    fn draw_sprite_editor(&self, helpers: &DrawHelpers) {
+        let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
+        let zoom = 16;
+
+        // Draw current sprite zoomed (128x128 pixels starting at 0,0)
+        for py in 0..8u8 {
+            for px in 0..8u8 {
+                let color = self.get_sprite_pixel(self.sprite_selected, px, py);
+                let sx = px as f32 * zoom as f32;
+                let sy = py as f32 * zoom as f32;
+                helpers.draw_rect(sx, sy, zoom as f32, zoom as f32, palette[color as usize]);
+            }
+        }
+
+        // Draw grid lines
+        let grid_color = Color::new(0.2, 0.2, 0.2, 1.0);
+        for i in 1..8 {
+            let pos = i as f32 * zoom as f32;
+            helpers.draw_rect(pos, 0.0, 1.0, 128.0, grid_color);
+            helpers.draw_rect(0.0, pos, 128.0, 1.0, grid_color);
+        }
+
+        // Draw cursor highlight
+        let cx = self.sprite_cursor_x as f32 * zoom as f32;
+        let cy = self.sprite_cursor_y as f32 * zoom as f32;
+        helpers.draw_rect(cx, cy, zoom as f32, 1.0, COLOR_WHITE);
+        helpers.draw_rect(cx, cy + zoom as f32 - 1.0, zoom as f32, 1.0, COLOR_WHITE);
+        helpers.draw_rect(cx, cy, 1.0, zoom as f32, COLOR_WHITE);
+        helpers.draw_rect(cx + zoom as f32 - 1.0, cy, 1.0, zoom as f32, COLOR_WHITE);
+
+        // Sprite picker column (right side, starting at x=132)
+        let picker_x = 132.0f32;
+        let picker_size = 10.0f32; // each sprite preview is 10px wide area
+        let cols = 2;
+        let rows = 14; // fits in 144px height
+        for i in 0..(cols * rows) {
+            let si = self.sprite_selected.wrapping_add(i as u8);
+            let col = i % cols;
+            let row = i / cols;
+            let bx = picker_x + col as f32 * (picker_size + 2.0);
+            let by = row as f32 * picker_size;
+            // Draw 8x8 sprite at 1x scale
+            for py in 0..8u8 {
+                for px in 0..8u8 {
+                    let c = self.get_sprite_pixel(si, px, py);
+                    if c != 0 {
+                        helpers.draw_rect(
+                            bx + px as f32 + 1.0,
+                            by + py as f32 + 1.0,
+                            1.0,
+                            1.0,
+                            palette[c as usize],
+                        );
+                    }
+                }
+            }
+            // Highlight selected sprite
+            if i == 0 {
+                helpers.draw_rect(bx, by, picker_size, 1.0, COLOR_WHITE);
+                helpers.draw_rect(bx, by + picker_size - 1.0, picker_size, 1.0, COLOR_WHITE);
+                helpers.draw_rect(bx, by, 1.0, picker_size, COLOR_WHITE);
+                helpers.draw_rect(bx + picker_size - 1.0, by, 1.0, picker_size, COLOR_WHITE);
+            }
+        }
+
+        // Color palette bar at bottom
+        let bar_y = 134.0f32;
+        for i in 0..4u8 {
+            let px = 4.0 + i as f32 * 20.0;
+            helpers.draw_rect(px, bar_y, 16.0, 8.0, palette[i as usize]);
+            // Outline for all
+            if i == 0 {
+                // Black on black - draw a border
+                helpers.draw_rect(px, bar_y, 16.0, 1.0, COLOR_DARK_GRAY);
+                helpers.draw_rect(px, bar_y + 7.0, 16.0, 1.0, COLOR_DARK_GRAY);
+                helpers.draw_rect(px, bar_y, 1.0, 8.0, COLOR_DARK_GRAY);
+                helpers.draw_rect(px + 15.0, bar_y, 1.0, 8.0, COLOR_DARK_GRAY);
+            }
+            // Mark selected color
+            if i == self.sprite_color {
+                helpers.draw_rect(px - 1.0, bar_y - 1.0, 18.0, 1.0, COLOR_WHITE);
+                helpers.draw_rect(px - 1.0, bar_y + 8.0, 18.0, 1.0, COLOR_WHITE);
+                helpers.draw_rect(px - 1.0, bar_y - 1.0, 1.0, 10.0, COLOR_WHITE);
+                helpers.draw_rect(px + 16.0, bar_y - 1.0, 1.0, 10.0, COLOR_WHITE);
+            }
+        }
+
+        // Sprite number
+        let label = format!("#{}", self.sprite_selected);
+        let label_x = 100.0;
+        for (i, c) in label.chars().enumerate() {
+            helpers.draw_char(
+                c,
+                label_x + i as f32 * TILE_WIDTH as f32,
+                bar_y + 1.0,
+                COLOR_WHITE,
+            );
+        }
+    }
+
     fn draw_terminal(&self, helpers: &DrawHelpers) {
         let visible_lines = SCREEN_TILES_Y as usize - 1; // bottom row for input
         let tw = TILE_WIDTH as f32;
@@ -1690,6 +1909,9 @@ impl App {
         if self.mode == AppMode::Running {
             clear_background(COLOR_BLACK);
             self.draw_running(&helpers);
+        } else if self.mode == AppMode::SpriteEditor {
+            clear_background(COLOR_BLACK);
+            self.draw_sprite_editor(&helpers);
         } else if self.mode == AppMode::Terminal {
             clear_background(COLOR_BLACK);
             self.draw_terminal(&helpers);
@@ -1711,7 +1933,7 @@ impl App {
                         self.draw_search_hint(&helpers);
                     }
                 }
-                AppMode::Terminal | AppMode::Running => unreachable!(),
+                AppMode::Terminal | AppMode::Running | AppMode::SpriteEditor => unreachable!(),
             }
         }
 
@@ -1953,6 +2175,31 @@ impl App {
             );
         }
     }
+}
+
+pub fn split_sprite_section(content: &str) -> (&str, [u8; 4096]) {
+    let mut spr = [0u8; 4096];
+    let Some(pos) = content.find("\n__spr__\n") else {
+        return (content, spr);
+    };
+    let source = &content[..pos];
+    let hex_section = &content[pos + "\n__spr__\n".len()..];
+    let mut offset = 0;
+    for line in hex_section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut i = 0;
+        while i + 1 < line.len() && offset < 4096 {
+            if let Ok(b) = u8::from_str_radix(&line[i..i + 2], 16) {
+                spr[offset] = b;
+                offset += 1;
+            }
+            i += 2;
+        }
+    }
+    (source, spr)
 }
 
 fn sample_buttons() -> u8 {
