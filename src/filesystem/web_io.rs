@@ -3,9 +3,28 @@ use std::sync::Mutex;
 extern "C" {
     fn monokrom_download_file(name: *const u8, name_len: u32, data: *const u8, data_len: u32);
     fn monokrom_request_upload();
+    fn monokrom_has_embedded_source() -> i32;
+    fn monokrom_get_embedded_source() -> sapp_jsutils::JsObject;
 }
 
 static PENDING_UPLOAD: Mutex<Option<(String, String)>> = Mutex::new(None);
+
+/// Check if this WASM instance has an embedded game source
+pub fn get_embedded_source() -> Option<String> {
+    unsafe {
+        if monokrom_has_embedded_source() == 0 {
+            return None;
+        }
+        let js_obj = monokrom_get_embedded_source();
+        let mut source = String::new();
+        js_obj.to_string(&mut source);
+        if source.is_empty() {
+            None
+        } else {
+            Some(source)
+        }
+    }
+}
 
 /// Trigger a browser file download
 pub fn download(filename: &str, content: &str) {

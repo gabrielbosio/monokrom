@@ -1,5 +1,5 @@
 pub const COMMAND_NAMES: &[&str] = &[
-    "clear", "cp", "example", "help", "ls", "new", "open", "rm", "run", "save", "stat",
+    "clear", "cp", "example", "export", "help", "ls", "new", "open", "rm", "run", "save", "stat",
 ];
 
 pub enum TerminalCommand {
@@ -10,6 +10,7 @@ pub enum TerminalCommand {
     Rm(String),
     Cp(String, String),
     Example(Option<String>),
+    Export(String),
     Run,
     Stat,
     Clear,
@@ -70,6 +71,10 @@ pub fn parse_command(input: &str) -> TerminalCommand {
             _ => TerminalCommand::Unknown("cp: usage: cp <src> <dst>".to_string()),
         },
         "example" => TerminalCommand::Example(arg.map(|(s, _)| s.to_string())),
+        "export" => match arg {
+            Some((name, _)) => TerminalCommand::Export(name.to_string()),
+            None => TerminalCommand::Unknown("export: usage: export <name>".to_string()),
+        },
         "run" => TerminalCommand::Run,
         "stat" => TerminalCommand::Stat,
         "clear" => TerminalCommand::Clear,
@@ -308,6 +313,22 @@ mod tests {
             TerminalCommand::Example(Some(name)) => assert_eq!(name, "tictactoe"),
             _ => panic!("expected Example(Some)"),
         }
+    }
+
+    #[test]
+    fn parse_export_with_name() {
+        match parse_command("export mygame") {
+            TerminalCommand::Export(name) => assert_eq!(name, "mygame"),
+            _ => panic!("expected Export"),
+        }
+    }
+
+    #[test]
+    fn parse_export_missing_name() {
+        assert!(matches!(
+            parse_command("export"),
+            TerminalCommand::Unknown(_)
+        ));
     }
 
     #[test]

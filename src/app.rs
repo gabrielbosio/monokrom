@@ -109,6 +109,7 @@ pub struct App {
 
     // VM
     run_state: Option<Vm>,
+    player_mode: bool,
 }
 
 impl App {
@@ -170,6 +171,63 @@ impl App {
             highlight_valid: false,
 
             run_state: None,
+            player_mode: false,
+        }
+    }
+
+    pub async fn new_player(vm: Vm) -> Self {
+        let font = BitmapFont::new().await;
+        let rt = render_target(SCREEN_WIDTH, SCREEN_HEIGHT);
+        rt.texture.set_filter(FilterMode::Nearest);
+        #[cfg(not(target_arch = "wasm32"))]
+        let clipboard = arboard::Clipboard::new().ok();
+        #[cfg(target_arch = "wasm32")]
+        let clipboard: operations::Clipboard = None;
+
+        Self {
+            editor: EditorState {
+                buffer: TextBuffer::new(),
+                cursor: Cursor::new(),
+                selection: Selection::new(),
+                history: History::new(),
+            },
+            view: ViewState {
+                scroll_x: 0,
+                scroll_y: 0,
+                scrollbar_state: ScrollbarState::default(),
+            },
+            search: SearchState {
+                query: String::new(),
+                replace_text: String::new(),
+                match_pos: None,
+                is_replacing: false,
+            },
+            terminal: TerminalState::new(),
+
+            current_filename: None,
+            is_modified: false,
+
+            mode: AppMode::Running,
+            input_dialog: InputDialog::new(),
+            confirm_dialog: ConfirmDialog::new(),
+            message_dialog: MessageDialog::new(),
+            file_picker: FilePicker::new(),
+            pending_action: PendingAction::None,
+
+            clipboard,
+            paste_cache: None,
+
+            cursor_blink_timer: 0.0,
+            cursor_visible: true,
+
+            font,
+            render_target: rt,
+
+            highlight_styles: Vec::new(),
+            highlight_valid: false,
+
+            run_state: Some(vm),
+            player_mode: true,
         }
     }
 
@@ -658,6 +716,104 @@ impl App {
                 }
             }
         }
+    }
+
+    fn export_game(&mut self, name: &str) {
+        let source = self.editor.buffer.to_string();
+        if source.is_empty() {
+            self.terminal.push_output("(empty buffer)");
+            return;
+        }
+        let bc = match compiler::compile(&source) {
+            Ok(bc) => bc,
+            Err(errors) => {
+                for e in &errors {
+                    self.terminal.push_output(&format!("error: {e}"));
+                }
+                return;
+            }
+        };
+        let payload = bc.serialize();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.export_native(name, &payload);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.export_wasm(name, &source);
+            let _ = payload; // compiled successfully, that's all we need
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn export_native(&mut self, name: &str, payload: &[u8]) {
+        let exe = match std::env::current_exe() {
+            Ok(p) => p,
+            Err(e) => {
+                self.terminal
+                    .push_output(&format!("error reading executable: {e}"));
+                return;
+            }
+        };
+        let exe_bytes = match std::fs::read(&exe) {
+            Ok(b) => b,
+            Err(e) => {
+                self.terminal
+                    .push_output(&format!("error reading executable: {e}"));
+                return;
+            }
+        };
+        let mut output = exe_bytes;
+        output.extend(payload);
+        output.extend(&(payload.len() as u32).to_le_bytes());
+        output.extend(b"MKRM");
+
+        let out_path = std::env::current_dir().unwrap_or_default().join(name);
+        match std::fs::write(&out_path, &output) {
+            Ok(()) => {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ =
+                        std::fs::set_permissions(&out_path, std::fs::Permissions::from_mode(0o755));
+                }
+                self.terminal
+                    .push_output(&format!("exported: {}", out_path.display()));
+            }
+            Err(e) => {
+                self.terminal
+                    .push_output(&format!("error writing file: {e}"));
+            }
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn export_wasm(&mut self, name: &str, source: &str) {
+        use crate::filesystem::web_io;
+        let escaped = source
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r");
+        let html = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>{name}</title>
+<style>body{{margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh}}canvas{{image-rendering:pixelated}}</style>
+</head>
+<body>
+<script>var MONOKROM_GAME_SOURCE = "{escaped}";</script>
+<script src="gl.js"></script>
+<script src="sapp_jsutils.js"></script>
+<script src="quad-storage.js"></script>
+<script src="monokrom.js"></script>
+<script>load("monokrom.wasm");</script>
+</body>
+</html>"#
+        );
+        let filename = format!("{name}.html");
+        web_io::download(&filename, &html);
+        self.terminal.push_output(&format!("exported: {filename}"));
     }
 
     fn handle_file_action(&mut self, action: EditorAction) {
@@ -1233,6 +1389,9 @@ impl App {
         while get_char_pressed().is_some() {}
 
         if is_key_pressed(KeyCode::Escape) {
+            if self.player_mode {
+                std::process::exit(0);
+            }
             self.terminal.push_output("stopped");
             self.run_state = None;
             self.mode = AppMode::Terminal;
@@ -1375,6 +1534,7 @@ impl App {
                         .push_output(&format!("unknown example: {name}")),
                 },
             },
+            TerminalCommand::Export(name) => self.export_game(&name),
             TerminalCommand::Run => self.run_program(),
             TerminalCommand::Stat => {
                 let source = self.editor.buffer.to_string();
@@ -1408,6 +1568,8 @@ impl App {
                 self.terminal.push_output("  rm <name>   remove file");
                 self.terminal.push_output("  cp <s> <d>  copy file");
                 self.terminal.push_output("  example     list/load example");
+                self.terminal
+                    .push_output("  export <n>  export standalone game");
                 self.terminal.push_output("  run         run program");
                 self.terminal.push_output("  stat        bytecode size");
                 self.terminal.push_output("  clear       clear screen");

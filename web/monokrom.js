@@ -70,6 +70,14 @@ miniquad_add_plugin({
             URL.revokeObjectURL(a.href);
         };
 
+        importObject.env.monokrom_has_embedded_source = function () {
+            return (typeof MONOKROM_GAME_SOURCE !== "undefined") ? 1 : 0;
+        };
+
+        importObject.env.monokrom_get_embedded_source = function () {
+            return js_object(typeof MONOKROM_GAME_SOURCE !== "undefined" ? MONOKROM_GAME_SOURCE : "");
+        };
+
         importObject.env.monokrom_request_upload = function () {
             var input = document.createElement("input");
             input.type = "file";

@@ -350,6 +350,107 @@ impl Bytecode {
     pub fn pos(&self) -> usize {
         self.code.len()
     }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        // Code
+        buf.extend(&(self.code.len() as u32).to_le_bytes());
+        buf.extend(&self.code);
+        // String pool
+        buf.extend(&(self.string_pool.len() as u32).to_le_bytes());
+        for s in &self.string_pool {
+            let bytes = s.as_bytes();
+            buf.extend(&(bytes.len() as u32).to_le_bytes());
+            buf.extend(bytes);
+        }
+        // Functions
+        buf.extend(&(self.functions.len() as u32).to_le_bytes());
+        for f in &self.functions {
+            buf.extend(&(f.code_offset as u32).to_le_bytes());
+            buf.push(f.n_params);
+            buf.extend(&f.n_locals.to_le_bytes());
+        }
+        // Entry point
+        match self.entry_point {
+            Some(ep) => {
+                buf.push(1);
+                buf.extend(&(ep as u32).to_le_bytes());
+            }
+            None => buf.push(0),
+        }
+        buf
+    }
+
+    pub fn deserialize(data: &[u8]) -> Result<Self, String> {
+        let mut pos = 0;
+        let read_u32 = |pos: &mut usize| -> Result<u32, String> {
+            if *pos + 4 > data.len() {
+                return Err("unexpected end of data".to_string());
+            }
+            let v = u32::from_le_bytes(data[*pos..*pos + 4].try_into().unwrap());
+            *pos += 4;
+            Ok(v)
+        };
+        // Code
+        let code_len = read_u32(&mut pos)? as usize;
+        if pos + code_len > data.len() {
+            return Err("unexpected end of data".to_string());
+        }
+        let code = data[pos..pos + code_len].to_vec();
+        pos += code_len;
+        // String pool
+        let str_count = read_u32(&mut pos)? as usize;
+        let mut string_pool = Vec::with_capacity(str_count);
+        for _ in 0..str_count {
+            let slen = read_u32(&mut pos)? as usize;
+            if pos + slen > data.len() {
+                return Err("unexpected end of data".to_string());
+            }
+            let s = std::str::from_utf8(&data[pos..pos + slen])
+                .map_err(|e| format!("invalid utf-8: {e}"))?
+                .to_string();
+            pos += slen;
+            string_pool.push(s);
+        }
+        // Functions
+        let func_count = read_u32(&mut pos)? as usize;
+        let mut functions = Vec::with_capacity(func_count);
+        for _ in 0..func_count {
+            let code_offset = read_u32(&mut pos)? as usize;
+            if pos >= data.len() {
+                return Err("unexpected end of data".to_string());
+            }
+            let n_params = data[pos];
+            pos += 1;
+            if pos + 2 > data.len() {
+                return Err("unexpected end of data".to_string());
+            }
+            let n_locals = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap());
+            pos += 2;
+            functions.push(FuncInfo {
+                code_offset,
+                n_params,
+                n_locals,
+            });
+        }
+        // Entry point
+        if pos >= data.len() {
+            return Err("unexpected end of data".to_string());
+        }
+        let has_entry = data[pos];
+        pos += 1;
+        let entry_point = if has_entry == 1 {
+            Some(read_u32(&mut pos)? as usize)
+        } else {
+            None
+        };
+        Ok(Bytecode {
+            code,
+            string_pool,
+            functions,
+            entry_point,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -364,6 +465,55 @@ mod tests {
                 "opcode 0x{opcode:02X} has no name"
             );
         }
+    }
+
+    #[test]
+    fn serialize_roundtrip_empty() {
+        let bc = Bytecode::new();
+        let data = bc.serialize();
+        let bc2 = Bytecode::deserialize(&data).unwrap();
+        assert!(bc2.code.is_empty());
+        assert!(bc2.string_pool.is_empty());
+        assert!(bc2.functions.is_empty());
+        assert_eq!(bc2.entry_point, None);
+    }
+
+    #[test]
+    fn serialize_roundtrip_full() {
+        let bc = Bytecode {
+            code: vec![PUSH_I8, 42, HALT],
+            string_pool: vec!["hello".to_string(), "world".to_string()],
+            functions: vec![
+                FuncInfo {
+                    code_offset: 0,
+                    n_params: 2,
+                    n_locals: 5,
+                },
+                FuncInfo {
+                    code_offset: 10,
+                    n_params: 0,
+                    n_locals: 300,
+                },
+            ],
+            entry_point: Some(0),
+        };
+        let data = bc.serialize();
+        let bc2 = Bytecode::deserialize(&data).unwrap();
+        assert_eq!(bc2.code, bc.code);
+        assert_eq!(bc2.string_pool, bc.string_pool);
+        assert_eq!(bc2.functions.len(), 2);
+        assert_eq!(bc2.functions[0].code_offset, 0);
+        assert_eq!(bc2.functions[0].n_params, 2);
+        assert_eq!(bc2.functions[0].n_locals, 5);
+        assert_eq!(bc2.functions[1].code_offset, 10);
+        assert_eq!(bc2.functions[1].n_locals, 300);
+        assert_eq!(bc2.entry_point, Some(0));
+    }
+
+    #[test]
+    fn deserialize_truncated() {
+        assert!(Bytecode::deserialize(&[]).is_err());
+        assert!(Bytecode::deserialize(&[0, 0]).is_err());
     }
 
     #[test]
