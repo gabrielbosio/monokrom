@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 use std::sync::Mutex;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", target_os = "macos"))]
 use crate::input::keybindings::is_alt_pressed;
 use crate::input::keybindings::{
     is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, refresh_cmd_timer,
@@ -180,12 +180,12 @@ pub fn get_editor_action() -> Option<EditorAction> {
     let shift = is_shift_pressed();
     let shortcut_mod = is_shortcut_modifier_pressed();
 
-    // On native, we don't use Alt for any bindings, word movement uses Ctrl
-    // (standard Linux/Windows convention). This avoids the "stuck Alt after Alt+Tab"
-    // problem where macroquad doesn't receive the Alt release event.
-    #[cfg(not(target_arch = "wasm32"))]
+    // macOS: Alt/Option for word ops (standard macOS convention, Ctrl+Arrow is intercepted by OS)
+    // Linux/Windows: Ctrl for word ops
+    // WASM: Alt for word ops
+    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
     let alt = false;
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
     let alt = is_alt_pressed();
 
     // Letter-key shortcuts: Alt on WASM, Ctrl on native
@@ -203,8 +203,8 @@ pub fn get_editor_action() -> Option<EditorAction> {
             refresh_cmd_timer();
             return Some(action);
         }
-        // Native: Ctrl+Arrow/Backspace/Delete for word operations
-        #[cfg(not(target_arch = "wasm32"))]
+        // Linux/Windows: Ctrl+Arrow/Backspace/Delete for word operations
+        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
         if let Some(action) = check_repeating(ALT_BINDINGS, true) {
             return Some(action);
         }
@@ -230,8 +230,8 @@ pub fn get_editor_action() -> Option<EditorAction> {
         return Some(EditorAction::Redo);
     }
 
-    // Word select: Ctrl+Shift on native, Shift+Alt on WASM
-    #[cfg(not(target_arch = "wasm32"))]
+    // Word select: Ctrl+Shift on Linux/Windows, Shift+Alt on WASM/macOS
+    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
     if modifier && shift {
         if let Some(action) = check_repeating(SHIFT_ALT_BINDINGS, true) {
             return Some(action);
@@ -330,8 +330,8 @@ pub fn get_terminal_action() -> Option<EditorAction> {
     if should_key_fire(KeyCode::PageDown, false) {
         return Some(EditorAction::ScrollDown);
     }
-    // Ctrl+Up/Down for line scrollback (native) / Alt+Up/Down (WASM)
-    #[cfg(not(target_arch = "wasm32"))]
+    // Ctrl+Up/Down for line scrollback (Linux/Windows) / Alt+Up/Down (WASM/macOS)
+    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
     if modifier {
         if should_key_fire(KeyCode::Up, true) {
             return Some(EditorAction::ScrollLineUp);
@@ -340,7 +340,7 @@ pub fn get_terminal_action() -> Option<EditorAction> {
             return Some(EditorAction::ScrollLineDown);
         }
     }
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
     if is_alt_pressed() {
         if should_key_fire(KeyCode::Up, false) {
             return Some(EditorAction::ScrollLineUp);

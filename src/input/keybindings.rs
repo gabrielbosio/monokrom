@@ -149,8 +149,8 @@ pub fn is_shift_pressed() -> bool {
     is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift)
 }
 
-/// Check if Alt/Option key is pressed (WASM only, native uses Ctrl for word ops)
-#[cfg(target_arch = "wasm32")]
+/// Check if Alt/Option key is pressed
+#[cfg(any(target_arch = "wasm32", target_os = "macos"))]
 pub fn is_alt_pressed() -> bool {
     is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt)
 }
