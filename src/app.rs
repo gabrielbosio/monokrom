@@ -8,7 +8,9 @@ use crate::config::{
 };
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
-use crate::input::{get_editor_action, get_terminal_action, EditorAction};
+use crate::input::{
+    get_editor_action, get_terminal_action, is_modifier_pressed, is_shift_pressed, EditorAction,
+};
 use crate::render::highlight::{self, CharStyle};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
 use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, COMMAND_NAMES};
@@ -119,6 +121,10 @@ pub struct App {
     sprite_cursor_x: u8,
     sprite_cursor_y: u8,
     sprite_color: u8,
+    sprite_undo: Vec<(u8, [u8; SPRITE_SIZE])>,
+    sprite_redo: Vec<(u8, [u8; SPRITE_SIZE])>,
+    sprite_clipboard: Option<[u8; SPRITE_SIZE]>,
+    sprite_painting: bool,
 }
 
 impl App {
@@ -187,6 +193,10 @@ impl App {
             sprite_cursor_x: 0,
             sprite_cursor_y: 0,
             sprite_color: 1,
+            sprite_undo: Vec::new(),
+            sprite_redo: Vec::new(),
+            sprite_clipboard: None,
+            sprite_painting: false,
         }
     }
 
@@ -249,6 +259,10 @@ impl App {
             sprite_cursor_x: 0,
             sprite_cursor_y: 0,
             sprite_color: 1,
+            sprite_undo: Vec::new(),
+            sprite_redo: Vec::new(),
+            sprite_clipboard: None,
+            sprite_painting: false,
         }
     }
 
@@ -1689,27 +1703,154 @@ impl App {
         while get_char_pressed().is_some() {}
 
         if is_key_pressed(KeyCode::Escape) {
+            self.sprite_painting = false;
             self.mode = AppMode::Terminal;
             return;
         }
 
-        // Uses the same button layout as the game runtime:
-        // Arrows: move cursor, Z: paint, X: cycle color,
-        // Enter: next sprite, RShift: prev sprite
+        let modifier = is_modifier_pressed();
+        let shift = is_shift_pressed();
+
+        // Ctrl+S: save
+        if modifier && !shift && is_key_pressed(KeyCode::S) {
+            if self.current_filename.is_some() && self.save_current_file() {
+                let name = self.current_filename.as_deref().unwrap_or("");
+                self.show_message(&format!("Saved {name}"));
+            }
+            return;
+        }
+
+        // Ctrl+Z: undo
+        if modifier && !shift && is_key_pressed(KeyCode::Z) {
+            self.sprite_undo();
+            return;
+        }
+
+        // Ctrl+Y or Ctrl+Shift+Z: redo
+        if modifier && is_key_pressed(KeyCode::Y) || modifier && shift && is_key_pressed(KeyCode::Z)
+        {
+            self.sprite_redo();
+            return;
+        }
+
+        // Ctrl+C: copy sprite
+        if modifier && !shift && is_key_pressed(KeyCode::C) {
+            self.sprite_clipboard = Some(self.get_sprite_bytes(self.sprite_selected));
+            return;
+        }
+
+        // Ctrl+V: paste sprite
+        if modifier && !shift && is_key_pressed(KeyCode::V) {
+            if let Some(data) = self.sprite_clipboard {
+                self.sprite_push_undo();
+                self.set_sprite_bytes(self.sprite_selected, &data);
+                self.is_modified = true;
+            }
+            return;
+        }
+
+        // Don't process other keys while modifier is held
+        if modifier {
+            return;
+        }
+
+        // Shift bindings
+        if shift {
+            // Shift+Tab: prev sprite
+            if is_key_pressed(KeyCode::Tab) {
+                self.sprite_selected = self.sprite_selected.wrapping_sub(1);
+                return;
+            }
+
+            // Shift+Arrow: shift sprite contents
+            let dir = if is_key_pressed(KeyCode::Left) {
+                Some((-1i8, 0i8))
+            } else if is_key_pressed(KeyCode::Right) {
+                Some((1, 0))
+            } else if is_key_pressed(KeyCode::Up) {
+                Some((0, -1))
+            } else if is_key_pressed(KeyCode::Down) {
+                Some((0, 1))
+            } else {
+                None
+            };
+            if let Some((dx, dy)) = dir {
+                self.sprite_push_undo();
+                self.shift_sprite(self.sprite_selected, dx, dy);
+                self.is_modified = true;
+            }
+
+            // Shift+F: flip vertical
+            if is_key_pressed(KeyCode::F) {
+                self.sprite_push_undo();
+                self.flip_sprite_vertical(self.sprite_selected);
+                self.is_modified = true;
+            }
+
+            return;
+        }
+
+        // F: flip horizontal
+        if is_key_pressed(KeyCode::F) {
+            self.sprite_push_undo();
+            self.flip_sprite_horizontal(self.sprite_selected);
+            self.is_modified = true;
+            return;
+        }
+
+        // Delete: clear sprite
+        if is_key_pressed(KeyCode::Delete) {
+            let bytes = self.get_sprite_bytes(self.sprite_selected);
+            if bytes != [0; SPRITE_SIZE] {
+                self.sprite_push_undo();
+                self.set_sprite_bytes(self.sprite_selected, &[0; SPRITE_SIZE]);
+                self.is_modified = true;
+            }
+            return;
+        }
+
+        // 1-4: select color directly
+        if is_key_pressed(KeyCode::Key1) {
+            self.sprite_color = 0;
+        }
+        if is_key_pressed(KeyCode::Key2) {
+            self.sprite_color = 1;
+        }
+        if is_key_pressed(KeyCode::Key3) {
+            self.sprite_color = 2;
+        }
+        if is_key_pressed(KeyCode::Key4) {
+            self.sprite_color = 3;
+        }
+
+        // Tab / Shift+Tab: next / prev sprite
+        if is_key_pressed(KeyCode::Tab) {
+            self.sprite_selected = self.sprite_selected.wrapping_add(1);
+        }
+
+        // Arrow keys: move cursor
+        let mut moved = false;
         if is_key_pressed(KeyCode::Left) {
             self.sprite_cursor_x = self.sprite_cursor_x.wrapping_sub(1) & 7;
+            moved = true;
         }
         if is_key_pressed(KeyCode::Right) {
             self.sprite_cursor_x = (self.sprite_cursor_x + 1) & 7;
+            moved = true;
         }
         if is_key_pressed(KeyCode::Up) {
             self.sprite_cursor_y = self.sprite_cursor_y.wrapping_sub(1) & 7;
+            moved = true;
         }
         if is_key_pressed(KeyCode::Down) {
             self.sprite_cursor_y = (self.sprite_cursor_y + 1) & 7;
+            moved = true;
         }
 
-        if is_key_pressed(KeyCode::Z) {
+        // Space: paint (hold to paint continuously while moving)
+        if is_key_pressed(KeyCode::Space) {
+            self.sprite_push_undo();
+            self.sprite_painting = true;
             self.set_sprite_pixel(
                 self.sprite_selected,
                 self.sprite_cursor_x,
@@ -1717,15 +1858,112 @@ impl App {
                 self.sprite_color,
             );
             self.is_modified = true;
+        } else if is_key_down(KeyCode::Space) {
+            if moved {
+                self.set_sprite_pixel(
+                    self.sprite_selected,
+                    self.sprite_cursor_x,
+                    self.sprite_cursor_y,
+                    self.sprite_color,
+                );
+                self.is_modified = true;
+            }
+        } else {
+            self.sprite_painting = false;
         }
-        if is_key_pressed(KeyCode::X) {
-            self.sprite_color = (self.sprite_color + 1) & 3;
+
+        // C: eyedropper (pick color under cursor)
+        if is_key_pressed(KeyCode::C) {
+            self.sprite_color = self.get_sprite_pixel(
+                self.sprite_selected,
+                self.sprite_cursor_x,
+                self.sprite_cursor_y,
+            );
         }
-        if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
-            self.sprite_selected = self.sprite_selected.wrapping_add(1);
+    }
+
+    fn get_sprite_bytes(&self, sprite: u8) -> [u8; SPRITE_SIZE] {
+        let base = sprite as usize * SPRITE_SIZE;
+        let mut data = [0u8; SPRITE_SIZE];
+        data.copy_from_slice(&self.sprite_data[base..base + SPRITE_SIZE]);
+        data
+    }
+
+    fn set_sprite_bytes(&mut self, sprite: u8, data: &[u8; SPRITE_SIZE]) {
+        let base = sprite as usize * SPRITE_SIZE;
+        self.sprite_data[base..base + SPRITE_SIZE].copy_from_slice(data);
+    }
+
+    fn sprite_push_undo(&mut self) {
+        let data = self.get_sprite_bytes(self.sprite_selected);
+        self.sprite_undo.push((self.sprite_selected, data));
+        if self.sprite_undo.len() > 32 {
+            self.sprite_undo.remove(0);
         }
-        if is_key_pressed(KeyCode::RightShift) {
-            self.sprite_selected = self.sprite_selected.wrapping_sub(1);
+        self.sprite_redo.clear();
+    }
+
+    fn sprite_undo(&mut self) {
+        if let Some((sprite, data)) = self.sprite_undo.pop() {
+            let current = self.get_sprite_bytes(sprite);
+            self.sprite_redo.push((sprite, current));
+            self.set_sprite_bytes(sprite, &data);
+            self.sprite_selected = sprite;
+            self.is_modified = true;
+        }
+    }
+
+    fn sprite_redo(&mut self) {
+        if let Some((sprite, data)) = self.sprite_redo.pop() {
+            let current = self.get_sprite_bytes(sprite);
+            self.sprite_undo.push((sprite, current));
+            self.set_sprite_bytes(sprite, &data);
+            self.sprite_selected = sprite;
+            self.is_modified = true;
+        }
+    }
+
+    fn flip_sprite_horizontal(&mut self, sprite: u8) {
+        for y in 0..8u8 {
+            let mut row = [0u8; 8];
+            for x in 0..8u8 {
+                row[x as usize] = self.get_sprite_pixel(sprite, x, y);
+            }
+            for x in 0..8u8 {
+                self.set_sprite_pixel(sprite, x, y, row[7 - x as usize]);
+            }
+        }
+    }
+
+    fn flip_sprite_vertical(&mut self, sprite: u8) {
+        for y in 0..4u8 {
+            for x in 0..8u8 {
+                let top = self.get_sprite_pixel(sprite, x, y);
+                let bot = self.get_sprite_pixel(sprite, x, 7 - y);
+                self.set_sprite_pixel(sprite, x, y, bot);
+                self.set_sprite_pixel(sprite, x, 7 - y, top);
+            }
+        }
+    }
+
+    fn shift_sprite(&mut self, sprite: u8, dx: i8, dy: i8) {
+        let mut pixels = [[0u8; 8]; 8];
+        for y in 0..8u8 {
+            for x in 0..8u8 {
+                pixels[y as usize][x as usize] = self.get_sprite_pixel(sprite, x, y);
+            }
+        }
+        for y in 0..8i8 {
+            for x in 0..8i8 {
+                let sx = x - dx;
+                let sy = y - dy;
+                let color = if (0..8).contains(&sx) && (0..8).contains(&sy) {
+                    pixels[sy as usize][sx as usize]
+                } else {
+                    0
+                };
+                self.set_sprite_pixel(sprite, x as u8, y as u8, color);
+            }
         }
     }
 
@@ -1780,8 +2018,12 @@ impl App {
         let picker_size = 10.0f32; // each sprite preview is 10px wide area
         let cols = 2;
         let rows = 14; // fits in 144px height
+        let half = (cols * rows / 2) as u8;
         for i in 0..(cols * rows) {
-            let si = self.sprite_selected.wrapping_add(i as u8);
+            let si = self
+                .sprite_selected
+                .wrapping_sub(half)
+                .wrapping_add(i as u8);
             let col = i % cols;
             let row = i / cols;
             let bx = picker_x + col as f32 * (picker_size + 2.0);
@@ -1802,7 +2044,7 @@ impl App {
                 }
             }
             // Highlight selected sprite
-            if i == 0 {
+            if si == self.sprite_selected {
                 helpers.draw_rect(bx, by, picker_size, 1.0, COLOR_WHITE);
                 helpers.draw_rect(bx, by + picker_size - 1.0, picker_size, 1.0, COLOR_WHITE);
                 helpers.draw_rect(bx, by, 1.0, picker_size, COLOR_WHITE);

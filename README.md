@@ -81,9 +81,16 @@ On macOS, word operations use Option instead of Ctrl (Ctrl+Arrow is intercepted 
 Press Escape from the code editor to enter the sprite editor.
 
 - **Arrow keys** move cursor on the 8x8 pixel grid
-- **Z** paint pixel with current color
-- **X** cycle color (0–3, color 0 is transparent)
-- **Enter** next sprite, **Right Shift** previous sprite
+- **Space** paint pixel (hold while moving to draw continuously)
+- **1/2/3/4** select color (1=black, 2=dark, 3=light, 4=white)
+- **C** eyedropper (pick color under cursor)
+- **Tab/Shift+Tab** next/previous sprite
+- **Ctrl+Z** undo, **Ctrl+Y** redo
+- **Ctrl+C/V** copy/paste sprite
+- **Ctrl+S** save
+- **F** flip horizontal, **Shift+F** flip vertical
+- **Shift+Arrow** shift sprite contents
+- **Delete** clear sprite
 - **Escape** return to terminal
 
 Sprite data is saved alongside source code in `.mkr` files and included in exports.
