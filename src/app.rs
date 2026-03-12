@@ -2013,42 +2013,36 @@ impl App {
         helpers.draw_rect(cx, cy, 1.0, zoom as f32, COLOR_WHITE);
         helpers.draw_rect(cx + zoom as f32 - 1.0, cy, 1.0, zoom as f32, COLOR_WHITE);
 
-        // Sprite picker column (right side, starting at x=132)
-        let picker_x = 132.0f32;
-        let picker_size = 10.0f32; // each sprite preview is 10px wide area
-        let cols = 2;
-        let rows = 14; // fits in 144px height
-        let half = (cols * rows / 2) as u8;
-        for i in 0..(cols * rows) {
-            let si = self
-                .sprite_selected
-                .wrapping_sub(half)
-                .wrapping_add(i as u8);
-            let col = i % cols;
-            let row = i / cols;
-            let bx = picker_x + col as f32 * (picker_size + 2.0);
-            let by = row as f32 * picker_size;
-            // Draw 8x8 sprite at 1x scale
-            for py in 0..8u8 {
-                for px in 0..8u8 {
-                    let c = self.get_sprite_pixel(si, px, py);
-                    if c != 0 {
-                        helpers.draw_rect(
-                            bx + px as f32 + 1.0,
-                            by + py as f32 + 1.0,
-                            1.0,
-                            1.0,
-                            palette[c as usize],
-                        );
+        // Sprite sheet view (right side, 3 cols × 16 rows of the 16×16 sheet)
+        let sheet_x = 133.0f32;
+        let sel_col = self.sprite_selected % 16;
+        let start_col = sel_col.wrapping_sub(1);
+        for row in 0..16u8 {
+            for col_off in 0..3u8 {
+                let sheet_col = start_col.wrapping_add(col_off) % 16;
+                let si = row * 16 + sheet_col;
+                let bx = sheet_x + col_off as f32 * 8.0;
+                let by = row as f32 * 8.0;
+                for py in 0..8u8 {
+                    for px in 0..8u8 {
+                        let c = self.get_sprite_pixel(si, px, py);
+                        if c != 0 {
+                            helpers.draw_rect(
+                                bx + px as f32,
+                                by + py as f32,
+                                1.0,
+                                1.0,
+                                palette[c as usize],
+                            );
+                        }
                     }
                 }
-            }
-            // Highlight selected sprite
-            if si == self.sprite_selected {
-                helpers.draw_rect(bx, by, picker_size, 1.0, COLOR_WHITE);
-                helpers.draw_rect(bx, by + picker_size - 1.0, picker_size, 1.0, COLOR_WHITE);
-                helpers.draw_rect(bx, by, 1.0, picker_size, COLOR_WHITE);
-                helpers.draw_rect(bx + picker_size - 1.0, by, 1.0, picker_size, COLOR_WHITE);
+                if si == self.sprite_selected {
+                    helpers.draw_rect(bx, by, 8.0, 1.0, COLOR_WHITE);
+                    helpers.draw_rect(bx, by + 7.0, 8.0, 1.0, COLOR_WHITE);
+                    helpers.draw_rect(bx, by, 1.0, 8.0, COLOR_WHITE);
+                    helpers.draw_rect(bx + 7.0, by, 1.0, 8.0, COLOR_WHITE);
+                }
             }
         }
 
