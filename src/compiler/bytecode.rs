@@ -59,8 +59,8 @@ pub const OP_ABS: u8 = 0x51;
 pub const OP_MIN: u8 = 0x52;
 pub const OP_MAX: u8 = 0x53;
 pub const OP_FLIP: u8 = 0x54;
-pub const OP_PRINTN: u8 = 0x55;
-pub const OP_TRACEN: u8 = 0x56;
+pub const OP_PRINTI: u8 = 0x55;
+pub const OP_TRACEI: u8 = 0x56;
 pub const OP_TRACES: u8 = 0x57;
 pub const OP_TIME: u8 = 0x58;
 pub const OP_RND: u8 = 0x59;
@@ -94,7 +94,7 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Circ => OP_CIRC,
         Intrinsic::Spr => OP_SPR,
         Intrinsic::Prints => OP_PRINTS,
-        Intrinsic::Printn => OP_PRINTN,
+        Intrinsic::Printi => OP_PRINTI,
         Intrinsic::Btn => OP_BTN,
         Intrinsic::Btnp => OP_BTNP,
         Intrinsic::Sfx => OP_SFX,
@@ -108,7 +108,7 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Min => OP_MIN,
         Intrinsic::Max => OP_MAX,
         Intrinsic::Flip => OP_FLIP,
-        Intrinsic::Tracen => OP_TRACEN,
+        Intrinsic::Tracei => OP_TRACEI,
         Intrinsic::Traces => OP_TRACES,
         Intrinsic::Time => OP_TIME,
         Intrinsic::Rnd => OP_RND,
@@ -189,7 +189,7 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_CIRC => Some("Circ"),
         OP_SPR => Some("Spr"),
         OP_PRINTS => Some("Prints"),
-        OP_PRINTN => Some("Printn"),
+        OP_PRINTI => Some("Printi"),
         OP_BTN => Some("Btn"),
         OP_BTNP => Some("Btnp"),
         OP_SFX => Some("Sfx"),
@@ -203,7 +203,7 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_MIN => Some("Min"),
         OP_MAX => Some("Max"),
         OP_FLIP => Some("Flip"),
-        OP_TRACEN => Some("Tracen"),
+        OP_TRACEI => Some("Tracei"),
         OP_TRACES => Some("Traces"),
         OP_TIME => Some("Time"),
         OP_RND => Some("Rnd"),
@@ -262,7 +262,7 @@ const ALL_OPCODES: [u8; 67] = [
     OP_CIRC,
     OP_SPR,
     OP_PRINTS,
-    OP_PRINTN,
+    OP_PRINTI,
     OP_BTN,
     OP_BTNP,
     OP_SFX,
@@ -276,7 +276,7 @@ const ALL_OPCODES: [u8; 67] = [
     OP_MIN,
     OP_MAX,
     OP_FLIP,
-    OP_TRACEN,
+    OP_TRACEI,
     OP_TRACES,
     OP_TIME,
     OP_RND,

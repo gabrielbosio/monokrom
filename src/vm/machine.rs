@@ -441,7 +441,7 @@ impl Vm {
                     self.fb_print(&s, x as i32, y as i32, col as u8);
                 }
             }
-            OP_PRINTN => {
+            OP_PRINTI => {
                 let col = self.pop()?;
                 let y = self.pop()?;
                 let x = self.pop()?;
@@ -516,7 +516,7 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(a.max(b))?;
             }
-            OP_TRACEN => {
+            OP_TRACEI => {
                 let val = self.pop()?;
                 self.trace_output.push(format!("{val}"));
             }
@@ -1092,7 +1092,7 @@ mod tests {
 
     #[test]
     fn struct_return_field_access() {
-        let src = "fn main()\n  printn(g().x, 55, 70, 3)\nend\n\nstruct F\n  x: int\nend\n\nfn g(): F\n  f: F\n  return f\nend";
+        let src = "fn main()\n  printi(g().x, 55, 70, 3)\nend\n\nstruct F\n  x: int\nend\n\nfn g(): F\n  f: F\n  return f\nend";
         let bc = crate::compiler::compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
@@ -1100,7 +1100,7 @@ mod tests {
 
     #[test]
     fn compound_return_value_assignment() {
-        let src = "fn new_list(): array[10] of int\n  a: array[10] of int\n  a[0] = 12\n  return a\nend\n\nfn main()\n  a = new_list()\n  tracen(a[0])\nend";
+        let src = "fn new_list(): array[10] of int\n  a: array[10] of int\n  a[0] = 12\n  return a\nend\n\nfn main()\n  a = new_list()\n  tracei(a[0])\nend";
         let bc = crate::compiler::compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();

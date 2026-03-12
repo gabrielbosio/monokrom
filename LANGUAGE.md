@@ -205,7 +205,7 @@ Built-in functions that compile to single opcodes.
 | `circ(x, y, r, col)` | Draw circle |
 | `spr(n, x, y)` | Draw sprite |
 | `prints(s, x, y, col)` | Print string |
-| `printn(val, x, y, col)` | Print number |
+| `printi(val, x, y, col)` | Print number |
 | `printf(val, x, y, col)` | Print fixed-point as decimal (e.g. "1.50") |
 
 ### Input
@@ -284,7 +284,7 @@ Constants are inlined at compile time as fixed-point literals.
 
 | Function | Description |
 |----------|-------------|
-| `tracen(val)` | Print number to terminal |
+| `tracei(val)` | Print number to terminal |
 | `traces(s)` | Print string to terminal |
 | `tracef(val)` | Print fixed-point as decimal to terminal |
 

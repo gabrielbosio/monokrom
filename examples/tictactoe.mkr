@@ -197,7 +197,7 @@ fn draw(game: Game)
     // or "PLAYER 2 WINS" if player 2
     // won.
     prints("PLAYER ", 55, 135, 3)
-    printn(game.turn, 55 + 28, 135, 3)
+    printi(game.turn, 55 + 28, 135, 3)
     prints(" WINS", 55 + 28 + 4, 135, 3)
   else
     // Draw cursor
