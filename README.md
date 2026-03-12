@@ -37,30 +37,21 @@ Debug stores files in `./fs/`, release in `~/.monokrom/`.
 
 ## Usage
 
-Monokrom boots into a terminal. Press Escape to toggle between terminal and editor.
+Monokrom boots into a terminal. Press **Escape** to cycle between terminal -> code editor -> sprite editor.
 
-### Terminal commands
+On macOS, word operations use Option instead of Ctrl. On WASM, all Ctrl shortcuts use Alt instead.
+
+### Terminal
 
 - `run`: compile and run the current file
 - `stat`: show bytecode size vs 32KB limit
-- `open <file>` / `save <file>`, file operations (use quotes for spaces: `open "my file"`)
-- `ls`, list files
-- `cp <src> <dst>`, copy file
-- `rm <file>`, remove file
-- `example`, list built-in examples
-- `example <name>`, load an example into the editor (e.g. `example tictactoe`)
+- `open <file>` / `save <file>`: file operations
+- `ls` / `rm <file>` / `cp <src> <dst>`: file management
 - `export <name>`: export game as a standalone binary
+- `example`: list/load built-in examples
+- `help`: show all commands
 
-### Exporting
-
-The `export` command bundles your game with the Monokrom engine so it can run directly without the editor.
-
-- **Native**: `export mygame` creates a self-contained executable in the current directory. Run it with `./mygame`.
-- **WASM**: `export mygame` downloads `mygame.html`. Serve it alongside the runtime files (`gl.js`, `sapp_jsutils.js`, `quad-storage.js`, `monokrom.js`, `monokrom.wasm`).
-
-### Editor hotkeys
-
-On macOS, word operations use Option instead of Ctrl (Ctrl+Arrow is intercepted by the OS). On WASM, all Ctrl shortcuts use Alt instead (browsers intercept Ctrl combos).
+### Code editor
 
 - **Ctrl+S** save, **Ctrl+O** open, **Ctrl+N** new file
 - **Ctrl+Enter** run program
@@ -68,17 +59,14 @@ On macOS, word operations use Option instead of Ctrl (Ctrl+Arrow is intercepted 
 - **Ctrl+X/C/V** cut, copy, paste
 - **Ctrl+A** select all
 - **Ctrl+F** find, **Ctrl+R** replace, **Ctrl+L** go to line
-- **Ctrl+Left/Right** word movement, **Ctrl+Backspace** word delete (macOS: Option instead of Ctrl)
-- **Ctrl+Up/Down** scroll viewport one line (macOS: Option instead of Ctrl)
+- **Ctrl+Left/Right** word movement, **Ctrl+Backspace** word delete
+- **Ctrl+Up/Down** scroll viewport one line
 - **Shift+arrows** selection, **Shift+Home/End** select to line start/end
-- **Ctrl+Shift+Left/Right** select by word (macOS: Option+Shift)
+- **Ctrl+Shift+Left/Right** select by word
 - **PageUp/PageDown** move cursor by page
-- **Tab/Shift+Tab** indent/dedent (block indent when multi-line selected)
-- **Escape** cycle between terminal, editor, and sprite editor
+- **Tab/Shift+Tab** indent/dedent
 
 ### Sprite editor
-
-Press Escape from the code editor to enter the sprite editor.
 
 - **Arrow keys** move cursor on the 8x8 pixel grid
 - **Space** paint pixel (hold while moving to draw continuously)
@@ -91,6 +79,10 @@ Press Escape from the code editor to enter the sprite editor.
 - **F** flip horizontal, **Shift+F** flip vertical
 - **Shift+Arrow** shift sprite contents
 - **Delete** clear sprite
-- **Escape** return to terminal
 
-Sprite data is saved alongside source code in `.mkr` files and included in exports.
+### Exporting
+
+The `export` command bundles your game with the Monokrom engine so it can run directly without the editor.
+
+- **Native**: `export mygame` creates a self-contained executable. Run it with `./mygame`.
+- **WASM**: `export mygame` downloads `mygame.html`. Serve it alongside the runtime files.
