@@ -92,6 +92,7 @@ pub struct App {
     input_dialog: InputDialog,
     confirm_dialog: ConfirmDialog,
     message_dialog: MessageDialog,
+    message_return_mode: AppMode,
     file_picker: FilePicker,
     pending_action: PendingAction,
 
@@ -170,6 +171,7 @@ impl App {
             input_dialog: InputDialog::new(),
             confirm_dialog: ConfirmDialog::new(),
             message_dialog: MessageDialog::new(),
+            message_return_mode: AppMode::Editing,
             file_picker: FilePicker::new(),
             pending_action: PendingAction::None,
 
@@ -236,6 +238,7 @@ impl App {
             input_dialog: InputDialog::new(),
             confirm_dialog: ConfirmDialog::new(),
             message_dialog: MessageDialog::new(),
+            message_return_mode: AppMode::Editing,
             file_picker: FilePicker::new(),
             pending_action: PendingAction::None,
 
@@ -1158,12 +1161,13 @@ impl App {
 
     fn update_message_dialog(&mut self) {
         if self.message_dialog.update() {
-            self.mode = AppMode::Editing;
+            self.mode = self.message_return_mode;
         }
     }
 
     fn show_message(&mut self, message: &str) {
         self.message_dialog.show(message);
+        self.message_return_mode = self.mode;
         self.mode = AppMode::Message;
     }
 
@@ -2145,9 +2149,14 @@ impl App {
         if self.mode == AppMode::Running {
             clear_background(COLOR_BLACK);
             self.draw_running(&helpers);
-        } else if self.mode == AppMode::SpriteEditor {
+        } else if self.mode == AppMode::SpriteEditor
+            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::SpriteEditor)
+        {
             clear_background(COLOR_BLACK);
             self.draw_sprite_editor(&helpers);
+            if self.mode == AppMode::Message {
+                self.message_dialog.draw_scaled(&helpers);
+            }
         } else if self.mode == AppMode::Terminal {
             clear_background(COLOR_BLACK);
             self.draw_terminal(&helpers);
