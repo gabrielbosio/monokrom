@@ -1989,40 +1989,46 @@ impl App {
 
     fn draw_sprite_editor(&self, helpers: &DrawHelpers) {
         let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
-        let zoom = 16;
+        let zoom = 14.0f32;
+        let editor_size = zoom * 8.0;
 
-        // Draw current sprite zoomed (128x128 pixels starting at 0,0)
+        // Draw current sprite zoomed
         for py in 0..8u8 {
             for px in 0..8u8 {
                 let color = self.get_sprite_pixel(self.sprite_selected, px, py);
-                let sx = px as f32 * zoom as f32;
-                let sy = py as f32 * zoom as f32;
-                helpers.draw_rect(sx, sy, zoom as f32, zoom as f32, palette[color as usize]);
+                helpers.draw_rect(
+                    px as f32 * zoom,
+                    py as f32 * zoom,
+                    zoom,
+                    zoom,
+                    palette[color as usize],
+                );
             }
         }
 
         // Draw grid lines
         let grid_color = Color::new(0.2, 0.2, 0.2, 1.0);
         for i in 1..8 {
-            let pos = i as f32 * zoom as f32;
-            helpers.draw_rect(pos, 0.0, 1.0, 128.0, grid_color);
-            helpers.draw_rect(0.0, pos, 128.0, 1.0, grid_color);
+            let pos = i as f32 * zoom;
+            helpers.draw_rect(pos, 0.0, 1.0, editor_size, grid_color);
+            helpers.draw_rect(0.0, pos, editor_size, 1.0, grid_color);
         }
 
         // Draw cursor highlight
-        let cx = self.sprite_cursor_x as f32 * zoom as f32;
-        let cy = self.sprite_cursor_y as f32 * zoom as f32;
-        helpers.draw_rect(cx, cy, zoom as f32, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy + zoom as f32 - 1.0, zoom as f32, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy, 1.0, zoom as f32, COLOR_WHITE);
-        helpers.draw_rect(cx + zoom as f32 - 1.0, cy, 1.0, zoom as f32, COLOR_WHITE);
+        let cx = self.sprite_cursor_x as f32 * zoom;
+        let cy = self.sprite_cursor_y as f32 * zoom;
+        helpers.draw_rect(cx, cy, zoom, 1.0, COLOR_WHITE);
+        helpers.draw_rect(cx, cy + zoom - 1.0, zoom, 1.0, COLOR_WHITE);
+        helpers.draw_rect(cx, cy, 1.0, zoom, COLOR_WHITE);
+        helpers.draw_rect(cx + zoom - 1.0, cy, 1.0, zoom, COLOR_WHITE);
 
-        // Sprite sheet view (right side, 3 cols × 16 rows of the 16×16 sheet)
-        let sheet_x = 133.0f32;
+        // Sprite sheet view (right side, 5 cols × 16 rows of the 16×16 sheet)
+        let sheet_x = editor_size + 4.0;
+        let sheet_cols = 5u8;
         let sel_col = self.sprite_selected % 16;
-        let start_col = sel_col.wrapping_sub(1);
+        let start_col = sel_col.wrapping_sub(sheet_cols / 2);
         for row in 0..16u8 {
-            for col_off in 0..3u8 {
+            for col_off in 0..sheet_cols {
                 let sheet_col = start_col.wrapping_add(col_off) % 16;
                 let si = row * 16 + sheet_col;
                 let bx = sheet_x + col_off as f32 * 8.0;
@@ -2040,12 +2046,6 @@ impl App {
                             );
                         }
                     }
-                }
-                if si == self.sprite_selected {
-                    helpers.draw_rect(bx, by, 8.0, 1.0, COLOR_WHITE);
-                    helpers.draw_rect(bx, by + 7.0, 8.0, 1.0, COLOR_WHITE);
-                    helpers.draw_rect(bx, by, 1.0, 8.0, COLOR_WHITE);
-                    helpers.draw_rect(bx + 7.0, by, 1.0, 8.0, COLOR_WHITE);
                 }
             }
         }
