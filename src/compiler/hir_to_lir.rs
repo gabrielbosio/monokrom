@@ -380,6 +380,54 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// Copy a compound value word-by-word from src address to dst address.
+    fn emit_compound_copy(&mut self, dst: Value, src: Value, size: u16) {
+        let mut offset: u16 = 0;
+        while offset + 1 < size {
+            let off = self.emit(LirInst::Const(offset as i16));
+            let sa = self.emit(LirInst::BinOp {
+                op: BinOp::Add,
+                lhs: src,
+                rhs: off,
+                is_fixed: false,
+            });
+            let w = self.emit(LirInst::Load { addr: sa, size: 2 });
+            let da = self.emit(LirInst::BinOp {
+                op: BinOp::Add,
+                lhs: dst,
+                rhs: off,
+                is_fixed: false,
+            });
+            self.emit(LirInst::Store {
+                addr: da,
+                val: w,
+                size: 2,
+            });
+            offset += 2;
+        }
+        if offset < size {
+            let off = self.emit(LirInst::Const(offset as i16));
+            let sa = self.emit(LirInst::BinOp {
+                op: BinOp::Add,
+                lhs: src,
+                rhs: off,
+                is_fixed: false,
+            });
+            let w = self.emit(LirInst::Load { addr: sa, size: 1 });
+            let da = self.emit(LirInst::BinOp {
+                op: BinOp::Add,
+                lhs: dst,
+                rhs: off,
+                is_fixed: false,
+            });
+            self.emit(LirInst::Store {
+                addr: da,
+                val: w,
+                size: 1,
+            });
+        }
+    }
+
     /// Get the memory address of an expression (for lvalues and compound access)
     fn lower_addr_of(&mut self, expr: &HirExpr) -> Value {
         match &expr.kind {
@@ -453,13 +501,14 @@ impl<'a> LowerCtx<'a> {
                     let block = self.current_block;
                     self.write_variable(name, block, val);
                 }
-                // Compound types: if initialized from a function return, use its address
+                // Compound types: copy into the local's pre-allocated memory
                 if !self.is_scalar(ty) {
                     if let Some(v) = value {
-                        let val = self.lower_expr(v);
-                        let block = self.current_block;
-                        self.compound_local_addrs.remove(name.as_str());
-                        self.write_variable(name, block, val);
+                        let src = self.lower_expr(v);
+                        let dst_addr = self.compound_local_addrs[name.as_str()];
+                        let dst = self.emit(LirInst::GlobalAddr(dst_addr));
+                        let size = self.type_size(ty);
+                        self.emit_compound_copy(dst, src, size);
                     }
                 }
             }
@@ -472,19 +521,28 @@ impl<'a> LowerCtx<'a> {
                         let block = self.current_block;
                         self.write_variable(name, block, val);
                     }
-                    // Compound local reassigned from a function return
+                    // Compound local: copy into the local's pre-allocated memory
                     HirExprKind::Var(name) if !self.is_scalar(&target.ty) => {
-                        let val = self.lower_expr(value);
-                        let block = self.current_block;
-                        self.compound_local_addrs.remove(name.as_str());
-                        self.write_variable(name, block, val);
+                        let src = self.lower_expr(value);
+                        let dst_addr = self.compound_local_addrs[name.as_str()];
+                        let dst = self.emit(LirInst::GlobalAddr(dst_addr));
+                        let size = self.type_size(&target.ty);
+                        self.emit_compound_copy(dst, src, size);
                     }
                     // Global or compound field
                     _ => {
-                        let addr = self.lower_addr_of(target);
+                        let dst = self.lower_addr_of(target);
                         let val = self.lower_expr(value);
-                        let size = self.type_size(&target.ty) as u8;
-                        self.emit(LirInst::Store { addr, val, size });
+                        let size = self.type_size(&target.ty);
+                        if self.is_scalar(&target.ty) {
+                            self.emit(LirInst::Store {
+                                addr: dst,
+                                val,
+                                size: size as u8,
+                            });
+                        } else {
+                            self.emit_compound_copy(dst, val, size);
+                        }
                     }
                 }
             }

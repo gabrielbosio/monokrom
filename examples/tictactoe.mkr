@@ -69,34 +69,31 @@ end
 // game struct and check for winners
 // or if the game ends in a draw.
 fn handle_input(game: Game)
-  // Alias to reduce line length
-  cursor = game.cursor
-
   // Press Left key to move the cursor
   // to the left, if possible
   if btnp(0) and not btnp(1)
-    cursor.x = max(cursor.x - 1, 0)
+    game.cursor.x = max(game.cursor.x - 1, 0)
   // Press Right key to move the
   // cursor to the right, if possible
   else if btnp(1) and not btnp(0)
-    cursor.x = min(cursor.x + 1, 2)
+    game.cursor.x = min(game.cursor.x + 1, 2)
   end
 
   // Press Up key to move the cursor
   // up, if possible
   if btnp(2) and not btnp(3)
-    cursor.y = max(cursor.y - 1, 0)
+    game.cursor.y = max(game.cursor.y - 1, 0)
   // Press Down key to move the cursor
   // down, if possible
   else if btnp(3) and not btnp(2)
-    cursor.y = min(cursor.y + 1, 2)
+    game.cursor.y = min(game.cursor.y + 1, 2)
   end
 
   // We have to convert the
   // two-dimensional representation of
   // the board to the one-dimensional
   // data structure used.
-  cell_idx = cursor.x + cursor.y * 3
+  cell_idx = game.cursor.x + game.cursor.y * 3
   empty_cell = game.board[cell_idx] == 0
   // Press Z if the cursor is
   // positioned in an empty cell to
