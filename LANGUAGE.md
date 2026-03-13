@@ -173,6 +173,16 @@ e.x = 10
 e.alive = true
 ```
 
+Assigning a struct copies all fields (value semantics):
+
+```
+a: Enemy
+a.x = 10
+b = a
+b.x = 20
+// a.x is still 10
+```
+
 ## Arrays
 
 Fixed-size, homogeneous:
