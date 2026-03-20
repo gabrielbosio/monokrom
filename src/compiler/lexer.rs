@@ -38,6 +38,8 @@ pub enum Token {
     Break,
     #[token("continue")]
     Continue,
+    #[token("ref")]
+    Ref,
     #[token("array")]
     Array,
     #[token("of")]
@@ -294,11 +296,12 @@ mod tests {
     #[test]
     fn struct_keywords() {
         assert_eq!(
-            tokens("struct break continue array of"),
+            tokens("struct break continue ref array of"),
             vec![
                 Token::Struct,
                 Token::Break,
                 Token::Continue,
+                Token::Ref,
                 Token::Array,
                 Token::Of
             ]

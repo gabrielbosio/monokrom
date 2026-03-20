@@ -24,6 +24,7 @@ extern {
         "not" => Token::Not,
         "break" => Token::Break,
         "continue" => Token::Continue,
+        "ref" => Token::Ref,
         "array" => Token::Array,
         "of" => Token::Of,
         "int" => Token::Int,
@@ -119,6 +120,7 @@ Type: TypeExpr = {
     "bool" => TypeExpr::Bool,
     "str" => TypeExpr::Str,
     "void" => TypeExpr::Void,
+    "ref" <ty:Type> => TypeExpr::Ref(Box::new(ty)),
     "array" "[" <size:INT> "]" "of" <ty:Type> => TypeExpr::Array(Box::new(ty), size),
     <name:IDENT> => TypeExpr::Named(name),
 };
@@ -250,6 +252,7 @@ UnaryExpr: Expr = {
     <l:@L> "not" <e:UnaryExpr> <r:@R> => Expr::new(ExprKind::UnaryOp {
         op: UnaryOp::Not, expr: Box::new(e)
     }, (l, r)),
+    <l:@L> "ref" <e:PostfixExpr> <r:@R> => Expr::new(ExprKind::Ref(Box::new(e)), (l, r)),
     PostfixExpr,
 };
 

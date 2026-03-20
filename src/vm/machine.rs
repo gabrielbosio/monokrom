@@ -1135,4 +1135,139 @@ mod tests {
         // pset drew color 2, sprite has color 0, so should not overwrite
         assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 2);
     }
+
+    #[test]
+    fn ref_scalar_write_through() {
+        // fn inc(x: ref int) writes through to modify caller's local
+        let src = "fn inc(x: ref int)\n  x = x + 1\nend\n\nfn main()\n  a = 10\n  inc(ref a)\n  tracei(a)\nend";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "11");
+    }
+
+    #[test]
+    fn ref_struct_field_mutation() {
+        let src = "\
+struct Vec2
+  x: int
+  y: int
+end
+
+fn add(a: ref Vec2, b: ref Vec2)
+  a.x = a.x + b.x
+  a.y = a.y + b.y
+end
+
+fn main()
+  a: Vec2
+  a.x = 3
+  a.y = 4
+  b: Vec2
+  b.x = 10
+  b.y = 20
+  add(ref a, ref b)
+  tracei(a.x)
+  tracei(a.y)
+end";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "13");
+        assert_eq!(vm.trace_output[1], "24");
+    }
+
+    #[test]
+    fn ref_forwarding() {
+        // Forward a ref param to another function
+        let src = "\
+fn set_val(x: ref int)
+  x = 99
+end
+
+fn wrapper(x: ref int)
+  set_val(x)
+end
+
+fn main()
+  v = 0
+  wrapper(ref v)
+  tracei(v)
+end";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "99");
+    }
+
+    #[test]
+    fn ref_local_binding() {
+        // p = ref v creates a local ref that can modify v
+        let src = "\
+struct Vec2
+  x: int
+  y: int
+end
+
+v: Vec2
+
+fn main()
+  v.x = 5
+  p = ref v
+  p.x = 42
+  tracei(v.x)
+end";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "42");
+    }
+
+    #[test]
+    fn compound_param_copy_semantics() {
+        // Without ref, struct params are copied, so callee can't mutate caller
+        let src = "\
+struct Vec2
+  x: int
+  y: int
+end
+
+fn try_modify(v: Vec2)
+  v.x = 999
+end
+
+fn main()
+  v: Vec2
+  v.x = 5
+  try_modify(v)
+  tracei(v.x)
+end";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "5");
+    }
+
+    #[test]
+    fn ref_swap() {
+        let src = "\
+fn swap(a: ref int, b: ref int)
+  tmp = a
+  a = b
+  b = tmp
+end
+
+fn main()
+  x = 10
+  y = 20
+  swap(ref x, ref y)
+  tracei(x)
+  tracei(y)
+end";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "20");
+        assert_eq!(vm.trace_output[1], "10");
+    }
 }

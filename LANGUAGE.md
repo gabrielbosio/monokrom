@@ -199,6 +199,86 @@ enemies[0].x = 10
 scores[i] = 100
 ```
 
+## References
+
+The `ref` keyword creates a mutable reference to a variable, field, or array element. References allow functions to modify the caller's data.
+
+### Ref parameters
+
+Without `ref`, all parameters are passed by value, so scalars are copied and structs and arrays are copied on entry. With `ref`, the callee receives an address and can modify the original:
+
+```
+fn inc(x: ref int)
+  x = x + 1
+end
+
+fn main()
+  a = 10
+  inc(ref a)
+  // a is now 11
+end
+```
+
+The `ref` keyword is required at both the declaration and the call site.
+
+### Ref with structs
+
+```
+struct Vec2
+  x: int
+  y: int
+end
+
+fn add(a: ref Vec2, b: ref Vec2)
+  a.x = a.x + b.x
+  a.y = a.y + b.y
+end
+```
+
+Field access and assignment work through refs transparently, with no special syntax needed.
+
+### Local ref bindings
+
+You can bind a ref to a local variable for convenience:
+
+```
+p = ref game.player
+p.x = p.x + dx
+p.y = p.y + dy
+```
+
+### Auto-deref
+
+Refs auto-dereference in expressions. `x + 1` works whether `x` is `int` or `ref int`:
+
+```
+fn double(x: ref int)
+  x = x * 2   // x auto-derefs on read, writes through on assign
+end
+```
+
+### Forwarding
+
+A `ref` parameter can be passed directly to another `ref` parameter without repeating `ref`:
+
+```
+fn set_zero(x: ref int)
+  x = 0
+end
+
+fn clear(x: ref int)
+  set_zero(x)  // forwards the ref
+end
+```
+
+### Rules
+
+- Refs are scoped: only in function parameters and local bindings
+- All refs are mutable
+- Cannot store refs in struct fields or arrays
+- Cannot return refs from functions
+- No nested `ref ref T`
+
 ## Intrinsics
 
 Built-in functions that compile to single opcodes.

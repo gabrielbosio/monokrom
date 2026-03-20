@@ -63,6 +63,7 @@ fn token_description(token: &lexer::Token) -> &str {
         Not => "'not'",
         Break => "'break'",
         Continue => "'continue'",
+        Ref => "'ref'",
         Array => "'array'",
         Of => "'of'",
         Int => "'int'",
@@ -109,6 +110,7 @@ fn simplify_expected(expected: &[String]) -> String {
         "\"false\"",
         "\"not\"",
         "\"-\"",
+        "\"ref\"",
         "\"PI\"",
         "\"E\"",
     ];
@@ -668,5 +670,48 @@ mod tests {
     fn compile_type_error_has_line_number() {
         let errs = super::compile("fn f()\n  x: int = true\nend").unwrap_err();
         assert!(errs.iter().any(|e| e.starts_with("line ")));
+    }
+
+    #[test]
+    fn ref_type_in_param() {
+        let m = p("fn f(x: ref int)\nend");
+        let TopLevel::Function(f) = &m.items[0] else {
+            panic!()
+        };
+        assert_eq!(f.params[0].ty, TypeExpr::Ref(Box::new(TypeExpr::Int)));
+    }
+
+    #[test]
+    fn ref_expr_in_call() {
+        let m = p("f(ref x)");
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!()
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!()
+        };
+        let ExprKind::Call { args, .. } = &e.kind else {
+            panic!()
+        };
+        let ExprKind::Ref(inner) = &args[0].kind else {
+            panic!()
+        };
+        assert_eq!(inner.kind, ExprKind::Ident("x".into()));
+    }
+
+    #[test]
+    fn ref_binds_at_unary_level() {
+        // ref a.field parses as ref (a.field)
+        let m = p("ref a.field");
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!()
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!()
+        };
+        let ExprKind::Ref(inner) = &e.kind else {
+            panic!()
+        };
+        assert!(matches!(&inner.kind, ExprKind::FieldAccess { .. }));
     }
 }

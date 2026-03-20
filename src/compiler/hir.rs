@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::compiler::ast::{BinOp, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -7,6 +9,7 @@ pub enum HirType {
     Bool,
     Str,
     Void,
+    Ref(Box<HirType>),
     Array(Box<HirType>, i16),
     Struct(String),
 }
@@ -19,6 +22,7 @@ impl std::fmt::Display for HirType {
             Self::Bool => write!(f, "bool"),
             Self::Str => write!(f, "str"),
             Self::Void => write!(f, "void"),
+            Self::Ref(inner) => write!(f, "ref {inner}"),
             Self::Array(elem, size) => write!(f, "array[{size}] of {elem}"),
             Self::Struct(name) => write!(f, "{name}"),
         }
@@ -103,6 +107,7 @@ pub enum HirExprKind {
         field: String,
         offset: u16,
     },
+    AddrOf(Box<HirExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -174,6 +179,7 @@ pub struct HirFunc {
     pub ret_type: HirType,
     pub locals: Vec<(String, HirType)>,
     pub body: Vec<HirStmt>,
+    pub promoted_locals: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

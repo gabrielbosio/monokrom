@@ -45,6 +45,7 @@ pub enum TypeExpr {
     Bool,
     Str,
     Void,
+    Ref(Box<TypeExpr>),
     Array(Box<TypeExpr>, i16),
     Named(String),
 }
@@ -153,6 +154,7 @@ pub enum ExprKind {
         expr: Box<Expr>,
         field: String,
     },
+    Ref(Box<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

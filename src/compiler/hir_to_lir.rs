@@ -251,7 +251,7 @@ impl<'a> LowerCtx<'a> {
 
     fn type_size(&self, ty: &HirType) -> u16 {
         match ty {
-            HirType::Int | HirType::Fixed | HirType::Str => 2,
+            HirType::Int | HirType::Fixed | HirType::Str | HirType::Ref(_) => 2,
             HirType::Bool => 1,
             HirType::Void => 0,
             HirType::Array(elem, count) => self.type_size(elem) * (*count as u16),
@@ -268,7 +268,7 @@ impl<'a> LowerCtx<'a> {
     fn is_scalar(&self, ty: &HirType) -> bool {
         matches!(
             ty,
-            HirType::Int | HirType::Fixed | HirType::Bool | HirType::Str
+            HirType::Int | HirType::Fixed | HirType::Bool | HirType::Str | HirType::Ref(_)
         )
     }
 
@@ -292,11 +292,27 @@ impl<'a> LowerCtx<'a> {
             HirExprKind::StrLit(idx) => self.emit(LirInst::Const(*idx as i16)),
 
             HirExprKind::Var(name) => {
-                if self.is_scalar(&expr.ty) {
-                    self.read_variable(name, self.current_block)
+                if let HirType::Ref(inner) = &expr.ty {
+                    // Ref variable: read address from SSA, auto-deref for scalar inner
+                    let addr = self.read_variable(name, self.current_block);
+                    if self.is_scalar(inner) {
+                        let size = self.type_size(inner) as u8;
+                        self.emit(LirInst::Load { addr, size })
+                    } else {
+                        addr // compound ref: address IS the value
+                    }
                 } else if self.compound_local_addrs.contains_key(name) {
                     let addr = self.compound_local_addrs[name];
-                    self.emit(LirInst::GlobalAddr(addr))
+                    let ga = self.emit(LirInst::GlobalAddr(addr));
+                    if self.is_scalar(&expr.ty) {
+                        // Promoted scalar: load from memory
+                        let size = self.type_size(&expr.ty) as u8;
+                        self.emit(LirInst::Load { addr: ga, size })
+                    } else {
+                        ga
+                    }
+                } else if self.is_scalar(&expr.ty) {
+                    self.read_variable(name, self.current_block)
                 } else {
                     // Dynamic compound address (e.g. for-in element variable)
                     self.read_variable(name, self.current_block)
@@ -334,7 +350,27 @@ impl<'a> LowerCtx<'a> {
             }
 
             HirExprKind::Call { name, args } => {
-                let arg_vals: Vec<Value> = args.iter().map(|a| self.lower_expr(a)).collect();
+                let func_params = self
+                    .module
+                    .functions
+                    .iter()
+                    .find(|f| f.name == *name)
+                    .map(|f| &f.params[..]);
+                let arg_vals: Vec<Value> = args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| {
+                        let is_ref_param = func_params
+                            .and_then(|ps| ps.get(i))
+                            .map(|p| matches!(&p.ty, HirType::Ref(_)))
+                            .unwrap_or(false);
+                        if is_ref_param {
+                            self.lower_as_ref(a)
+                        } else {
+                            self.lower_expr(a)
+                        }
+                    })
+                    .collect();
                 self.emit(LirInst::Call {
                     name: name.clone(),
                     args: arg_vals,
@@ -359,6 +395,8 @@ impl<'a> LowerCtx<'a> {
                 }
             }
 
+            HirExprKind::AddrOf(inner) => self.lower_addr_of(inner),
+
             HirExprKind::FieldAccess {
                 expr: base, offset, ..
             } => {
@@ -377,6 +415,18 @@ impl<'a> LowerCtx<'a> {
                     addr
                 }
             }
+        }
+    }
+
+    /// Lower an expression that should produce a ref (address) value.
+    /// Avoids auto-deref for Ref vars and returns the raw address.
+    fn lower_as_ref(&mut self, expr: &HirExpr) -> Value {
+        match &expr.kind {
+            HirExprKind::AddrOf(inner) => self.lower_addr_of(inner),
+            HirExprKind::Var(name) if matches!(&expr.ty, HirType::Ref(_)) => {
+                self.read_variable(name, self.current_block)
+            }
+            _ => self.lower_expr(expr),
         }
     }
 
@@ -489,7 +539,36 @@ impl<'a> LowerCtx<'a> {
         }
         match stmt {
             HirStmt::VarDecl { name, ty, value } => {
-                if self.is_scalar(ty) {
+                if let HirType::Ref(_) = ty {
+                    // Ref declaration: store the address as an SSA value
+                    let val = if let Some(v) = value {
+                        self.lower_as_ref(v)
+                    } else {
+                        self.emit(LirInst::Const(0))
+                    };
+                    let block = self.current_block;
+                    self.write_variable(name, block, val);
+                } else if self.is_scalar(ty)
+                    && self.compound_local_addrs.contains_key(name.as_str())
+                {
+                    // Promoted scalar: store to memory
+                    let val = if let Some(v) = value {
+                        self.lower_expr(v)
+                    } else {
+                        match ty {
+                            HirType::Bool => self.emit(LirInst::ConstBool(false)),
+                            _ => self.emit(LirInst::Const(0)),
+                        }
+                    };
+                    let addr = self.compound_local_addrs[name.as_str()];
+                    let ga = self.emit(LirInst::GlobalAddr(addr));
+                    let size = self.type_size(ty) as u8;
+                    self.emit(LirInst::Store {
+                        addr: ga,
+                        val,
+                        size,
+                    });
+                } else if self.is_scalar(ty) {
                     let val = if let Some(v) = value {
                         self.lower_expr(v)
                     } else {
@@ -500,9 +579,8 @@ impl<'a> LowerCtx<'a> {
                     };
                     let block = self.current_block;
                     self.write_variable(name, block, val);
-                }
-                // Compound types: copy into the local's pre-allocated memory
-                if !self.is_scalar(ty) {
+                } else {
+                    // Compound types: copy into the local's pre-allocated memory
                     if let Some(v) = value {
                         let src = self.lower_expr(v);
                         let dst_addr = self.compound_local_addrs[name.as_str()];
@@ -515,6 +593,46 @@ impl<'a> LowerCtx<'a> {
 
             HirStmt::Assign { target, value } => {
                 match &target.kind {
+                    // Ref variable assignment
+                    HirExprKind::Var(name) if matches!(&target.ty, HirType::Ref(..)) => {
+                        let inner = match &target.ty {
+                            HirType::Ref(inner) => inner.as_ref(),
+                            _ => unreachable!(),
+                        };
+                        if matches!(&value.kind, HirExprKind::AddrOf(_)) {
+                            // Rebind: explicit `ref` expression changes what ref points to
+                            let new_addr = self.lower_as_ref(value);
+                            let block = self.current_block;
+                            self.write_variable(name, block, new_addr);
+                        } else {
+                            // Write-through: store value at the address the ref holds
+                            let addr = self.read_variable(name, self.current_block);
+                            if self.is_scalar(inner) {
+                                let val = self.lower_expr(value);
+                                let size = self.type_size(inner) as u8;
+                                self.emit(LirInst::Store { addr, val, size });
+                            } else {
+                                let src = self.lower_expr(value);
+                                let size = self.type_size(inner);
+                                self.emit_compound_copy(addr, src, size);
+                            }
+                        }
+                    }
+                    // Promoted scalar local
+                    HirExprKind::Var(name)
+                        if self.is_scalar(&target.ty)
+                            && self.compound_local_addrs.contains_key(name.as_str()) =>
+                    {
+                        let val = self.lower_expr(value);
+                        let addr = self.compound_local_addrs[name.as_str()];
+                        let ga = self.emit(LirInst::GlobalAddr(addr));
+                        let size = self.type_size(&target.ty) as u8;
+                        self.emit(LirInst::Store {
+                            addr: ga,
+                            val,
+                            size,
+                        });
+                    }
                     // Scalar local
                     HirExprKind::Var(name) if self.is_scalar(&target.ty) => {
                         let val = self.lower_expr(value);
@@ -954,7 +1072,7 @@ impl<'a> LowerCtx<'a> {
 
 fn alloc_compound_locals(ctx: &mut LowerCtx, func: &HirFunc) {
     for (name, ty) in &func.locals {
-        if !ctx.is_scalar(ty) {
+        if !ctx.is_scalar(ty) || func.promoted_locals.contains(name) {
             let addr = ctx.next_compound_addr;
             ctx.next_compound_addr += ctx.type_size(ty);
             ctx.compound_local_addrs.insert(name.clone(), addr);
@@ -975,6 +1093,19 @@ fn lower_function(module: &HirModule, func: &HirFunc, globals_size: u16) -> (Lir
         let block = ctx.current_block;
         ctx.write_variable(&p.name, block, v);
         params.push(v);
+    }
+
+    // Copy compound params to local memory (by-value semantics)
+    for p in &func.params {
+        if !ctx.is_scalar(&p.ty) {
+            let size = ctx.type_size(&p.ty);
+            let local_addr = ctx.next_compound_addr;
+            ctx.next_compound_addr += size;
+            ctx.compound_local_addrs.insert(p.name.clone(), local_addr);
+            let src = ctx.read_variable(&p.name, ctx.current_block);
+            let dst = ctx.emit(LirInst::GlobalAddr(local_addr));
+            ctx.emit_compound_copy(dst, src, size);
+        }
     }
 
     // If this is main(), inline global initializers first
@@ -1023,20 +1154,18 @@ pub fn lower_to_lir(module: &HirModule) -> LirModule {
         .unwrap_or(0);
 
     let mut functions = Vec::new();
-    let mut max_compound_end = globals_size;
+    let mut next_base = globals_size;
 
     for func in &module.functions {
-        let (lir_func, compound_end) = lower_function(module, func, globals_size);
-        if compound_end > max_compound_end {
-            max_compound_end = compound_end;
-        }
+        let (lir_func, compound_end) = lower_function(module, func, next_base);
+        next_base = compound_end;
         functions.push(lir_func);
     }
 
     LirModule {
         functions,
         string_pool: module.string_pool.clone(),
-        globals_size: max_compound_end,
+        globals_size: next_base,
     }
 }
 
