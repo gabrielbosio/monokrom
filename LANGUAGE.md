@@ -72,11 +72,16 @@ Precedence from lowest to highest:
 |-----------|-----------|-------------|
 | 1 | `or` | Logical OR |
 | 2 | `and` | Logical AND |
-| 3 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
-| 4 | `+` `-` | Addition, subtraction |
-| 5 | `*` `/` `%` | Multiplication, division, modulo |
-| 6 | `-` `not` | Unary negation, logical NOT |
-| 7 | `()` `[]` `.` | Call, index, field access |
+| 3 | `\|` | Bitwise OR |
+| 4 | `&` | Bitwise AND |
+| 5 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
+| 6 | `<<` `>>` | Bit shift left, right |
+| 7 | `+` `-` | Addition, subtraction |
+| 8 | `*` `/` `%` | Multiplication, division, modulo |
+| 9 | `-` `not` `~` | Unary negation, logical NOT, bitwise NOT |
+| 10 | `()` `[]` `.` | Call, index, field access |
+
+Bitwise operators work on `int` only. `>>` is arithmetic (sign-extending).
 
 ## Control Flow
 
@@ -131,6 +136,14 @@ end
 
 for _, e in enemies
     // discard index
+end
+```
+
+For scalar types (`int`, `fixed`, `bool`), the element is a copy. For structs, the element is a reference to the array entry, so modifications are written back to the array:
+
+```
+for _, e in enemies
+    e.x = e.x + 1  // modifies enemies[i].x
 end
 ```
 
