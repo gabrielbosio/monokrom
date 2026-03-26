@@ -285,8 +285,30 @@ impl TypeCheckCtx {
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Gt | BinOp::Leq | BinOp::Geq
         );
         let is_logical = matches!(op, BinOp::And | BinOp::Or);
+        let is_bitwise = matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::Shl | BinOp::Shr);
 
-        if is_logical {
+        if is_bitwise {
+            if *lhs_ty != HirType::Int {
+                self.error_at(
+                    span,
+                    format!("bitwise operation requires int, got {}", lhs_hir.ty),
+                );
+            }
+            if *rhs_ty != HirType::Int {
+                self.error_at(
+                    span,
+                    format!("bitwise operation requires int, got {}", rhs_hir.ty),
+                );
+            }
+            HirExpr {
+                kind: HirExprKind::BinOp {
+                    op,
+                    lhs: Box::new(lhs_hir),
+                    rhs: Box::new(rhs_hir),
+                },
+                ty: HirType::Int,
+            }
+        } else if is_logical {
             if *lhs_ty != HirType::Bool {
                 self.error_at(span, format!("expected bool, got {}", lhs_hir.ty));
             }
@@ -355,6 +377,18 @@ impl TypeCheckCtx {
                         expr: Box::new(inner),
                     },
                     ty: HirType::Bool,
+                }
+            }
+            UnaryOp::BitNot => {
+                if *inner_ty != HirType::Int {
+                    self.error_at(span, format!("'~' requires int, got {}", inner.ty));
+                }
+                HirExpr {
+                    kind: HirExprKind::UnaryOp {
+                        op,
+                        expr: Box::new(inner),
+                    },
+                    ty: HirType::Int,
                 }
             }
         }

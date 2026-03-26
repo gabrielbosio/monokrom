@@ -297,6 +297,30 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(if a == 0 { 1 } else { 0 })?;
             }
+            BAND => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(a & b)?;
+            }
+            BOR => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(a | b)?;
+            }
+            BNOT => {
+                let a = self.pop()?;
+                self.push(!a)?;
+            }
+            SHL => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(a.wrapping_shl(b as u32))?;
+            }
+            SHR => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(a.wrapping_shr(b as u32))?;
+            }
             LOAD1 => {
                 let addr = self.pop()? as u16 as usize;
                 if addr >= MEMORY_SIZE {

@@ -27,6 +27,12 @@ pub const AND: u8 = 0x1C;
 pub const OR: u8 = 0x1D;
 pub const NOT: u8 = 0x1E;
 
+pub const BAND: u8 = 0x64;
+pub const BOR: u8 = 0x65;
+pub const BNOT: u8 = 0x66;
+pub const SHL: u8 = 0x67;
+pub const SHR: u8 = 0x68;
+
 pub const LOAD1: u8 = 0x20;
 pub const LOAD2: u8 = 0x21;
 pub const STORE1: u8 = 0x22;
@@ -217,12 +223,17 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_PRINTF => Some("Printf"),
         FMUL => Some("Fmul"),
         FDIV => Some("Fdiv"),
+        BAND => Some("Band"),
+        BOR => Some("Bor"),
+        BNOT => Some("Bnot"),
+        SHL => Some("Shl"),
+        SHR => Some("Shr"),
         _ => None,
     }
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 67] = [
+const ALL_OPCODES: [u8; 72] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -290,6 +301,11 @@ const ALL_OPCODES: [u8; 67] = [
     OP_PRINTF,
     FMUL,
     FDIV,
+    BAND,
+    BOR,
+    BNOT,
+    SHL,
+    SHR,
 ];
 
 #[derive(Debug)]

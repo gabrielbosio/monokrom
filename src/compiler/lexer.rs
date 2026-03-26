@@ -92,6 +92,10 @@ pub enum Token {
     Leq,
     #[token(">=")]
     Geq,
+    #[token("<<")]
+    Shl,
+    #[token(">>")]
+    Shr,
     #[token("+")]
     Plus,
     #[token("-")]
@@ -118,6 +122,12 @@ pub enum Token {
     RBracket,
     #[token(",")]
     Comma,
+    #[token("&")]
+    Ampersand,
+    #[token("|")]
+    Pipe,
+    #[token("~")]
+    Tilde,
     #[token(":")]
     Colon,
     #[token("..=")]

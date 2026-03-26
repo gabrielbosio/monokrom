@@ -172,10 +172,15 @@ pub enum BinOp {
     Geq,
     And,
     Or,
+    BitAnd,
+    BitOr,
+    Shl,
+    Shr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     Neg,
     Not,
+    BitNot,
 }

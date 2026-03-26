@@ -48,6 +48,11 @@ extern {
         "/" => Token::Slash,
         "%" => Token::Percent,
         "=" => Token::Assign,
+        "<<" => Token::Shl,
+        ">>" => Token::Shr,
+        "&" => Token::Ampersand,
+        "|" => Token::Pipe,
+        "~" => Token::Tilde,
         "<" => Token::Lt,
         ">" => Token::Gt,
         "(" => Token::LParen,
@@ -200,17 +205,31 @@ OrExpr: Expr = {
 };
 
 AndExpr: Expr = {
-    <l:@L> <lhs:AndExpr> "and" <rhs:CmpExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+    <l:@L> <lhs:AndExpr> "and" <rhs:BitOrExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::And, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    }, (l, r)),
+    BitOrExpr,
+};
+
+BitOrExpr: Expr = {
+    <l:@L> <lhs:BitOrExpr> "|" <rhs:BitAndExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+        op: BinOp::BitOr, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    }, (l, r)),
+    BitAndExpr,
+};
+
+BitAndExpr: Expr = {
+    <l:@L> <lhs:BitAndExpr> "&" <rhs:CmpExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+        op: BinOp::BitAnd, lhs: Box::new(lhs), rhs: Box::new(rhs)
     }, (l, r)),
     CmpExpr,
 };
 
 CmpExpr: Expr = {
-    <l:@L> <lhs:AddExpr> <op:CmpOp> <rhs:AddExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+    <l:@L> <lhs:ShiftExpr> <op:CmpOp> <rhs:ShiftExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op, lhs: Box::new(lhs), rhs: Box::new(rhs)
     }, (l, r)),
-    AddExpr,
+    ShiftExpr,
 };
 
 CmpOp: BinOp = {
@@ -220,6 +239,16 @@ CmpOp: BinOp = {
     ">" => BinOp::Gt,
     "<=" => BinOp::Leq,
     ">=" => BinOp::Geq,
+};
+
+ShiftExpr: Expr = {
+    <l:@L> <lhs:ShiftExpr> "<<" <rhs:AddExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+        op: BinOp::Shl, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    }, (l, r)),
+    <l:@L> <lhs:ShiftExpr> ">>" <rhs:AddExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+        op: BinOp::Shr, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    }, (l, r)),
+    AddExpr,
 };
 
 AddExpr: Expr = {
@@ -251,6 +280,9 @@ UnaryExpr: Expr = {
     }, (l, r)),
     <l:@L> "not" <e:UnaryExpr> <r:@R> => Expr::new(ExprKind::UnaryOp {
         op: UnaryOp::Not, expr: Box::new(e)
+    }, (l, r)),
+    <l:@L> "~" <e:UnaryExpr> <r:@R> => Expr::new(ExprKind::UnaryOp {
+        op: UnaryOp::BitNot, expr: Box::new(e)
     }, (l, r)),
     <l:@L> "ref" <e:PostfixExpr> <r:@R> => Expr::new(ExprKind::Ref(Box::new(e)), (l, r)),
     PostfixExpr,

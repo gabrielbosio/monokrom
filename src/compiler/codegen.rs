@@ -157,6 +157,10 @@ fn binop_opcode(op: BinOp) -> u8 {
         BinOp::Geq => GEQ,
         BinOp::And => AND,
         BinOp::Or => OR,
+        BinOp::BitAnd => BAND,
+        BinOp::BitOr => BOR,
+        BinOp::Shl => SHL,
+        BinOp::Shr => SHR,
     }
 }
 
@@ -164,6 +168,7 @@ fn unaryop_opcode(op: UnaryOp) -> u8 {
     match op {
         UnaryOp::Neg => NEG,
         UnaryOp::Not => NOT,
+        UnaryOp::BitNot => BNOT,
     }
 }
 

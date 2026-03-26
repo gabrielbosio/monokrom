@@ -111,6 +111,12 @@ pub fn simplify(func: &mut LirFunc) {
                                 bools.insert(val, !b);
                             }
                         }
+                        UnaryOp::BitNot => {
+                            if let Some(&n) = consts.get(&operand) {
+                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::Const(!n);
+                                consts.insert(val, !n);
+                            }
+                        }
                     }
                 }
                 LirInst::Phi(entries) => {
@@ -185,6 +191,10 @@ fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
         BinOp::Geq => (l >= r) as i16,
         BinOp::And => ((l != 0) && (r != 0)) as i16,
         BinOp::Or => ((l != 0) || (r != 0)) as i16,
+        BinOp::BitAnd => l & r,
+        BinOp::BitOr => l | r,
+        BinOp::Shl => l.wrapping_shl(r as u32),
+        BinOp::Shr => l.wrapping_shr(r as u32),
     })
 }
 
