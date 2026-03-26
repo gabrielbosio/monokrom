@@ -1308,14 +1308,31 @@ impl App {
         }
     }
 
-    /// Check if a line should be dedented: true when its indent >= the line above
+    /// Check if a line should be dedented by finding the matching block opener
     fn should_dedent(&self, line: usize) -> bool {
-        let indent = self.leading_spaces(line);
-        if line > 0 {
-            indent >= self.leading_spaces(line - 1)
-        } else {
-            indent > 0
+        self.leading_spaces(line) > self.block_opener_indent(line)
+    }
+
+    /// Scan upward to find the indent of the block opener matching this line
+    fn block_opener_indent(&self, line: usize) -> usize {
+        let mut depth = 0usize;
+        for i in (0..line).rev() {
+            let trimmed = self.editor.buffer.get_line(i).trim().to_string();
+            if trimmed == "end" {
+                depth += 1;
+            } else if trimmed.starts_with("if ")
+                || trimmed.starts_with("while ")
+                || trimmed.starts_with("for ")
+                || trimmed.starts_with("fn ")
+                || trimmed.starts_with("struct ")
+            {
+                if depth == 0 {
+                    return self.leading_spaces(i);
+                }
+                depth -= 1;
+            }
         }
+        0
     }
 
     fn leading_spaces(&self, line: usize) -> usize {
