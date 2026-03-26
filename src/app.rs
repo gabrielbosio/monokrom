@@ -126,6 +126,7 @@ pub struct App {
     sprite_redo: Vec<(u8, [u8; SPRITE_SIZE])>,
     sprite_clipboard: Option<[u8; SPRITE_SIZE]>,
     sprite_painting: bool,
+    sprite_sheet_col: u8,
 }
 
 impl App {
@@ -199,6 +200,7 @@ impl App {
             sprite_redo: Vec::new(),
             sprite_clipboard: None,
             sprite_painting: false,
+            sprite_sheet_col: 0,
         }
     }
 
@@ -266,6 +268,7 @@ impl App {
             sprite_redo: Vec::new(),
             sprite_clipboard: None,
             sprite_painting: false,
+            sprite_sheet_col: 0,
         }
     }
 
@@ -1775,14 +1778,26 @@ impl App {
             return;
         }
 
+        // Alt+Arrow: navigate sprite sheet in 4 directions
+        let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
+        if alt {
+            if is_key_pressed(KeyCode::Left) {
+                self.select_sprite(self.sprite_selected.wrapping_sub(1));
+            }
+            if is_key_pressed(KeyCode::Right) {
+                self.select_sprite(self.sprite_selected.wrapping_add(1));
+            }
+            if is_key_pressed(KeyCode::Up) {
+                self.select_sprite(self.sprite_selected.wrapping_sub(16));
+            }
+            if is_key_pressed(KeyCode::Down) {
+                self.select_sprite(self.sprite_selected.wrapping_add(16));
+            }
+            return;
+        }
+
         // Shift bindings
         if shift {
-            // Shift+Tab: prev sprite
-            if is_key_pressed(KeyCode::Tab) {
-                self.sprite_selected = self.sprite_selected.wrapping_sub(1);
-                return;
-            }
-
             // Shift+Arrow: shift sprite contents
             let dir = if is_key_pressed(KeyCode::Left) {
                 Some((-1i8, 0i8))
@@ -1842,11 +1857,6 @@ impl App {
         }
         if is_key_pressed(KeyCode::Key4) {
             self.sprite_color = 3;
-        }
-
-        // Tab / Shift+Tab: next / prev sprite
-        if is_key_pressed(KeyCode::Tab) {
-            self.sprite_selected = self.sprite_selected.wrapping_add(1);
         }
 
         // Arrow keys: move cursor
@@ -1915,6 +1925,20 @@ impl App {
         self.sprite_data[base..base + SPRITE_SIZE].copy_from_slice(data);
     }
 
+    fn select_sprite(&mut self, idx: u8) {
+        self.sprite_selected = idx;
+        let sheet_cols: u8 = 5;
+        let sel_col = idx % 16;
+        let offset = sel_col.wrapping_sub(self.sprite_sheet_col) % 16;
+        if offset >= sheet_cols {
+            if offset > 8 {
+                self.sprite_sheet_col = sel_col;
+            } else {
+                self.sprite_sheet_col = sel_col.wrapping_sub(sheet_cols - 1) % 16;
+            }
+        }
+    }
+
     fn sprite_push_undo(&mut self) {
         let data = self.get_sprite_bytes(self.sprite_selected);
         self.sprite_undo.push((self.sprite_selected, data));
@@ -1929,7 +1953,7 @@ impl App {
             let current = self.get_sprite_bytes(sprite);
             self.sprite_redo.push((sprite, current));
             self.set_sprite_bytes(sprite, &data);
-            self.sprite_selected = sprite;
+            self.select_sprite(sprite);
             self.is_modified = true;
         }
     }
@@ -1939,7 +1963,7 @@ impl App {
             let current = self.get_sprite_bytes(sprite);
             self.sprite_undo.push((sprite, current));
             self.set_sprite_bytes(sprite, &data);
-            self.sprite_selected = sprite;
+            self.select_sprite(sprite);
             self.is_modified = true;
         }
     }
@@ -2042,8 +2066,7 @@ impl App {
         // Sprite sheet view (right side, 5 cols × 16 rows of the 16×16 sheet)
         let sheet_x = editor_size + 4.0;
         let sheet_cols = 5u8;
-        let sel_col = self.sprite_selected % 16;
-        let start_col = sel_col.wrapping_sub(sheet_cols / 2);
+        let start_col = self.sprite_sheet_col;
         for row in 0..16u8 {
             for col_off in 0..sheet_cols {
                 let sheet_col = start_col.wrapping_add(col_off) % 16;
@@ -2066,6 +2089,16 @@ impl App {
                 }
             }
         }
+
+        // Highlight selected sprite in sheet view
+        let sel_col = self.sprite_selected % 16;
+        let col_off = sel_col.wrapping_sub(start_col) % 16;
+        let sel_bx = sheet_x + col_off as f32 * 8.0;
+        let sel_by = (self.sprite_selected / 16) as f32 * 8.0;
+        helpers.draw_rect(sel_bx, sel_by, 8.0, 1.0, COLOR_WHITE);
+        helpers.draw_rect(sel_bx, sel_by + 7.0, 8.0, 1.0, COLOR_WHITE);
+        helpers.draw_rect(sel_bx, sel_by, 1.0, 8.0, COLOR_WHITE);
+        helpers.draw_rect(sel_bx + 7.0, sel_by, 1.0, 8.0, COLOR_WHITE);
 
         // Color palette bar at bottom
         let bar_y = 134.0f32;
