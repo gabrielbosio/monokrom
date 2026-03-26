@@ -19,7 +19,10 @@ use crate::ui::{
 };
 use crate::vm::Vm;
 
-const EXAMPLES: &[(&str, &str)] = &[("tictactoe", include_str!("../examples/tictactoe.mkr"))];
+const EXAMPLES: &[(&str, &str)] = &[
+    ("bricks", include_str!("../examples/bricks.mkr")),
+    ("tictactoe", include_str!("../examples/tictactoe.mkr")),
+];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 enum PendingAction {
