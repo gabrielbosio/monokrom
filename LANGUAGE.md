@@ -307,6 +307,7 @@ Built-in functions that compile to single opcodes.
 | `rect(x, y, w, h, col)` | Draw rectangle |
 | `circ(x, y, r, col)` | Draw circle |
 | `spr(n, x, y)` | Draw sprite |
+| `map(sx, sy, dx, dy, w, h)` | Draw map region: tiles at (sx,sy) to screen at (dx,dy), w×h tiles |
 | `prints(s, x, y, col)` | Print string |
 | `printi(val, x, y, col)` | Print integer |
 | `printf(val, x, y, col)` | Print fixed-point as decimal (e.g. "1.50") |
@@ -337,6 +338,16 @@ Button mapping:
 |----------|-------------|
 | `peek(addr): int` | Read byte from memory |
 | `poke(addr, val)` | Write byte to memory |
+| `mget(x, y): int` | Get map tile (sprite index) at position |
+| `mset(x, y, tile)` | Set map tile at position |
+
+Memory layout:
+
+| Address | Size | Contents |
+|---------|------|----------|
+| `0x0000` | 12KB | General purpose (globals, arrays) |
+| `0x3000` | 4KB | Sprite data (256 × 16 bytes) |
+| `0x4000` | 4KB | Map data (128 × 32 tiles) |
 
 Peek and poke operate on single bytes. Since `int` is 16-bit (2 bytes, little-endian), reading a full int requires two peeks:
 
@@ -417,5 +428,6 @@ Programs that don't call `flip()` run once and exit, which is useful for one-sho
 ## Limits
 
 - **Bytecode**: 32KB max
-- **Runtime memory**: 16KB flat (static allocation, no GC)
-- **Sprites**: 8x8 pixels
+- **Runtime memory**: 20KB flat (static allocation, no GC)
+- **Sprites**: 256 sprites, 8×8 pixels, 2bpp (4 colors)
+- **Map**: 128×32 tiles, 1 byte per cell (sprite index)
