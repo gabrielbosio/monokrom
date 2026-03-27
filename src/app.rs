@@ -232,7 +232,7 @@ impl App {
             map_data: [0; 4096],
             map_cursor_x: 0,
             map_cursor_y: 0,
-            map_selected_tile: 1,
+            map_selected_tile: 0,
             map_undo: Vec::new(),
             map_redo: Vec::new(),
             map_viewport_x: 0,
