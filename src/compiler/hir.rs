@@ -65,6 +65,9 @@ pub enum Intrinsic {
     Itof,
     Tracef,
     Printf,
+    Mget,
+    Mset,
+    Map,
 }
 
 #[derive(Debug, Clone, PartialEq)]

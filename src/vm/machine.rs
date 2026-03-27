@@ -1,10 +1,12 @@
 use crate::compiler::bytecode::*;
-use crate::config::{SPRITE_COUNT, SPRITE_REGION_START, SPRITE_SIZE};
+use crate::config::{
+    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, SPRITE_COUNT, SPRITE_REGION_START, SPRITE_SIZE,
+};
 use crate::render::font::FONT_DATA;
 
 const STACK_LIMIT: usize = 256;
 const CALL_STACK_LIMIT: usize = 64;
-const MEMORY_SIZE: usize = 16384;
+const MEMORY_SIZE: usize = 20480;
 const FB_WIDTH: usize = 160;
 const FB_HEIGHT: usize = 144;
 const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
@@ -550,6 +552,38 @@ impl Vm {
                 self.prev_buttons = self.buttons;
                 return Ok(VmResult::Flip);
             }
+            OP_MGET => {
+                let y = self.pop()?;
+                let x = self.pop()?;
+                let xu = x as u16 as usize;
+                let yu = y as u16 as usize;
+                if xu < MAP_WIDTH && yu < MAP_HEIGHT {
+                    self.push(self.memory[MAP_REGION_START + yu * MAP_WIDTH + xu] as i16)?;
+                } else {
+                    self.push(0)?;
+                }
+            }
+            OP_MSET => {
+                let tile = self.pop()?;
+                let y = self.pop()?;
+                let x = self.pop()?;
+                let xu = x as u16 as usize;
+                let yu = y as u16 as usize;
+                if xu < MAP_WIDTH && yu < MAP_HEIGHT {
+                    self.memory[MAP_REGION_START + yu * MAP_WIDTH + xu] = tile as u8;
+                }
+            }
+            OP_MAP => {
+                let h = self.pop()?;
+                let w = self.pop()?;
+                let dy = self.pop()?;
+                let dx = self.pop()?;
+                let sy = self.pop()?;
+                let sx = self.pop()?;
+                self.fb_map(
+                    sx as i32, sy as i32, dx as i32, dy as i32, w as i32, h as i32,
+                );
+            }
             _ => return Err(VmError::UnknownOpcode(op)),
         }
         Ok(VmResult::Continue)
@@ -661,6 +695,22 @@ impl Vm {
                 let c1 = (b1 >> (6 - col * 2)) & 3;
                 if c1 != 0 {
                     self.fb_pset(x + 4 + col, y + row, c1);
+                }
+            }
+        }
+    }
+
+    fn fb_map(&mut self, sx: i32, sy: i32, dx: i32, dy: i32, w: i32, h: i32) {
+        for ty in 0..h {
+            for tx in 0..w {
+                let mx = sx + tx;
+                let my = sy + ty;
+                if mx >= 0 && mx < MAP_WIDTH as i32 && my >= 0 && my < MAP_HEIGHT as i32 {
+                    let tile =
+                        self.memory[MAP_REGION_START + my as usize * MAP_WIDTH + mx as usize];
+                    if tile != 0 {
+                        self.fb_spr(tile as u16, dx + tx * 8, dy + ty * 8);
+                    }
                 }
             }
         }

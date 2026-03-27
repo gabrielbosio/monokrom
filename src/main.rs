@@ -55,17 +55,23 @@ fn detect_embedded_game() -> Option<vm::Vm> {
         vm.memory[config::SPRITE_REGION_START..config::SPRITE_REGION_START + 4096]
             .copy_from_slice(&payload[spr_start..spr_start + 4096]);
     }
+    let map_start = spr_start + 4096;
+    if payload.len() >= map_start + 4096 {
+        vm.memory[config::MAP_REGION_START..config::MAP_REGION_START + 4096]
+            .copy_from_slice(&payload[map_start..map_start + 4096]);
+    }
     Some(vm)
 }
 
 #[cfg(target_arch = "wasm32")]
 fn detect_embedded_game() -> Option<vm::Vm> {
     let full_source = filesystem::web_io::get_embedded_source()?;
-    let (source, spr) = app::split_sprite_section(&full_source);
+    let (source, spr, map) = app::split_data_sections(&full_source);
     let bc = compiler::compile(source).ok()?;
     let mut vm = vm::Vm::new(&bc, 0.0).ok()?;
     vm.memory[config::SPRITE_REGION_START..config::SPRITE_REGION_START + 4096]
         .copy_from_slice(&spr);
+    vm.memory[config::MAP_REGION_START..config::MAP_REGION_START + 4096].copy_from_slice(&map);
     Some(vm)
 }
 

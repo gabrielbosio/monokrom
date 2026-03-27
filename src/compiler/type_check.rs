@@ -84,6 +84,9 @@ impl TypeCheckCtx {
             ("itof", Itof, vec![Int], Fixed),
             ("tracef", Tracef, vec![Fixed], Void),
             ("printf", Printf, vec![Fixed, Int, Int, Int], Void),
+            ("mget", Mget, vec![Int, Int], Int),
+            ("mset", Mset, vec![Int, Int, Int], Void),
+            ("map", Map, vec![Int, Int, Int, Int, Int, Int], Void),
         ];
         for (name, op, params, ret) in sigs {
             self.intrinsics

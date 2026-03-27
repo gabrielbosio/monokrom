@@ -35,3 +35,8 @@ pub const TERMINAL_MAX_SCROLLBACK: usize = 200;
 pub const SPRITE_COUNT: usize = 256;
 pub const SPRITE_SIZE: usize = 16; // bytes per sprite (8x8, 2bpp)
 pub const SPRITE_REGION_START: usize = 0x3000; // 12288
+
+// Map
+pub const MAP_WIDTH: usize = 128;
+pub const MAP_HEIGHT: usize = 32;
+pub const MAP_REGION_START: usize = 0x4000; // 16384

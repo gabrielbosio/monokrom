@@ -32,6 +32,9 @@ pub const BOR: u8 = 0x65;
 pub const BNOT: u8 = 0x66;
 pub const SHL: u8 = 0x67;
 pub const SHR: u8 = 0x68;
+pub const OP_MGET: u8 = 0x69;
+pub const OP_MSET: u8 = 0x6A;
+pub const OP_MAP: u8 = 0x6B;
 
 pub const LOAD1: u8 = 0x20;
 pub const LOAD2: u8 = 0x21;
@@ -126,6 +129,9 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Itof => OP_ITOF,
         Intrinsic::Tracef => OP_TRACEF,
         Intrinsic::Printf => OP_PRINTF,
+        Intrinsic::Mget => OP_MGET,
+        Intrinsic::Mset => OP_MSET,
+        Intrinsic::Map => OP_MAP,
     }
 }
 
@@ -150,6 +156,7 @@ pub fn intrinsic_has_return_value(op: Intrinsic) -> bool {
             | Intrinsic::Atan2
             | Intrinsic::Ftoi
             | Intrinsic::Itof
+            | Intrinsic::Mget
     )
 }
 
@@ -228,12 +235,15 @@ fn op_name(b: u8) -> Option<&'static str> {
         BNOT => Some("Bnot"),
         SHL => Some("Shl"),
         SHR => Some("Shr"),
+        OP_MGET => Some("Mget"),
+        OP_MSET => Some("Mset"),
+        OP_MAP => Some("Map"),
         _ => None,
     }
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 72] = [
+const ALL_OPCODES: [u8; 75] = [
     PUSH0,
     PUSH1,
     PUSH_I8,
@@ -306,6 +316,9 @@ const ALL_OPCODES: [u8; 72] = [
     BNOT,
     SHL,
     SHR,
+    OP_MGET,
+    OP_MSET,
+    OP_MAP,
 ];
 
 #[derive(Debug)]
