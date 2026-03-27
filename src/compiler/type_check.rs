@@ -11,11 +11,15 @@ struct IntrinsicSig {
     ret: HirType,
 }
 
+struct GlobalInfo {
+    ty: HirType,
+    address: u16,
+    init: Option<HirExpr>,
+}
+
 struct TypeCheckCtx {
     structs: HashMap<String, HirStruct>,
-    globals: HashMap<String, HirType>,
-    global_addresses: HashMap<String, u16>,
-    global_inits: HashMap<String, HirExpr>,
+    globals: HashMap<String, GlobalInfo>,
     functions: HashMap<String, (Vec<HirType>, HirType)>,
     intrinsics: HashMap<String, IntrinsicSig>,
     scopes: Vec<HashMap<String, HirType>>,
@@ -30,8 +34,6 @@ impl TypeCheckCtx {
         let mut ctx = Self {
             structs: HashMap::new(),
             globals: HashMap::new(),
-            global_addresses: HashMap::new(),
-            global_inits: HashMap::new(),
             functions: HashMap::new(),
             intrinsics: HashMap::new(),
             scopes: Vec::new(),
@@ -119,8 +121,8 @@ impl TypeCheckCtx {
             }
         }
         // Search globals
-        if let Some(ty) = self.globals.get(name) {
-            return Some((ty.clone(), true));
+        if let Some(info) = self.globals.get(name) {
+            return Some((info.ty.clone(), true));
         }
         None
     }
@@ -794,11 +796,14 @@ impl TypeCheckCtx {
                     hv
                 });
                 let addr = self.alloc_global(&hir_ty);
-                self.globals.insert(name.clone(), hir_ty.clone());
-                self.global_addresses.insert(name.clone(), addr);
-                if let Some(init) = hir_value {
-                    self.global_inits.insert(name.clone(), init);
-                }
+                self.globals.insert(
+                    name.clone(),
+                    GlobalInfo {
+                        ty: hir_ty,
+                        address: addr,
+                        init: hir_value,
+                    },
+                );
                 None
             }
             ast::StmtKind::Assign { target, value } => {
@@ -809,9 +814,14 @@ impl TypeCheckCtx {
                         let hir_value = self.check_expr(value);
                         let ty = hir_value.ty.clone();
                         let addr = self.alloc_global(&ty);
-                        self.globals.insert(name.clone(), ty.clone());
-                        self.global_addresses.insert(name.clone(), addr);
-                        self.global_inits.insert(name.clone(), hir_value);
+                        self.globals.insert(
+                            name.clone(),
+                            GlobalInfo {
+                                ty,
+                                address: addr,
+                                init: Some(hir_value),
+                            },
+                        );
                         return None;
                     }
                 }
@@ -894,17 +904,14 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
                 _ => None,
             };
             if let Some(name) = name {
-                if let (Some(ty), Some(&addr)) =
-                    (ctx.globals.get(&name), ctx.global_addresses.get(&name))
-                {
+                if let Some(info) = ctx.globals.get_mut(&name) {
                     // Avoid duplicates
                     if !hir_globals.iter().any(|g: &HirGlobal| g.name == name) {
-                        let init = ctx.global_inits.remove(&name);
                         hir_globals.push(HirGlobal {
                             name: name.clone(),
-                            ty: ty.clone(),
-                            address: addr,
-                            init,
+                            ty: info.ty.clone(),
+                            address: info.address,
+                            init: info.init.take(),
                         });
                     }
                 }
@@ -1077,9 +1084,11 @@ pub fn type_size_standalone(ty: &HirType, structs: &[HirStruct]) -> u16 {
     }
 }
 
+const FP_SCALE: f64 = 128.0;
+
 fn parse_fixed(s: &str) -> i16 {
     let val: f64 = s.parse().unwrap_or(0.0);
-    (val * 128.0).round() as i16
+    (val * FP_SCALE).round() as i16
 }
 
 #[cfg(test)]

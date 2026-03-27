@@ -9,6 +9,7 @@ const FB_WIDTH: usize = 160;
 const FB_HEIGHT: usize = 144;
 const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
 const CYCLE_LIMIT: u32 = 1_000_000;
+const FP_SCALE: f32 = 128.0;
 
 #[derive(Debug)]
 pub enum VmError {
@@ -180,6 +181,14 @@ impl Vm {
             return Ok(VmResult::Halted);
         }
 
+        macro_rules! binop {
+            ($op:expr) => {{
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push($op(a, b))?;
+            }};
+        }
+
         let op = self.read_u8();
         match op {
             PUSH0 => self.push(0)?,
@@ -205,122 +214,58 @@ impl Vm {
                 let v = self.pop()?;
                 self.store_local(slot, v);
             }
-            ADD => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.wrapping_add(b))?;
-            }
-            SUB => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.wrapping_sub(b))?;
-            }
-            MUL => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.wrapping_mul(b))?;
-            }
+            ADD => binop!(i16::wrapping_add),
+            SUB => binop!(i16::wrapping_sub),
+            MUL => binop!(i16::wrapping_mul),
             DIV => {
                 let b = self.pop()?;
-                let a = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
                 }
+                let a = self.pop()?;
                 self.push(a.wrapping_div(b))?;
             }
             MOD => {
                 let b = self.pop()?;
-                let a = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
                 }
+                let a = self.pop()?;
                 self.push(a.wrapping_rem(b))?;
             }
             NEG => {
                 let a = self.pop()?;
                 self.push(a.wrapping_neg())?;
             }
-            FMUL => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(((a as i32 * b as i32) >> 7) as i16)?;
-            }
+            FMUL => binop!(|a: i16, b| ((a as i32 * b as i32) >> 7) as i16),
             FDIV => {
                 let b = self.pop()?;
-                let a = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
                 }
+                let a = self.pop()?;
                 self.push((((a as i32) << 7) / b as i32) as i16)?;
             }
-            EQ => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a == b { 1 } else { 0 })?;
-            }
-            NEQ => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a != b { 1 } else { 0 })?;
-            }
-            LT => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a < b { 1 } else { 0 })?;
-            }
-            GT => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a > b { 1 } else { 0 })?;
-            }
-            LEQ => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a <= b { 1 } else { 0 })?;
-            }
-            GEQ => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a >= b { 1 } else { 0 })?;
-            }
-            AND => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a != 0 && b != 0 { 1 } else { 0 })?;
-            }
-            OR => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(if a != 0 || b != 0 { 1 } else { 0 })?;
-            }
+            EQ => binop!(|a: i16, b| if a == b { 1 } else { 0 }),
+            NEQ => binop!(|a: i16, b| if a != b { 1 } else { 0 }),
+            LT => binop!(|a: i16, b| if a < b { 1 } else { 0 }),
+            GT => binop!(|a: i16, b| if a > b { 1 } else { 0 }),
+            LEQ => binop!(|a: i16, b| if a <= b { 1 } else { 0 }),
+            GEQ => binop!(|a: i16, b| if a >= b { 1 } else { 0 }),
+            AND => binop!(|a: i16, b| if a != 0 && b != 0 { 1 } else { 0 }),
+            OR => binop!(|a: i16, b| if a != 0 || b != 0 { 1 } else { 0 }),
             NOT => {
                 let a = self.pop()?;
                 self.push(if a == 0 { 1 } else { 0 })?;
             }
-            BAND => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a & b)?;
-            }
-            BOR => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a | b)?;
-            }
+            BAND => binop!(|a: i16, b| a & b),
+            BOR => binop!(|a: i16, b| a | b),
             BNOT => {
                 let a = self.pop()?;
                 self.push(!a)?;
             }
-            SHL => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.wrapping_shl(b as u32))?;
-            }
-            SHR => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.wrapping_shr(b as u32))?;
-            }
+            SHL => binop!(|a: i16, b| a.wrapping_shl(b as u32)),
+            SHR => binop!(|a: i16, b| a.wrapping_shr(b as u32)),
             LOAD1 => {
                 let addr = self.pop()? as u16 as usize;
                 if addr >= MEMORY_SIZE {
@@ -507,22 +452,20 @@ impl Vm {
             }
             OP_SIN => {
                 let x = self.pop()?;
-                let rad = (x as f32) / 128.0;
-                let result = (rad.sin() * 128.0) as i16;
-                self.push(result)?;
+                let rad = (x as f32) / FP_SCALE;
+                self.push((rad.sin() * FP_SCALE) as i16)?;
             }
             OP_COS => {
                 let x = self.pop()?;
-                let rad = (x as f32) / 128.0;
-                let result = (rad.cos() * 128.0) as i16;
-                self.push(result)?;
+                let rad = (x as f32) / FP_SCALE;
+                self.push((rad.cos() * FP_SCALE) as i16)?;
             }
             OP_SQRT => {
                 let x = self.pop()?;
                 let result = if x <= 0 {
                     0
                 } else {
-                    ((x as f32 / 128.0).sqrt() * 128.0) as i16
+                    ((x as f32 / FP_SCALE).sqrt() * FP_SCALE) as i16
                 };
                 self.push(result)?;
             }
@@ -530,16 +473,8 @@ impl Vm {
                 let x = self.pop()?;
                 self.push(x.wrapping_abs())?;
             }
-            OP_MIN => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.min(b))?;
-            }
-            OP_MAX => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(a.max(b))?;
-            }
+            OP_MIN => binop!(i16::min),
+            OP_MAX => binop!(i16::max),
             OP_TRACEI => {
                 let val = self.pop()?;
                 self.trace_output.push(format!("{val}"));
@@ -568,29 +503,28 @@ impl Vm {
             }
             OP_EXP => {
                 let x = self.pop()?;
-                let result = ((x as f32 / 128.0).exp() * 128.0) as i16;
-                self.push(result)?;
+                self.push(((x as f32 / FP_SCALE).exp() * FP_SCALE) as i16)?;
             }
             OP_LOG => {
                 let x = self.pop()?;
                 let result = if x <= 0 {
                     0
                 } else {
-                    ((x as f32 / 128.0).ln() * 128.0) as i16
+                    ((x as f32 / FP_SCALE).ln() * FP_SCALE) as i16
                 };
                 self.push(result)?;
             }
             OP_POW => {
                 let exp = self.pop()?;
                 let base = self.pop()?;
-                let result = ((base as f32 / 128.0).powf(exp as f32 / 128.0) * 128.0) as i16;
-                self.push(result)?;
+                self.push(
+                    ((base as f32 / FP_SCALE).powf(exp as f32 / FP_SCALE) * FP_SCALE) as i16,
+                )?;
             }
             OP_ATAN2 => {
                 let x = self.pop()?;
                 let y = self.pop()?;
-                let result = ((y as f32 / 128.0).atan2(x as f32 / 128.0) * 128.0) as i16;
-                self.push(result)?;
+                self.push(((y as f32 / FP_SCALE).atan2(x as f32 / FP_SCALE) * FP_SCALE) as i16)?;
             }
             OP_FTOI => {
                 let x = self.pop()?;

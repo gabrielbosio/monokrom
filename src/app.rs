@@ -134,80 +134,23 @@ pub struct App {
 
 impl App {
     pub async fn new() -> Self {
-        let font = BitmapFont::new().await;
-        let rt = render_target(SCREEN_WIDTH, SCREEN_HEIGHT);
-        rt.texture.set_filter(FilterMode::Nearest);
-        #[cfg(not(target_arch = "wasm32"))]
-        let clipboard = arboard::Clipboard::new().ok();
-        #[cfg(target_arch = "wasm32")]
-        let clipboard: operations::Clipboard = None;
-
-        Self {
-            editor: EditorState {
-                buffer: TextBuffer::new(),
-                cursor: Cursor::new(),
-                selection: Selection::new(),
-                history: History::new(),
-            },
-            view: ViewState {
-                scroll_x: 0,
-                scroll_y: 0,
-                scrollbar_state: ScrollbarState::default(),
-            },
-            search: SearchState {
-                query: String::new(),
-                replace_text: String::new(),
-                match_pos: None,
-                is_replacing: false,
-            },
-            terminal: {
-                let mut t = TerminalState::new();
-                t.push_output("monokrom");
-                t.push_output("type 'help' for commands");
-                t.push_output("");
-                t
-            },
-
-            current_filename: None,
-            is_modified: false,
-
-            mode: AppMode::Terminal,
-            input_dialog: InputDialog::new(),
-            confirm_dialog: ConfirmDialog::new(),
-            message_dialog: MessageDialog::new(),
-            message_return_mode: AppMode::Editing,
-            file_picker: FilePicker::new(),
-            pending_action: PendingAction::None,
-
-            clipboard,
-            paste_cache: None,
-
-            cursor_blink_timer: 0.0,
-            cursor_visible: true,
-
-            font,
-            render_target: rt,
-
-            highlight_styles: Vec::new(),
-            highlight_valid: false,
-
-            run_state: None,
-            player_mode: false,
-
-            sprite_data: [0; 4096],
-            sprite_selected: 0,
-            sprite_cursor_x: 0,
-            sprite_cursor_y: 0,
-            sprite_color: 1,
-            sprite_undo: Vec::new(),
-            sprite_redo: Vec::new(),
-            sprite_clipboard: None,
-            sprite_painting: false,
-            sprite_sheet_col: 0,
-        }
+        let mut t = TerminalState::new();
+        t.push_output("monokrom");
+        t.push_output("type 'help' for commands");
+        t.push_output("");
+        Self::init(AppMode::Terminal, t, None, false).await
     }
 
     pub async fn new_player(vm: Vm) -> Self {
+        Self::init(AppMode::Running, TerminalState::new(), Some(vm), true).await
+    }
+
+    async fn init(
+        mode: AppMode,
+        terminal: TerminalState,
+        run_state: Option<Vm>,
+        player_mode: bool,
+    ) -> Self {
         let font = BitmapFont::new().await;
         let rt = render_target(SCREEN_WIDTH, SCREEN_HEIGHT);
         rt.texture.set_filter(FilterMode::Nearest);
@@ -234,12 +177,12 @@ impl App {
                 match_pos: None,
                 is_replacing: false,
             },
-            terminal: TerminalState::new(),
+            terminal,
 
             current_filename: None,
             is_modified: false,
 
-            mode: AppMode::Running,
+            mode,
             input_dialog: InputDialog::new(),
             confirm_dialog: ConfirmDialog::new(),
             message_dialog: MessageDialog::new(),
@@ -259,8 +202,8 @@ impl App {
             highlight_styles: Vec::new(),
             highlight_valid: false,
 
-            run_state: Some(vm),
-            player_mode: true,
+            run_state,
+            player_mode,
 
             sprite_data: [0; 4096],
             sprite_selected: 0,
@@ -298,6 +241,17 @@ impl App {
     fn after_selection_move(&mut self) {
         self.editor.selection.cursor = self.editor.cursor.position;
         self.ensure_cursor_visible();
+    }
+
+    fn append_sprite_data(&self, content: &mut String) {
+        if self.sprite_data.iter().any(|&b| b != 0) {
+            content.push_str("\n__spr__\n");
+            for row in self.sprite_data.chunks(16) {
+                let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
+                content.push_str(&hex);
+                content.push('\n');
+            }
+        }
     }
 
     pub fn update(&mut self) {
@@ -845,14 +799,7 @@ impl App {
     fn export_wasm(&mut self, name: &str, source: &str) {
         use crate::filesystem::web_io;
         let mut full_source = source.to_string();
-        if self.sprite_data.iter().any(|&b| b != 0) {
-            full_source.push_str("\n__spr__\n");
-            for row in self.sprite_data.chunks(16) {
-                let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
-                full_source.push_str(&hex);
-                full_source.push('\n');
-            }
-        }
+        self.append_sprite_data(&mut full_source);
         let escaped = full_source
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
@@ -1388,14 +1335,7 @@ impl App {
     fn save_current_file(&mut self) -> bool {
         if let Some(ref filename) = self.current_filename {
             let mut content = self.editor.buffer.to_string();
-            if self.sprite_data.iter().any(|&b| b != 0) {
-                content.push_str("\n__spr__\n");
-                for row in self.sprite_data.chunks(16) {
-                    let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
-                    content.push_str(&hex);
-                    content.push('\n');
-                }
-            }
+            self.append_sprite_data(&mut content);
             match filesystem::write_file(filename, &content) {
                 Ok(()) => {
                     self.is_modified = false;
@@ -1558,14 +1498,7 @@ impl App {
                     return;
                 }
                 let mut content = self.editor.buffer.to_string();
-                if self.sprite_data.iter().any(|&b| b != 0) {
-                    content.push_str("\n__spr__\n");
-                    for row in self.sprite_data.chunks(16) {
-                        let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
-                        content.push_str(&hex);
-                        content.push('\n');
-                    }
-                }
+                self.append_sprite_data(&mut content);
                 match filesystem::write_file(&name, &content) {
                     Ok(()) => {
                         self.current_filename = Some(name.clone());
