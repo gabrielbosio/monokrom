@@ -2273,21 +2273,19 @@ impl App {
                 let my = self.map_viewport_y + ty;
                 if mx < 128 && my < 32 {
                     let tile = self.map_data[my as usize * 128 + mx as usize];
-                    if tile != 0 {
-                        let sx = tx as f32 * 8.0;
-                        let sy = ty as f32 * 8.0;
-                        for py in 0..8u8 {
-                            for px in 0..8u8 {
-                                let c = self.get_sprite_pixel(tile, px, py);
-                                if c != 0 {
-                                    helpers.draw_rect(
-                                        sx + px as f32,
-                                        sy + py as f32,
-                                        1.0,
-                                        1.0,
-                                        palette[c as usize],
-                                    );
-                                }
+                    let sx = tx as f32 * 8.0;
+                    let sy = ty as f32 * 8.0;
+                    for py in 0..8u8 {
+                        for px in 0..8u8 {
+                            let c = self.get_sprite_pixel(tile, px, py);
+                            if c != 0 {
+                                helpers.draw_rect(
+                                    sx + px as f32,
+                                    sy + py as f32,
+                                    1.0,
+                                    1.0,
+                                    palette[c as usize],
+                                );
                             }
                         }
                     }

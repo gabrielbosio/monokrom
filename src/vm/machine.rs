@@ -708,9 +708,7 @@ impl Vm {
                 if mx >= 0 && mx < MAP_WIDTH as i32 && my >= 0 && my < MAP_HEIGHT as i32 {
                     let tile =
                         self.memory[MAP_REGION_START + my as usize * MAP_WIDTH + mx as usize];
-                    if tile != 0 {
-                        self.fb_spr(tile as u16, dx + tx * 8, dy + ty * 8);
-                    }
+                    self.fb_spr(tile as u16, dx + tx * 8, dy + ty * 8);
                 }
             }
         }
