@@ -9,7 +9,8 @@ use crate::config::{
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
 use crate::input::{
-    get_editor_action, get_terminal_action, is_modifier_pressed, is_shift_pressed, EditorAction,
+    get_editor_action, get_terminal_action, is_modifier_pressed, is_shift_pressed, should_key_fire,
+    EditorAction,
 };
 use crate::render::highlight::{self, CharStyle};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
@@ -409,6 +410,8 @@ impl App {
                         self.search.match_pos = None;
                         self.search.is_replacing = false;
                         self.editor.selection.clear();
+                    } else if is_shift_pressed() {
+                        self.mode = AppMode::Terminal;
                     } else {
                         self.mode = AppMode::SpriteEditor;
                     }
@@ -1436,7 +1439,11 @@ impl App {
                     }
                 }
                 EditorAction::DialogCancel => {
-                    self.mode = AppMode::Editing;
+                    self.mode = if is_shift_pressed() {
+                        AppMode::MapEditor
+                    } else {
+                        AppMode::Editing
+                    };
                 }
                 EditorAction::InsertChar(c) => self.terminal.insert_char(c),
                 EditorAction::Backspace => self.terminal.backspace(),
@@ -1707,7 +1714,11 @@ impl App {
 
         if is_key_pressed(KeyCode::Escape) {
             self.sprite_painting = false;
-            self.mode = AppMode::MapEditor;
+            self.mode = if is_shift_pressed() {
+                AppMode::Editing
+            } else {
+                AppMode::MapEditor
+            };
             return;
         }
 
@@ -1840,19 +1851,19 @@ impl App {
 
         // Arrow keys: move cursor
         let mut moved = false;
-        if is_key_pressed(KeyCode::Left) {
+        if should_key_fire(KeyCode::Left, false) {
             self.sprite_cursor_x = self.sprite_cursor_x.wrapping_sub(1) & 7;
             moved = true;
         }
-        if is_key_pressed(KeyCode::Right) {
+        if should_key_fire(KeyCode::Right, false) {
             self.sprite_cursor_x = (self.sprite_cursor_x + 1) & 7;
             moved = true;
         }
-        if is_key_pressed(KeyCode::Up) {
+        if should_key_fire(KeyCode::Up, false) {
             self.sprite_cursor_y = self.sprite_cursor_y.wrapping_sub(1) & 7;
             moved = true;
         }
-        if is_key_pressed(KeyCode::Down) {
+        if should_key_fire(KeyCode::Down, false) {
             self.sprite_cursor_y = (self.sprite_cursor_y + 1) & 7;
             moved = true;
         }
@@ -2118,7 +2129,11 @@ impl App {
         while get_char_pressed().is_some() {}
 
         if is_key_pressed(KeyCode::Escape) {
-            self.mode = AppMode::Terminal;
+            self.mode = if is_shift_pressed() {
+                AppMode::SpriteEditor
+            } else {
+                AppMode::Terminal
+            };
             return;
         }
 
@@ -2165,16 +2180,16 @@ impl App {
             return;
         }
 
-        if is_key_pressed(KeyCode::Left) && self.map_cursor_x > 0 {
+        if should_key_fire(KeyCode::Left, false) && self.map_cursor_x > 0 {
             self.map_cursor_x -= 1;
         }
-        if is_key_pressed(KeyCode::Right) && self.map_cursor_x < 127 {
+        if should_key_fire(KeyCode::Right, false) && self.map_cursor_x < 127 {
             self.map_cursor_x += 1;
         }
-        if is_key_pressed(KeyCode::Up) && self.map_cursor_y > 0 {
+        if should_key_fire(KeyCode::Up, false) && self.map_cursor_y > 0 {
             self.map_cursor_y -= 1;
         }
-        if is_key_pressed(KeyCode::Down) && self.map_cursor_y < 31 {
+        if should_key_fire(KeyCode::Down, false) && self.map_cursor_y < 31 {
             self.map_cursor_y += 1;
         }
 

@@ -33,7 +33,7 @@ fn drain_char_queue() {
 }
 
 /// Check if a key should fire (either just pressed or repeating)
-fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
+pub fn should_key_fire(key: KeyCode, with_modifier: bool) -> bool {
     let mut state = match KEY_REPEAT.lock() {
         Ok(s) => s,
         Err(_) => return is_key_pressed(key),
