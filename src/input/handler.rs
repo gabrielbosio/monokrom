@@ -260,6 +260,11 @@ pub fn get_editor_action() -> Option<EditorAction> {
         }
     }
 
+    if !modifier && !alt && is_key_pressed(KeyCode::Escape) {
+        drain_char_queue();
+        return Some(EditorAction::DialogCancel);
+    }
+
     if !modifier && !alt && !shift {
         if let Some(action) = check_repeating(PLAIN_BINDINGS, false) {
             return Some(action);
@@ -267,10 +272,6 @@ pub fn get_editor_action() -> Option<EditorAction> {
         if should_key_fire(KeyCode::Enter, false) || should_key_fire(KeyCode::KpEnter, false) {
             drain_char_queue();
             return Some(EditorAction::InsertNewline);
-        }
-        if is_key_pressed(KeyCode::Escape) {
-            drain_char_queue();
-            return Some(EditorAction::DialogCancel);
         }
         if is_key_pressed(KeyCode::Tab) {
             drain_char_queue();
