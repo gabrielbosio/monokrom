@@ -143,6 +143,7 @@ pub struct App {
     map_redo: Vec<(u16, u16, u8)>,
     map_viewport_x: u16,
     map_viewport_y: u16,
+    map_painting: bool,
 }
 
 impl App {
@@ -237,6 +238,7 @@ impl App {
             map_redo: Vec::new(),
             map_viewport_x: 0,
             map_viewport_y: 0,
+            map_painting: false,
         }
     }
 
@@ -2129,6 +2131,7 @@ impl App {
         while get_char_pressed().is_some() {}
 
         if is_key_pressed(KeyCode::Escape) {
+            self.map_painting = false;
             self.mode = if is_shift_pressed() {
                 AppMode::SpriteEditor
             } else {
@@ -2183,17 +2186,22 @@ impl App {
         let fast = is_shift_pressed();
         let step: u16 = if fast { 8 } else { 1 };
 
+        let mut moved = false;
         if should_key_fire(KeyCode::Left, fast) && self.map_cursor_x > 0 {
             self.map_cursor_x = self.map_cursor_x.saturating_sub(step);
+            moved = true;
         }
         if should_key_fire(KeyCode::Right, fast) && self.map_cursor_x < 127 {
             self.map_cursor_x = (self.map_cursor_x + step).min(127);
+            moved = true;
         }
         if should_key_fire(KeyCode::Up, fast) && self.map_cursor_y > 0 {
             self.map_cursor_y = self.map_cursor_y.saturating_sub(step);
+            moved = true;
         }
         if should_key_fire(KeyCode::Down, fast) && self.map_cursor_y < 31 {
             self.map_cursor_y = (self.map_cursor_y + step).min(31);
+            moved = true;
         }
 
         // Keep viewport following cursor
@@ -2210,39 +2218,40 @@ impl App {
             self.map_viewport_y = self.map_cursor_y - 15;
         }
 
+        // Space/Enter: paint tile (hold Space to paint continuously while moving)
         if is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::Enter) {
-            let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
-            let old = self.map_data[idx];
-            if old != self.map_selected_tile {
-                self.map_undo
-                    .push((self.map_cursor_x, self.map_cursor_y, old));
-                if self.map_undo.len() > 64 {
-                    self.map_undo.remove(0);
-                }
-                self.map_redo.clear();
-                self.map_data[idx] = self.map_selected_tile;
-                self.is_modified = true;
+            self.map_painting = true;
+            self.map_place_tile(self.map_selected_tile);
+        } else if is_key_down(KeyCode::Space) {
+            if moved {
+                self.map_place_tile(self.map_selected_tile);
             }
+        } else {
+            self.map_painting = false;
         }
 
         if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
-            let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
-            let old = self.map_data[idx];
-            if old != 0 {
-                self.map_undo
-                    .push((self.map_cursor_x, self.map_cursor_y, old));
-                if self.map_undo.len() > 64 {
-                    self.map_undo.remove(0);
-                }
-                self.map_redo.clear();
-                self.map_data[idx] = 0;
-                self.is_modified = true;
-            }
+            self.map_place_tile(0);
         }
 
         if is_key_pressed(KeyCode::C) {
             let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
             self.map_selected_tile = self.map_data[idx];
+        }
+    }
+
+    fn map_place_tile(&mut self, tile: u8) {
+        let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
+        let old = self.map_data[idx];
+        if old != tile {
+            self.map_undo
+                .push((self.map_cursor_x, self.map_cursor_y, old));
+            if self.map_undo.len() > 64 {
+                self.map_undo.remove(0);
+            }
+            self.map_redo.clear();
+            self.map_data[idx] = tile;
+            self.is_modified = true;
         }
     }
 
