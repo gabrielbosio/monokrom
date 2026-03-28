@@ -2180,17 +2180,20 @@ impl App {
             return;
         }
 
-        if should_key_fire(KeyCode::Left, false) && self.map_cursor_x > 0 {
-            self.map_cursor_x -= 1;
+        let fast = is_shift_pressed();
+        let step: u16 = if fast { 8 } else { 1 };
+
+        if should_key_fire(KeyCode::Left, fast) && self.map_cursor_x > 0 {
+            self.map_cursor_x = self.map_cursor_x.saturating_sub(step);
         }
-        if should_key_fire(KeyCode::Right, false) && self.map_cursor_x < 127 {
-            self.map_cursor_x += 1;
+        if should_key_fire(KeyCode::Right, fast) && self.map_cursor_x < 127 {
+            self.map_cursor_x = (self.map_cursor_x + step).min(127);
         }
-        if should_key_fire(KeyCode::Up, false) && self.map_cursor_y > 0 {
-            self.map_cursor_y -= 1;
+        if should_key_fire(KeyCode::Up, fast) && self.map_cursor_y > 0 {
+            self.map_cursor_y = self.map_cursor_y.saturating_sub(step);
         }
-        if should_key_fire(KeyCode::Down, false) && self.map_cursor_y < 31 {
-            self.map_cursor_y += 1;
+        if should_key_fire(KeyCode::Down, fast) && self.map_cursor_y < 31 {
+            self.map_cursor_y = (self.map_cursor_y + step).min(31);
         }
 
         // Keep viewport following cursor
