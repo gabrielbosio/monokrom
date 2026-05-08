@@ -1020,10 +1020,8 @@ fn check_returns(stmts: &[HirStmt], expected: &HirType, ctx: &mut TypeCheckCtx) 
                     }
                 }
             }
-            HirStmt::Return(None) => {
-                if *expected != HirType::Void {
-                    ctx.error(format!("return: expected {}, got void", expected));
-                }
+            HirStmt::Return(None) if *expected != HirType::Void => {
+                ctx.error(format!("return: expected {}, got void", expected));
             }
             HirStmt::If {
                 body,

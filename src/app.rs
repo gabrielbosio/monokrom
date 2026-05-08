@@ -715,10 +715,8 @@ impl App {
                 self.editor.cursor.set_position(new_line, col);
                 self.after_cursor_move();
             }
-            EditorAction::ScrollLineUp => {
-                if self.view.scroll_y > 0 {
-                    self.view.scroll_y -= 1;
-                }
+            EditorAction::ScrollLineUp if self.view.scroll_y > 0 => {
+                self.view.scroll_y -= 1;
             }
             EditorAction::ScrollLineDown => {
                 let max = self

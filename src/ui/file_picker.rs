@@ -95,22 +95,18 @@ impl FilePicker {
 
         if let Some(action) = get_file_picker_action() {
             match action {
-                EditorAction::MoveUp => {
-                    if self.selected_index > 0 {
-                        self.selected_index -= 1;
-                        // Adjust scroll if needed
-                        if self.selected_index < self.scroll_offset {
-                            self.scroll_offset = self.selected_index;
-                        }
+                EditorAction::MoveUp if self.selected_index > 0 => {
+                    self.selected_index -= 1;
+                    // Adjust scroll if needed
+                    if self.selected_index < self.scroll_offset {
+                        self.scroll_offset = self.selected_index;
                     }
                 }
-                EditorAction::MoveDown => {
-                    if self.selected_index < self.files.len() - 1 {
-                        self.selected_index += 1;
-                        // Adjust scroll if needed
-                        if self.selected_index >= self.scroll_offset + Self::VISIBLE_ITEMS {
-                            self.scroll_offset = self.selected_index - Self::VISIBLE_ITEMS + 1;
-                        }
+                EditorAction::MoveDown if self.selected_index < self.files.len() - 1 => {
+                    self.selected_index += 1;
+                    // Adjust scroll if needed
+                    if self.selected_index >= self.scroll_offset + Self::VISIBLE_ITEMS {
+                        self.scroll_offset = self.selected_index - Self::VISIBLE_ITEMS + 1;
                     }
                 }
                 EditorAction::DialogConfirm => {

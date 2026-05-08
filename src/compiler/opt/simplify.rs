@@ -231,10 +231,8 @@ fn algebraic_simplify(
             }
         }
         // x - 0 -> x
-        BinOp::Sub => {
-            if r_const == Some(0) {
-                return Some(Simplified::Replace(lhs));
-            }
+        BinOp::Sub if r_const == Some(0) => {
+            return Some(Simplified::Replace(lhs));
         }
         // x * 1, 1 * x -> x. x * 0, 0 * x -> 0
         BinOp::Mul => {
@@ -254,10 +252,8 @@ fn algebraic_simplify(
             }
         }
         // x / 1 -> x
-        BinOp::Div => {
-            if r_const == Some(one) {
-                return Some(Simplified::Replace(lhs));
-            }
+        BinOp::Div if r_const == Some(one) => {
+            return Some(Simplified::Replace(lhs));
         }
         // x and true, true and x -> x. x and false, false and x -> false
         BinOp::And => {

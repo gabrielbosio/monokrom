@@ -16,7 +16,7 @@ impl CursorPosition {
 impl CursorPosition {
     /// Clamp cursor position to valid buffer bounds
     pub fn clamp(&self, buffer: &TextBuffer) -> Self {
-        let line = self.line.min(buffer.line_count().saturating_sub(1).max(0));
+        let line = self.line.min(buffer.line_count().saturating_sub(1));
         let col = self.col.min(buffer.line_len(line));
         Self { line, col }
     }
