@@ -935,14 +935,17 @@ impl App {
             match result {
                 DialogResult::Confirm(filename) => {
                     if filename.is_empty() {
+                        self.input_dialog.show("Save as:");
                         self.show_message("Error: Filename cannot be empty");
                         return;
                     }
                     if !filesystem::is_valid_filename(&filename) {
+                        self.input_dialog.show("Save as:");
                         self.show_message("Error: Invalid filename");
                         return;
                     }
                     self.current_filename = Some(filename.clone());
+                    self.mode = AppMode::Editing;
                     if self.save_current_file() {
                         // Check if we have a pending action after saving
                         if self.pending_action != PendingAction::None {
