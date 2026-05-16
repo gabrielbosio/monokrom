@@ -37,7 +37,9 @@ Debug stores files in `./fs/`, release in `~/.monokrom/`.
 
 ## Usage
 
-Monokrom boots into a terminal. Press **Escape** to cycle between terminal -> code editor -> sprite editor.
+Monokrom boots into a terminal. Press **Escape** to cycle through terminal, code editor, sprite editor, and map editor. **Shift+Escape** cycles in reverse.
+
+**Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and returns to whichever mode launched it (errors drop you in the terminal).
 
 On macOS, word operations use Option instead of Ctrl. On WASM, all Ctrl shortcuts use Alt instead.
 
@@ -72,13 +74,24 @@ On macOS, word operations use Option instead of Ctrl. On WASM, all Ctrl shortcut
 - **Space** paint pixel (hold while moving to draw continuously)
 - **1/2/3/4** select color (1=black, 2=dark, 3=light, 4=white)
 - **C** eyedropper (pick color under cursor)
-- **Tab/Shift+Tab** next/previous sprite
+- **Alt+Arrow** navigate the sprite sheet
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+C/V** copy/paste sprite
 - **Ctrl+S** save
 - **F** flip horizontal, **Shift+F** flip vertical
 - **Shift+Arrow** shift sprite contents
 - **Delete** clear sprite
+
+### Map editor
+
+- **Arrow keys** move cursor on the 128×32 tile grid
+- **Shift+Arrow** move cursor by 8 tiles
+- **Space** paint tile (hold while moving to paint continuously)
+- **Delete/Backspace** clear tile (place tile 0)
+- **C** eyedropper (pick tile under cursor)
+- **Alt+Arrow** navigate the tile picker (picker scrolls one column at a time)
+- **Ctrl+Z** undo, **Ctrl+Y** redo
+- **Ctrl+S** save
 
 ### Exporting
 
