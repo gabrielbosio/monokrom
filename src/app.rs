@@ -145,6 +145,7 @@ pub struct App {
     map_viewport_x: u16,
     map_viewport_y: u16,
     map_painting: bool,
+    map_picker_col: u8,
 }
 
 impl App {
@@ -241,6 +242,7 @@ impl App {
             map_viewport_x: 0,
             map_viewport_y: 0,
             map_painting: false,
+            map_picker_col: 0,
         }
     }
 
@@ -2192,16 +2194,16 @@ impl App {
         let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
         if alt {
             if is_key_pressed(KeyCode::Left) {
-                self.map_selected_tile = self.map_selected_tile.wrapping_sub(1);
+                self.select_map_tile(self.map_selected_tile.wrapping_sub(1));
             }
             if is_key_pressed(KeyCode::Right) {
-                self.map_selected_tile = self.map_selected_tile.wrapping_add(1);
+                self.select_map_tile(self.map_selected_tile.wrapping_add(1));
             }
             if is_key_pressed(KeyCode::Up) {
-                self.map_selected_tile = self.map_selected_tile.wrapping_sub(16);
+                self.select_map_tile(self.map_selected_tile.wrapping_sub(16));
             }
             if is_key_pressed(KeyCode::Down) {
-                self.map_selected_tile = self.map_selected_tile.wrapping_add(16);
+                self.select_map_tile(self.map_selected_tile.wrapping_add(16));
             }
             return;
         }
@@ -2259,7 +2261,18 @@ impl App {
 
         if is_key_pressed(KeyCode::C) {
             let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
-            self.map_selected_tile = self.map_data[idx];
+            self.select_map_tile(self.map_data[idx]);
+        }
+    }
+
+    fn select_map_tile(&mut self, idx: u8) {
+        self.map_selected_tile = idx;
+        let sel_col = idx % 16;
+        let visible_cols = 4u8;
+        if sel_col < self.map_picker_col {
+            self.map_picker_col = sel_col;
+        } else if sel_col >= self.map_picker_col + visible_cols {
+            self.map_picker_col = sel_col + 1 - visible_cols;
         }
     }
 
@@ -2346,7 +2359,7 @@ impl App {
 
         // Sprite picker: 4 cols x 16 rows at x=128
         let sheet_x = 128.0f32;
-        let picker_col_offset = (self.map_selected_tile / 16) / 4 * 4;
+        let picker_col_offset = self.map_picker_col;
         for row in 0..16u8 {
             for col in 0..4u8 {
                 let si = row * 16 + picker_col_offset + col;
