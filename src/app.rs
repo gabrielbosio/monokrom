@@ -916,12 +916,24 @@ impl App {
             EditorAction::Find => {
                 self.search.is_replacing = false;
                 self.mode = AppMode::FindDialog;
-                self.input_dialog.show("Find:");
+                let initial = self
+                    .editor
+                    .selection
+                    .get_text(&self.editor.buffer)
+                    .filter(|s| !s.contains('\n'))
+                    .unwrap_or_default();
+                self.input_dialog.show_with_text("Find:", &initial);
             }
             EditorAction::Replace => {
                 self.search.is_replacing = true;
                 self.mode = AppMode::FindDialog;
-                self.input_dialog.show("Find:");
+                let initial = self
+                    .editor
+                    .selection
+                    .get_text(&self.editor.buffer)
+                    .filter(|s| !s.contains('\n'))
+                    .unwrap_or_default();
+                self.input_dialog.show_with_text("Find:", &initial);
             }
             EditorAction::GoToLine => {
                 let line = self.editor.cursor.line() + 1;

@@ -29,8 +29,13 @@ impl InputDialog {
     }
 
     pub fn show(&mut self, title: &str) {
+        self.show_with_text(title, "");
+    }
+
+    pub fn show_with_text(&mut self, title: &str, initial: &str) {
         self.title = title.to_string();
         self.input.clear();
+        self.input.push_str(initial);
         self.visible = true;
     }
 
