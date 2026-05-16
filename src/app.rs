@@ -121,6 +121,7 @@ pub struct App {
     // VM
     run_state: Option<Vm>,
     player_mode: bool,
+    run_return_mode: AppMode,
 
     // Sprites
     sprite_data: [u8; 4096],
@@ -218,6 +219,7 @@ impl App {
 
             run_state,
             player_mode,
+            run_return_mode: AppMode::Terminal,
 
             sprite_data: [0; 4096],
             sprite_selected: 0,
@@ -733,6 +735,7 @@ impl App {
     }
 
     fn run_program(&mut self) {
+        self.run_return_mode = self.mode;
         let source = self.editor.buffer.to_string();
         if source.is_empty() {
             self.terminal.push_output("(empty buffer)");
@@ -1478,7 +1481,7 @@ impl App {
             }
             self.terminal.push_output("stopped");
             self.run_state = None;
-            self.mode = AppMode::Terminal;
+            self.mode = self.run_return_mode;
             return;
         }
 
