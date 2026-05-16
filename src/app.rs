@@ -9,8 +9,8 @@ use crate::config::{
 use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
 use crate::filesystem;
 use crate::input::{
-    get_editor_action, get_terminal_action, is_modifier_pressed, is_shift_pressed, should_key_fire,
-    EditorAction,
+    get_editor_action, get_terminal_action, is_modifier_pressed, is_shift_pressed,
+    is_shortcut_modifier_pressed, should_key_fire, EditorAction,
 };
 use crate::render::highlight::{self, CharStyle};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
@@ -1462,6 +1462,7 @@ impl App {
                     self.terminal.scroll_down()
                 }
                 EditorAction::Autocomplete => self.handle_terminal_autocomplete(),
+                EditorAction::RunProgram => self.run_program(),
                 _ => {}
             }
         }
@@ -1763,6 +1764,15 @@ impl App {
                 self.set_sprite_bytes(self.sprite_selected, &data);
                 self.is_modified = true;
             }
+            return;
+        }
+
+        // Ctrl+Enter (Alt+Enter on WASM): run program
+        if is_shortcut_modifier_pressed()
+            && !shift
+            && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
+        {
+            self.run_program();
             return;
         }
 
@@ -2160,6 +2170,15 @@ impl App {
             || (modifier && shift && is_key_pressed(KeyCode::Z))
         {
             self.map_redo();
+            return;
+        }
+
+        // Ctrl+Enter (Alt+Enter on WASM): run program
+        if is_shortcut_modifier_pressed()
+            && !shift
+            && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
+        {
+            self.run_program();
             return;
         }
 

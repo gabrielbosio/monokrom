@@ -315,6 +315,16 @@ pub fn get_dialog_action() -> Option<EditorAction> {
 
 /// Process keyboard input for terminal
 pub fn get_terminal_action() -> Option<EditorAction> {
+    // Ctrl+Enter (Alt+Enter on WASM): run program
+    if is_shortcut_modifier_pressed()
+        && !is_shift_pressed()
+        && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
+    {
+        drain_char_queue();
+        refresh_cmd_timer();
+        return Some(EditorAction::RunProgram);
+    }
+
     if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
         return Some(EditorAction::DialogConfirm);
     }
