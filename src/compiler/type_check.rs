@@ -748,13 +748,13 @@ impl TypeCheckCtx {
             } => {
                 let hir_start = self.check_expr(start);
                 let hir_end = self.check_expr(end);
-                if hir_start.ty != HirType::Int {
+                if Self::deref_type(&hir_start.ty) != &HirType::Int {
                     self.error_at(
                         start.span,
                         format!("for: start must be int, got {}", hir_start.ty),
                     );
                 }
-                if hir_end.ty != HirType::Int {
+                if Self::deref_type(&hir_end.ty) != &HirType::Int {
                     self.error_at(
                         end.span,
                         format!("for: end must be int, got {}", hir_end.ty),
@@ -1270,6 +1270,12 @@ mod tests {
         // for-range in a function to test local var typing
         let hir = lower("fn f()\n  for i in 0..10\n    cls(i)\n  end\nend");
         assert_eq!(hir.functions.len(), 1);
+    }
+
+    #[test]
+    fn for_range_bounds_auto_deref_ref_int() {
+        let _hir =
+            lower("fn f(lo: ref int, hi: ref int)\n  for i in lo..hi\n    cls(i)\n  end\nend");
     }
 
     #[test]
