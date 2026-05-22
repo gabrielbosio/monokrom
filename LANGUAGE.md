@@ -139,13 +139,27 @@ for _, e in enemies
 end
 ```
 
-For scalar types (`int`, `fixed`, `bool`), the element is a copy. For structs, the element is a reference to the array entry, so modifications are written back to the array:
+For scalar types (`int`, `fixed`, `bool`), the element is a copy. For structs, the element has type `ref T` (a reference to the array entry), so modifications are written back to the array:
 
 ```
 for _, e in enemies
     e.x = e.x + 1  // modifies enemies[i].x
 end
 ```
+
+Because the element is already a ref, it can be passed directly to a function expecting `ref T`, with no `ref` keyword at the call site:
+
+```
+fn update(en: ref Enemy)
+    en.x = en.x + 1
+end
+
+for _, e in enemies
+    update(e)       // e is already ref Enemy
+end
+```
+
+Passing it to a by-value parameter (`fn update(en: Enemy)`) is also fine. The struct auto-derefs and gets copied on entry.
 
 ## Functions
 

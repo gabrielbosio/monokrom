@@ -722,7 +722,13 @@ impl TypeCheckCtx {
                     self.define_local(index, HirType::Int);
                 }
                 if elem != "_" {
-                    self.define_local(elem, elem_ty);
+                    let bind_ty = match &elem_ty {
+                        HirType::Struct(_) | HirType::Array(_, _) => {
+                            HirType::Ref(Box::new(elem_ty))
+                        }
+                        _ => elem_ty,
+                    };
+                    self.define_local(elem, bind_ty);
                 }
                 let hir_body = self.check_stmts(body);
                 self.pop_scope();
@@ -1472,5 +1478,38 @@ mod tests {
     fn ref_auto_deref_index() {
         // ref int used as index auto-derefs
         let _hir = lower("a: array[10] of int\nfn f(i: ref int)\n  cls(a[i])\nend");
+    }
+
+    #[test]
+    fn for_in_struct_element_pass_to_ref_param() {
+        // Struct element from for-in can be passed directly to a ref param,
+        // since the element is typed as ref T.
+        let _hir = lower(
+            "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: ref En)\nend\nfn f()\n  for _, e in es\n    upd(e)\n  end\nend",
+        );
+    }
+
+    #[test]
+    fn for_in_struct_element_pass_to_value_param() {
+        // Struct element can also be passed to a by-value param (auto-deref + copy).
+        let _hir = lower(
+            "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: En)\nend\nfn f()\n  for _, e in es\n    upd(e)\n  end\nend",
+        );
+    }
+
+    #[test]
+    fn for_in_struct_element_explicit_ref_at_call_site() {
+        // Explicit ref e is also accepted (forwarding rule, no nesting).
+        let _hir = lower(
+            "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: ref En)\nend\nfn f()\n  for _, e in es\n    upd(ref e)\n  end\nend",
+        );
+    }
+
+    #[test]
+    fn for_in_scalar_element_is_value() {
+        // Scalar elements remain plain values, and can be passed to int params without ref.
+        let _hir = lower(
+            "xs: array[4] of int\nfn upd(v: int)\nend\nfn f()\n  for _, v in xs\n    upd(v)\n  end\nend",
+        );
     }
 }
