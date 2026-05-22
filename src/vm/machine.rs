@@ -1276,4 +1276,24 @@ end";
         assert_eq!(vm.trace_output[0], "20");
         assert_eq!(vm.trace_output[1], "10");
     }
+
+    #[test]
+    fn nested_for_in_wildcard_indices() {
+        let src = "\
+n: int
+outer: array[3] of int
+inner: array[3] of int
+fn main()
+  for _, x in outer
+    for _, y in inner
+      n = n + 1
+    end
+  end
+  tracei(n)
+end";
+        let bc = crate::compiler::compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "9");
+    }
 }

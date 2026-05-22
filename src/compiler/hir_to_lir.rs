@@ -959,11 +959,18 @@ impl<'a> LowerCtx<'a> {
             _ => return,
         };
 
+        // Synthesize a unique name for `_` so nested loops don't share storage
+        let index_var = if index_var == "_" {
+            format!("$for_idx_{}", self.next_val)
+        } else {
+            index_var.to_string()
+        };
+
         // Init index = 0
         let zero = self.emit(LirInst::Const(0));
         let count_val = self.emit(LirInst::Const(count));
         let block = self.current_block;
-        self.write_variable(index_var, block, zero);
+        self.write_variable(&index_var, block, zero);
 
         let header = self.fresh_block();
         let body_block = self.fresh_block();
@@ -975,7 +982,7 @@ impl<'a> LowerCtx<'a> {
 
         // Header: index < count
         self.start_block(header);
-        let idx = self.read_variable(index_var, header);
+        let idx = self.read_variable(&index_var, header);
         let cond = self.emit(LirInst::BinOp {
             op: BinOp::Lt,
             lhs: idx,
@@ -997,7 +1004,7 @@ impl<'a> LowerCtx<'a> {
 
         // Load element if not wildcard
         if elem_var != "_" {
-            let cur_idx = self.read_variable(index_var, self.current_block);
+            let cur_idx = self.read_variable(&index_var, self.current_block);
             let base_addr = self.lower_addr_of(iter);
             let elem_size = self.type_size(&elem_ty);
             let size_val = self.emit(LirInst::Const(elem_size as i16));
@@ -1045,7 +1052,7 @@ impl<'a> LowerCtx<'a> {
         // Latch: increment index
         self.seal_block(latch);
         self.start_block(latch);
-        let cur_idx = self.read_variable(index_var, self.current_block);
+        let cur_idx = self.read_variable(&index_var, self.current_block);
         let one = self.emit(LirInst::Const(1));
         let next_idx = self.emit(LirInst::BinOp {
             op: BinOp::Add,
@@ -1054,7 +1061,7 @@ impl<'a> LowerCtx<'a> {
             is_fixed: false,
         });
         let block = self.current_block;
-        self.write_variable(index_var, block, next_idx);
+        self.write_variable(&index_var, block, next_idx);
         self.add_predecessor(header, block);
         self.finish_block(Terminator::Jump(header));
 
