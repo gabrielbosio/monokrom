@@ -297,6 +297,7 @@ fn algebraic_simplify(
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::BinOp;
     use crate::compiler::lir::*;
     use crate::compiler::test_helpers::*;
 
@@ -344,10 +345,7 @@ mod tests {
         let f = find_func(&m, "f");
         assert!(!has_inst(f, |i| matches!(
             i,
-            LirInst::BinOp {
-                op: crate::compiler::ast::BinOp::Mul,
-                ..
-            }
+            LirInst::BinOp { op: BinOp::Mul, .. }
         )));
     }
 
@@ -357,10 +355,7 @@ mod tests {
         let f = find_func(&m, "f");
         assert!(!has_inst(f, |i| matches!(
             i,
-            LirInst::BinOp {
-                op: crate::compiler::ast::BinOp::Add,
-                ..
-            }
+            LirInst::BinOp { op: BinOp::Add, .. }
         )));
     }
 

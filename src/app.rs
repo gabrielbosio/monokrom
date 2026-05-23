@@ -18,7 +18,10 @@ use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, C
 use crate::ui::{
     ConfirmDialog, DialogResult, FilePicker, FilePickerResult, InputDialog, MessageDialog,
 };
-use crate::vm::Vm;
+use crate::vm::{Vm, VmResult};
+
+#[cfg(target_arch = "wasm32")]
+use crate::filesystem::web_io;
 
 const EXAMPLES: &[(&str, &str)] = &[
     ("bricks", include_str!("../examples/bricks.mkr")),
@@ -844,7 +847,6 @@ impl App {
 
     #[cfg(target_arch = "wasm32")]
     fn export_wasm(&mut self, name: &str, source: &str) {
-        use crate::filesystem::web_io;
         let mut full_source = source.to_string();
         self.append_sprite_data(&mut full_source);
         self.append_map_data(&mut full_source);
@@ -1513,12 +1515,12 @@ impl App {
         vm.current_time = get_time();
 
         match vm.run_until_flip() {
-            Ok(crate::vm::VmResult::Flip | crate::vm::VmResult::Halted) => {
+            Ok(VmResult::Flip | VmResult::Halted) => {
                 for line in vm.trace_output.drain(..) {
                     self.terminal.push_output(&line);
                 }
             }
-            Ok(crate::vm::VmResult::Continue) => {}
+            Ok(VmResult::Continue) => {}
             Err(e) => {
                 self.terminal.push_output(&format!("runtime error: {e}"));
                 self.run_state = None;

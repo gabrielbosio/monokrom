@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
 use super::font::BitmapFont;
-use crate::config::TILE_WIDTH;
+use crate::config::{COLOR_BLACK, COLOR_WHITE, TILE_WIDTH};
 
 /// Helper struct for drawing UI elements with scaling
 pub struct DrawHelpers<'a> {
@@ -64,8 +64,8 @@ impl<'a> DrawHelpers<'a> {
 
     /// Draw a dialog frame (black fill + white border)
     pub fn draw_dialog_frame(&self, x: f32, y: f32, w: f32, h: f32) {
-        self.draw_rect(x, y, w, h, crate::config::COLOR_BLACK);
-        self.draw_rect_lines(x, y, w, h, 2.0, crate::config::COLOR_WHITE);
+        self.draw_rect(x, y, w, h, COLOR_BLACK);
+        self.draw_rect_lines(x, y, w, h, 2.0, COLOR_WHITE);
     }
 
     /// Draw a string of text without shadow

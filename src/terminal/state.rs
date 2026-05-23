@@ -1,4 +1,4 @@
-use crate::config::TERMINAL_MAX_SCROLLBACK;
+use crate::config::{SCREEN_TILES_X, SCREEN_TILES_Y, TERMINAL_MAX_SCROLLBACK};
 
 pub struct TerminalState {
     pub output_lines: Vec<String>,
@@ -24,7 +24,7 @@ impl TerminalState {
     }
 
     pub fn push_output(&mut self, line: &str) {
-        let width = crate::config::SCREEN_TILES_X as usize;
+        let width = SCREEN_TILES_X as usize;
         if line.len() <= width {
             self.output_lines.push(line.to_string());
         } else {
@@ -132,7 +132,7 @@ impl TerminalState {
     }
 
     pub fn scroll_to_bottom(&mut self) {
-        let visible_lines = crate::config::SCREEN_TILES_Y as usize - 1; // reserve 1 row for input
+        let visible_lines = SCREEN_TILES_Y as usize - 1; // reserve 1 row for input
         if self.output_lines.len() > visible_lines {
             self.scroll_offset = self.output_lines.len() - visible_lines;
         } else {
@@ -147,7 +147,7 @@ impl TerminalState {
     }
 
     pub fn scroll_down(&mut self) {
-        let visible_lines = crate::config::SCREEN_TILES_Y as usize - 1;
+        let visible_lines = SCREEN_TILES_Y as usize - 1;
         let max_offset = self.output_lines.len().saturating_sub(visible_lines);
         if self.scroll_offset < max_offset {
             self.scroll_offset += 1;

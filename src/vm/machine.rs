@@ -747,6 +747,7 @@ fn format_fixed(val: i16) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler::compile;
 
     /// Build a minimal Bytecode with one function (main) from raw bytes.
     fn make_bc(code: Vec<u8>, n_locals: u16) -> Bytecode {
@@ -1022,7 +1023,7 @@ mod tests {
     fn nested_while_compiled() {
         // Compile and run a nested while loop to verify outer variable increments
         let src = "fn main()\n  x: int = 0\n  while x < 3\n    y: int = 0\n    while y < 3\n      pset(x, y, 3)\n      y = y + 1\n    end\n    x = x + 1\n  end\n  flip()\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
@@ -1044,7 +1045,7 @@ mod tests {
     fn fixed_mul_no_overflow() {
         // cos(0.01) * 1.00 should be ~0.99, not -1.00
         let src = "fn main()\n  x = cos(0.01)\n  y = x * 1.00\n  tracef(y)\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output.len(), 1);
@@ -1102,7 +1103,7 @@ mod tests {
     #[test]
     fn struct_return_field_access() {
         let src = "fn main()\n  printi(g().x, 55, 70, 3)\nend\n\nstruct F\n  x: int\nend\n\nfn g(): F\n  f: F\n  return f\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
     }
@@ -1110,7 +1111,7 @@ mod tests {
     #[test]
     fn compound_return_value_assignment() {
         let src = "fn new_list(): array[10] of int\n  a: array[10] of int\n  a[0] = 12\n  return a\nend\n\nfn main()\n  a = new_list()\n  tracei(a[0])\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "12");
@@ -1121,7 +1122,7 @@ mod tests {
         // Manually poke sprite 0 data and call spr(0, 10, 20)
         let src =
             "fn main()\n  poke(12288, 0xFF)\n  poke(12289, 0x00)\n  spr(0, 10, 20)\n  flip()\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
         assert_eq!(result, VmResult::Flip);
@@ -1138,7 +1139,7 @@ mod tests {
     fn spr_transparency() {
         // Color 0 should not overwrite existing pixels
         let src = "fn main()\n  cls(0)\n  pset(10, 20, 2)\n  poke(12288, 0x00)\n  spr(0, 10, 20)\n  flip()\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         // pset drew color 2, sprite has color 0, so should not overwrite
@@ -1149,7 +1150,7 @@ mod tests {
     fn ref_scalar_write_through() {
         // fn inc(x: ref int) writes through to modify caller's local
         let src = "fn inc(x: ref int)\n  x = x + 1\nend\n\nfn main()\n  a = 10\n  inc(ref a)\n  tracei(a)\nend";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "11");
@@ -1179,7 +1180,7 @@ fn main()
   tracei(a.x)
   tracei(a.y)
 end";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "13");
@@ -1203,7 +1204,7 @@ fn main()
   wrapper(ref v)
   tracei(v)
 end";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "99");
@@ -1226,7 +1227,7 @@ fn main()
   p.x = 42
   tracei(v.x)
 end";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "42");
@@ -1251,7 +1252,7 @@ fn main()
   try_modify(v)
   tracei(v.x)
 end";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "5");
@@ -1273,7 +1274,7 @@ fn main()
   tracei(x)
   tracei(y)
 end";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "20");
@@ -1294,7 +1295,7 @@ fn main()
   end
   tracei(n)
 end";
-        let bc = crate::compiler::compile(src).unwrap();
+        let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "9");

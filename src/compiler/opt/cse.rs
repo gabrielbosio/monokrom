@@ -78,6 +78,7 @@ pub fn eliminate(func: &mut LirFunc) {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::BinOp;
     use crate::compiler::lir::*;
     use crate::compiler::test_helpers::*;
 
@@ -93,15 +94,7 @@ mod tests {
             .map(|b| {
                 b.insts
                     .iter()
-                    .filter(|(_, inst)| {
-                        matches!(
-                            inst,
-                            LirInst::BinOp {
-                                op: crate::compiler::ast::BinOp::Add,
-                                ..
-                            }
-                        )
-                    })
+                    .filter(|(_, inst)| matches!(inst, LirInst::BinOp { op: BinOp::Add, .. }))
                     .count()
             })
             .sum();
