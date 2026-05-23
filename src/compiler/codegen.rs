@@ -59,27 +59,16 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
 }
 
 fn count_locals(func: &LirFunc) -> u16 {
-    let mut max_val: u32 = 0;
-    let mut found = false;
-    for block in &func.blocks {
-        for (val, _) in &block.insts {
-            if val.0 >= max_val {
-                max_val = val.0;
-                found = true;
-            }
-        }
-    }
-    for p in &func.params {
-        if p.0 >= max_val {
-            max_val = p.0;
-            found = true;
-        }
-    }
-    if found {
-        (max_val + 1) as u16
-    } else {
-        0
-    }
+    let inst_vals = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter().map(|(v, _)| v.0));
+    let param_vals = func.params.iter().map(|v| v.0);
+    inst_vals
+        .chain(param_vals)
+        .max()
+        .map(|m| (m + 1) as u16)
+        .unwrap_or(0)
 }
 
 fn count_uses(func: &LirFunc) -> HashMap<Value, u32> {
