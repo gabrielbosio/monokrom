@@ -1288,23 +1288,13 @@ impl App {
         let trimmed = prev.trim();
 
         if trimmed == "end" {
-            if self.should_dedent(cur_line - 1) {
-                self.dedent_line(cur_line - 1);
-                self.dedent_line(cur_line);
-                let col = self.editor.cursor.col().saturating_sub(2);
-                self.editor.cursor.set_position(cur_line, col);
-            }
+            self.dedent_closing_keyword(cur_line);
             return;
         }
 
         // Dedent else/else-if line if needed, then fall through to add body indent
-        if (trimmed == "else" || trimmed.starts_with("else if "))
-            && self.should_dedent(cur_line - 1)
-        {
-            self.dedent_line(cur_line - 1);
-            self.dedent_line(cur_line);
-            let col = self.editor.cursor.col().saturating_sub(2);
-            self.editor.cursor.set_position(cur_line, col);
+        if trimmed == "else" || trimmed.starts_with("else if ") {
+            self.dedent_closing_keyword(cur_line);
         }
 
         let opens_block = trimmed == "else"
@@ -1321,6 +1311,18 @@ impl App {
                 .cursor
                 .set_position(cur_line, self.editor.cursor.col() + 2);
         }
+    }
+
+    /// Dedent both the previous (closing keyword) line and the current line by 2 spaces,
+    /// if the closing keyword is over-indented relative to its block opener.
+    fn dedent_closing_keyword(&mut self, cur_line: usize) {
+        if !self.should_dedent(cur_line - 1) {
+            return;
+        }
+        self.dedent_line(cur_line - 1);
+        self.dedent_line(cur_line);
+        let col = self.editor.cursor.col().saturating_sub(2);
+        self.editor.cursor.set_position(cur_line, col);
     }
 
     /// Check if a line should be dedented by finding the matching block opener
