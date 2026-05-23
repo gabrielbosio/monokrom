@@ -4,14 +4,14 @@ use crate::compiler;
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
     EDITOR_TILES_Y, MAP_REGION_START, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
-    SCROLLBAR_WIDTH, SPRITE_REGION_START, SPRITE_SIZE, TILE_HEIGHT, TILE_WIDTH,
+    SCROLLBAR_WIDTH, SPRITE_REGION_START, TILE_HEIGHT, TILE_WIDTH,
 };
-use crate::editor::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
+use crate::editor::{
+    operations, Cursor, CursorPosition, History, MapEditor, MapEditorAction, Selection,
+    SpriteEditor, SpriteEditorAction, TextBuffer,
+};
 use crate::filesystem;
-use crate::input::{
-    get_editor_action, get_terminal_action, is_modifier_pressed, is_shift_pressed,
-    is_shortcut_modifier_pressed, should_key_fire, EditorAction,
-};
+use crate::input::{get_editor_action, get_terminal_action, is_shift_pressed, EditorAction};
 use crate::render::highlight::{self, CharStyle};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
 use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, COMMAND_NAMES};
@@ -126,29 +126,11 @@ pub struct App {
     player_mode: bool,
     run_return_mode: AppMode,
 
-    // Sprites
-    sprite_data: [u8; 4096],
-    sprite_selected: u8,
-    sprite_cursor_x: u8,
-    sprite_cursor_y: u8,
-    sprite_color: u8,
-    sprite_undo: Vec<(u8, [u8; SPRITE_SIZE])>,
-    sprite_redo: Vec<(u8, [u8; SPRITE_SIZE])>,
-    sprite_clipboard: Option<[u8; SPRITE_SIZE]>,
-    sprite_painting: bool,
-    sprite_sheet_col: u8,
+    // Sprite editor
+    sprite_editor: SpriteEditor,
 
-    // Map
-    map_data: [u8; 4096],
-    map_cursor_x: u16,
-    map_cursor_y: u16,
-    map_selected_tile: u8,
-    map_undo: Vec<(u16, u16, u8)>,
-    map_redo: Vec<(u16, u16, u8)>,
-    map_viewport_x: u16,
-    map_viewport_y: u16,
-    map_painting: bool,
-    map_picker_col: u8,
+    // Map editor
+    map_editor: MapEditor,
 }
 
 impl App {
@@ -225,27 +207,8 @@ impl App {
             player_mode,
             run_return_mode: AppMode::Terminal,
 
-            sprite_data: [0; 4096],
-            sprite_selected: 0,
-            sprite_cursor_x: 0,
-            sprite_cursor_y: 0,
-            sprite_color: 1,
-            sprite_undo: Vec::new(),
-            sprite_redo: Vec::new(),
-            sprite_clipboard: None,
-            sprite_painting: false,
-            sprite_sheet_col: 0,
-
-            map_data: [0; 4096],
-            map_cursor_x: 0,
-            map_cursor_y: 0,
-            map_selected_tile: 0,
-            map_undo: Vec::new(),
-            map_redo: Vec::new(),
-            map_viewport_x: 0,
-            map_viewport_y: 0,
-            map_painting: false,
-            map_picker_col: 0,
+            sprite_editor: SpriteEditor::new(),
+            map_editor: MapEditor::new(),
         }
     }
 
@@ -272,28 +235,6 @@ impl App {
     fn after_selection_move(&mut self) {
         self.editor.selection.cursor = self.editor.cursor.position;
         self.ensure_cursor_visible();
-    }
-
-    fn append_sprite_data(&self, content: &mut String) {
-        if self.sprite_data.iter().any(|&b| b != 0) {
-            content.push_str("\n__spr__\n");
-            for row in self.sprite_data.chunks(16) {
-                let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
-                content.push_str(&hex);
-                content.push('\n');
-            }
-        }
-    }
-
-    fn append_map_data(&self, content: &mut String) {
-        if self.map_data.iter().any(|&b| b != 0) {
-            content.push_str("\n__map__\n");
-            for row in self.map_data.chunks(16) {
-                let hex: String = row.iter().map(|b| format!("{b:02x}")).collect();
-                content.push_str(&hex);
-                content.push('\n');
-            }
-        }
     }
 
     pub fn update(&mut self) {
@@ -739,9 +680,9 @@ impl App {
                 Ok(bc) => match Vm::new(&bc, get_time()) {
                     Ok(mut vm) => {
                         vm.memory[SPRITE_REGION_START..SPRITE_REGION_START + 4096]
-                            .copy_from_slice(&self.sprite_data);
+                            .copy_from_slice(&self.sprite_editor.data);
                         vm.memory[MAP_REGION_START..MAP_REGION_START + 4096]
-                            .copy_from_slice(&self.map_data);
+                            .copy_from_slice(&self.map_editor.data);
                         self.run_state = Some(vm);
                         self.mode = AppMode::Running;
                     }
@@ -779,8 +720,8 @@ impl App {
         let mut payload = Vec::new();
         payload.extend(&(bc_bytes.len() as u32).to_le_bytes());
         payload.extend(&bc_bytes);
-        payload.extend(&self.sprite_data);
-        payload.extend(&self.map_data);
+        payload.extend(&self.sprite_editor.data);
+        payload.extend(&self.map_editor.data);
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.export_native(name, &payload);
@@ -837,8 +778,8 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     fn export_wasm(&mut self, name: &str, source: &str) {
         let mut full_source = source.to_string();
-        self.append_sprite_data(&mut full_source);
-        self.append_map_data(&mut full_source);
+        self.sprite_editor.append_data(&mut full_source);
+        self.map_editor.append_data(&mut full_source);
         let escaped = full_source
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
@@ -1388,8 +1329,8 @@ impl App {
     fn save_current_file(&mut self) -> bool {
         if let Some(ref filename) = self.current_filename {
             let mut content = self.editor.buffer.to_string();
-            self.append_sprite_data(&mut content);
-            self.append_map_data(&mut content);
+            self.sprite_editor.append_data(&mut content);
+            self.map_editor.append_data(&mut content);
             match filesystem::write_file(filename, &content) {
                 Ok(()) => {
                     self.is_modified = false;
@@ -1421,8 +1362,8 @@ impl App {
         match filesystem::read_file(filename) {
             Ok(content) => {
                 let (source, spr, map) = split_data_sections(&content);
-                self.sprite_data = spr;
-                self.map_data = map;
+                self.sprite_editor.data = spr;
+                self.map_editor.data = map;
                 self.reset_editor(TextBuffer::from_str(source), Some(filename.to_string()));
                 true
             }
@@ -1559,8 +1500,8 @@ impl App {
                     return;
                 }
                 let mut content = self.editor.buffer.to_string();
-                self.append_sprite_data(&mut content);
-                self.append_map_data(&mut content);
+                self.sprite_editor.append_data(&mut content);
+                self.map_editor.append_data(&mut content);
                 match filesystem::write_file(&name, &content) {
                     Ok(()) => {
                         self.current_filename = Some(name.clone());
@@ -1723,704 +1664,38 @@ impl App {
 
     fn update_sprite_editor(&mut self) {
         while get_char_pressed().is_some() {}
-
-        if is_key_pressed(KeyCode::Escape) {
-            self.sprite_painting = false;
-            self.mode = if is_shift_pressed() {
-                AppMode::Editing
-            } else {
-                AppMode::MapEditor
-            };
-            return;
-        }
-
-        let modifier = is_modifier_pressed();
-        let shift = is_shift_pressed();
-
-        // Ctrl+S: save
-        if modifier && !shift && is_key_pressed(KeyCode::S) {
-            if self.current_filename.is_some() && self.save_current_file() {
-                let name = self.current_filename.as_deref().unwrap_or("");
-                self.show_message(&format!("Saved {name}"));
-            }
-            return;
-        }
-
-        // Ctrl+Z: undo
-        if modifier && !shift && is_key_pressed(KeyCode::Z) {
-            self.sprite_undo();
-            return;
-        }
-
-        // Ctrl+Y or Ctrl+Shift+Z: redo
-        if modifier && is_key_pressed(KeyCode::Y) || modifier && shift && is_key_pressed(KeyCode::Z)
-        {
-            self.sprite_redo();
-            return;
-        }
-
-        // Ctrl+C: copy sprite
-        if modifier && !shift && is_key_pressed(KeyCode::C) {
-            self.sprite_clipboard = Some(self.get_sprite_bytes(self.sprite_selected));
-            return;
-        }
-
-        // Ctrl+V: paste sprite
-        if modifier && !shift && is_key_pressed(KeyCode::V) {
-            if let Some(data) = self.sprite_clipboard {
-                self.sprite_push_undo();
-                self.set_sprite_bytes(self.sprite_selected, &data);
-                self.is_modified = true;
-            }
-            return;
-        }
-
-        // Ctrl+Enter (Alt+Enter on WASM): run program
-        if is_shortcut_modifier_pressed()
-            && !shift
-            && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
-        {
-            self.run_program();
-            return;
-        }
-
-        // Don't process other keys while modifier is held
-        if modifier {
-            return;
-        }
-
-        // Alt+Arrow: navigate sprite sheet in 4 directions
-        let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
-        if alt {
-            if is_key_pressed(KeyCode::Left) {
-                self.select_sprite(self.sprite_selected.wrapping_sub(1));
-            }
-            if is_key_pressed(KeyCode::Right) {
-                self.select_sprite(self.sprite_selected.wrapping_add(1));
-            }
-            if is_key_pressed(KeyCode::Up) {
-                self.select_sprite(self.sprite_selected.wrapping_sub(16));
-            }
-            if is_key_pressed(KeyCode::Down) {
-                self.select_sprite(self.sprite_selected.wrapping_add(16));
-            }
-            return;
-        }
-
-        // Shift bindings
-        if shift {
-            // Shift+Arrow: shift sprite contents
-            let dir = if is_key_pressed(KeyCode::Left) {
-                Some((-1i8, 0i8))
-            } else if is_key_pressed(KeyCode::Right) {
-                Some((1, 0))
-            } else if is_key_pressed(KeyCode::Up) {
-                Some((0, -1))
-            } else if is_key_pressed(KeyCode::Down) {
-                Some((0, 1))
-            } else {
-                None
-            };
-            if let Some((dx, dy)) = dir {
-                self.sprite_push_undo();
-                self.shift_sprite(self.sprite_selected, dx, dy);
-                self.is_modified = true;
-            }
-
-            // Shift+F: flip vertical
-            if is_key_pressed(KeyCode::F) {
-                self.sprite_push_undo();
-                self.flip_sprite_vertical(self.sprite_selected);
-                self.is_modified = true;
-            }
-
-            return;
-        }
-
-        // F: flip horizontal
-        if is_key_pressed(KeyCode::F) {
-            self.sprite_push_undo();
-            self.flip_sprite_horizontal(self.sprite_selected);
-            self.is_modified = true;
-            return;
-        }
-
-        // Delete: clear sprite
-        if is_key_pressed(KeyCode::Delete) {
-            let bytes = self.get_sprite_bytes(self.sprite_selected);
-            if bytes != [0; SPRITE_SIZE] {
-                self.sprite_push_undo();
-                self.set_sprite_bytes(self.sprite_selected, &[0; SPRITE_SIZE]);
-                self.is_modified = true;
-            }
-            return;
-        }
-
-        // 1-4: select color directly
-        if is_key_pressed(KeyCode::Key1) {
-            self.sprite_color = 0;
-        }
-        if is_key_pressed(KeyCode::Key2) {
-            self.sprite_color = 1;
-        }
-        if is_key_pressed(KeyCode::Key3) {
-            self.sprite_color = 2;
-        }
-        if is_key_pressed(KeyCode::Key4) {
-            self.sprite_color = 3;
-        }
-
-        // Arrow keys: move cursor
-        let mut moved = false;
-        if should_key_fire(KeyCode::Left, false) {
-            self.sprite_cursor_x = self.sprite_cursor_x.wrapping_sub(1) & 7;
-            moved = true;
-        }
-        if should_key_fire(KeyCode::Right, false) {
-            self.sprite_cursor_x = (self.sprite_cursor_x + 1) & 7;
-            moved = true;
-        }
-        if should_key_fire(KeyCode::Up, false) {
-            self.sprite_cursor_y = self.sprite_cursor_y.wrapping_sub(1) & 7;
-            moved = true;
-        }
-        if should_key_fire(KeyCode::Down, false) {
-            self.sprite_cursor_y = (self.sprite_cursor_y + 1) & 7;
-            moved = true;
-        }
-
-        // Space: paint (hold to paint continuously while moving)
-        if is_key_pressed(KeyCode::Space) {
-            self.sprite_push_undo();
-            self.sprite_painting = true;
-            self.set_sprite_pixel(
-                self.sprite_selected,
-                self.sprite_cursor_x,
-                self.sprite_cursor_y,
-                self.sprite_color,
-            );
-            self.is_modified = true;
-        } else if is_key_down(KeyCode::Space) {
-            if moved {
-                self.set_sprite_pixel(
-                    self.sprite_selected,
-                    self.sprite_cursor_x,
-                    self.sprite_cursor_y,
-                    self.sprite_color,
-                );
-                self.is_modified = true;
-            }
-        } else {
-            self.sprite_painting = false;
-        }
-
-        // C: eyedropper (pick color under cursor)
-        if is_key_pressed(KeyCode::C) {
-            self.sprite_color = self.get_sprite_pixel(
-                self.sprite_selected,
-                self.sprite_cursor_x,
-                self.sprite_cursor_y,
-            );
-        }
-    }
-
-    fn get_sprite_bytes(&self, sprite: u8) -> [u8; SPRITE_SIZE] {
-        let base = sprite as usize * SPRITE_SIZE;
-        let mut data = [0u8; SPRITE_SIZE];
-        data.copy_from_slice(&self.sprite_data[base..base + SPRITE_SIZE]);
-        data
-    }
-
-    fn set_sprite_bytes(&mut self, sprite: u8, data: &[u8; SPRITE_SIZE]) {
-        let base = sprite as usize * SPRITE_SIZE;
-        self.sprite_data[base..base + SPRITE_SIZE].copy_from_slice(data);
-    }
-
-    fn select_sprite(&mut self, idx: u8) {
-        self.sprite_selected = idx;
-        let sheet_cols: u8 = 5;
-        let sel_col = idx % 16;
-        let offset = sel_col.wrapping_sub(self.sprite_sheet_col) % 16;
-        if offset >= sheet_cols {
-            if offset > 8 {
-                self.sprite_sheet_col = sel_col;
-            } else {
-                self.sprite_sheet_col = sel_col.wrapping_sub(sheet_cols - 1) % 16;
-            }
-        }
-    }
-
-    fn sprite_push_undo(&mut self) {
-        let data = self.get_sprite_bytes(self.sprite_selected);
-        self.sprite_undo.push((self.sprite_selected, data));
-        if self.sprite_undo.len() > 32 {
-            self.sprite_undo.remove(0);
-        }
-        self.sprite_redo.clear();
-    }
-
-    fn sprite_undo(&mut self) {
-        if let Some((sprite, data)) = self.sprite_undo.pop() {
-            let current = self.get_sprite_bytes(sprite);
-            self.sprite_redo.push((sprite, current));
-            self.set_sprite_bytes(sprite, &data);
-            self.select_sprite(sprite);
+        let output = self.sprite_editor.update();
+        if output.modified {
             self.is_modified = true;
         }
-    }
-
-    fn sprite_redo(&mut self) {
-        if let Some((sprite, data)) = self.sprite_redo.pop() {
-            let current = self.get_sprite_bytes(sprite);
-            self.sprite_undo.push((sprite, current));
-            self.set_sprite_bytes(sprite, &data);
-            self.select_sprite(sprite);
-            self.is_modified = true;
-        }
-    }
-
-    fn flip_sprite_horizontal(&mut self, sprite: u8) {
-        for y in 0..8u8 {
-            let mut row = [0u8; 8];
-            for x in 0..8u8 {
-                row[x as usize] = self.get_sprite_pixel(sprite, x, y);
-            }
-            for x in 0..8u8 {
-                self.set_sprite_pixel(sprite, x, y, row[7 - x as usize]);
-            }
-        }
-    }
-
-    fn flip_sprite_vertical(&mut self, sprite: u8) {
-        for y in 0..4u8 {
-            for x in 0..8u8 {
-                let top = self.get_sprite_pixel(sprite, x, y);
-                let bot = self.get_sprite_pixel(sprite, x, 7 - y);
-                self.set_sprite_pixel(sprite, x, y, bot);
-                self.set_sprite_pixel(sprite, x, 7 - y, top);
-            }
-        }
-    }
-
-    fn shift_sprite(&mut self, sprite: u8, dx: i8, dy: i8) {
-        let mut pixels = [[0u8; 8]; 8];
-        for y in 0..8u8 {
-            for x in 0..8u8 {
-                pixels[y as usize][x as usize] = self.get_sprite_pixel(sprite, x, y);
-            }
-        }
-        for y in 0..8i8 {
-            for x in 0..8i8 {
-                let sx = x - dx;
-                let sy = y - dy;
-                let color = if (0..8).contains(&sx) && (0..8).contains(&sy) {
-                    pixels[sy as usize][sx as usize]
-                } else {
-                    0
-                };
-                self.set_sprite_pixel(sprite, x as u8, y as u8, color);
-            }
-        }
-    }
-
-    fn get_sprite_pixel(&self, sprite: u8, x: u8, y: u8) -> u8 {
-        let base = sprite as usize * SPRITE_SIZE + y as usize * 2;
-        let byte_idx = x as usize / 4;
-        let bit_shift = 6 - (x as usize % 4) * 2;
-        (self.sprite_data[base + byte_idx] >> bit_shift) & 3
-    }
-
-    fn set_sprite_pixel(&mut self, sprite: u8, x: u8, y: u8, color: u8) {
-        let base = sprite as usize * SPRITE_SIZE + y as usize * 2;
-        let byte_idx = x as usize / 4;
-        let bit_shift = 6 - (x as usize % 4) * 2;
-        let mask = !(3 << bit_shift);
-        self.sprite_data[base + byte_idx] =
-            (self.sprite_data[base + byte_idx] & mask) | ((color & 3) << bit_shift);
-    }
-
-    fn draw_sprite_editor(&self, helpers: &DrawHelpers) {
-        let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
-        let zoom = 14.0f32;
-        let editor_size = zoom * 8.0;
-
-        // Draw current sprite zoomed
-        for py in 0..8u8 {
-            for px in 0..8u8 {
-                let color = self.get_sprite_pixel(self.sprite_selected, px, py);
-                helpers.draw_rect(
-                    px as f32 * zoom,
-                    py as f32 * zoom,
-                    zoom,
-                    zoom,
-                    palette[color as usize],
-                );
-            }
-        }
-
-        // Draw grid lines
-        let grid_color = Color::new(0.2, 0.2, 0.2, 1.0);
-        for i in 1..8 {
-            let pos = i as f32 * zoom;
-            helpers.draw_rect(pos, 0.0, 1.0, editor_size, grid_color);
-            helpers.draw_rect(0.0, pos, editor_size, 1.0, grid_color);
-        }
-
-        // Draw cursor highlight
-        let cx = self.sprite_cursor_x as f32 * zoom;
-        let cy = self.sprite_cursor_y as f32 * zoom;
-        helpers.draw_rect(cx, cy, zoom, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy + zoom - 1.0, zoom, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy, 1.0, zoom, COLOR_WHITE);
-        helpers.draw_rect(cx + zoom - 1.0, cy, 1.0, zoom, COLOR_WHITE);
-
-        // Sprite sheet view (right side, 5 cols × 16 rows of the 16×16 sheet)
-        let sheet_x = editor_size + 4.0;
-        let sheet_cols = 5u8;
-        let start_col = self.sprite_sheet_col;
-        for row in 0..16u8 {
-            for col_off in 0..sheet_cols {
-                let sheet_col = start_col.wrapping_add(col_off) % 16;
-                let si = row * 16 + sheet_col;
-                let bx = sheet_x + col_off as f32 * 8.0;
-                let by = row as f32 * 8.0;
-                for py in 0..8u8 {
-                    for px in 0..8u8 {
-                        let c = self.get_sprite_pixel(si, px, py);
-                        if c != 0 {
-                            helpers.draw_rect(
-                                bx + px as f32,
-                                by + py as f32,
-                                1.0,
-                                1.0,
-                                palette[c as usize],
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        // Highlight selected sprite in sheet view
-        let sel_col = self.sprite_selected % 16;
-        let col_off = sel_col.wrapping_sub(start_col) % 16;
-        let sel_bx = sheet_x + col_off as f32 * 8.0;
-        let sel_by = (self.sprite_selected / 16) as f32 * 8.0;
-        helpers.draw_rect(sel_bx, sel_by, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(sel_bx, sel_by + 7.0, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(sel_bx, sel_by, 1.0, 8.0, COLOR_WHITE);
-        helpers.draw_rect(sel_bx + 7.0, sel_by, 1.0, 8.0, COLOR_WHITE);
-
-        // Color palette bar at bottom
-        let bar_y = 134.0f32;
-        for i in 0..4u8 {
-            let px = 4.0 + i as f32 * 20.0;
-            helpers.draw_rect(px, bar_y, 16.0, 8.0, palette[i as usize]);
-            // Outline for all
-            if i == 0 {
-                // Black on black - draw a border
-                helpers.draw_rect(px, bar_y, 16.0, 1.0, COLOR_DARK_GRAY);
-                helpers.draw_rect(px, bar_y + 7.0, 16.0, 1.0, COLOR_DARK_GRAY);
-                helpers.draw_rect(px, bar_y, 1.0, 8.0, COLOR_DARK_GRAY);
-                helpers.draw_rect(px + 15.0, bar_y, 1.0, 8.0, COLOR_DARK_GRAY);
-            }
-            // Mark selected color
-            if i == self.sprite_color {
-                helpers.draw_rect(px - 1.0, bar_y - 1.0, 18.0, 1.0, COLOR_WHITE);
-                helpers.draw_rect(px - 1.0, bar_y + 8.0, 18.0, 1.0, COLOR_WHITE);
-                helpers.draw_rect(px - 1.0, bar_y - 1.0, 1.0, 10.0, COLOR_WHITE);
-                helpers.draw_rect(px + 16.0, bar_y - 1.0, 1.0, 10.0, COLOR_WHITE);
-            }
-        }
-
-        // Sprite number
-        let label = format!("#{}", self.sprite_selected);
-        let label_x = 100.0;
-        for (i, c) in label.chars().enumerate() {
-            helpers.draw_char(
-                c,
-                label_x + i as f32 * TILE_WIDTH as f32,
-                bar_y + 1.0,
-                COLOR_WHITE,
-            );
+        match output.action {
+            SpriteEditorAction::None => {}
+            SpriteEditorAction::ExitToTextEditor => self.mode = AppMode::Editing,
+            SpriteEditorAction::ExitToMapEditor => self.mode = AppMode::MapEditor,
+            SpriteEditorAction::Save => self.save_and_show_message(),
+            SpriteEditorAction::Run => self.run_program(),
         }
     }
 
     fn update_map_editor(&mut self) {
         while get_char_pressed().is_some() {}
-
-        if is_key_pressed(KeyCode::Escape) {
-            self.map_painting = false;
-            self.mode = if is_shift_pressed() {
-                AppMode::SpriteEditor
-            } else {
-                AppMode::Terminal
-            };
-            return;
-        }
-
-        let modifier = is_modifier_pressed();
-        let shift = is_shift_pressed();
-
-        if modifier && !shift && is_key_pressed(KeyCode::S) {
-            if self.current_filename.is_some() && self.save_current_file() {
-                let name = self.current_filename.clone().unwrap_or_default();
-                self.show_message(&format!("Saved {name}"));
-            }
-            return;
-        }
-
-        if modifier && !shift && is_key_pressed(KeyCode::Z) {
-            self.map_undo();
-            return;
-        }
-        if (modifier && is_key_pressed(KeyCode::Y))
-            || (modifier && shift && is_key_pressed(KeyCode::Z))
-        {
-            self.map_redo();
-            return;
-        }
-
-        // Ctrl+Enter (Alt+Enter on WASM): run program
-        if is_shortcut_modifier_pressed()
-            && !shift
-            && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
-        {
-            self.run_program();
-            return;
-        }
-
-        if modifier {
-            return;
-        }
-
-        let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
-        if alt {
-            if is_key_pressed(KeyCode::Left) {
-                self.select_map_tile(self.map_selected_tile.wrapping_sub(1));
-            }
-            if is_key_pressed(KeyCode::Right) {
-                self.select_map_tile(self.map_selected_tile.wrapping_add(1));
-            }
-            if is_key_pressed(KeyCode::Up) {
-                self.select_map_tile(self.map_selected_tile.wrapping_sub(16));
-            }
-            if is_key_pressed(KeyCode::Down) {
-                self.select_map_tile(self.map_selected_tile.wrapping_add(16));
-            }
-            return;
-        }
-
-        let fast = is_shift_pressed();
-        let step: u16 = if fast { 8 } else { 1 };
-
-        let mut moved = false;
-        if should_key_fire(KeyCode::Left, fast) && self.map_cursor_x > 0 {
-            self.map_cursor_x = self.map_cursor_x.saturating_sub(step);
-            moved = true;
-        }
-        if should_key_fire(KeyCode::Right, fast) && self.map_cursor_x < 127 {
-            self.map_cursor_x = (self.map_cursor_x + step).min(127);
-            moved = true;
-        }
-        if should_key_fire(KeyCode::Up, fast) && self.map_cursor_y > 0 {
-            self.map_cursor_y = self.map_cursor_y.saturating_sub(step);
-            moved = true;
-        }
-        if should_key_fire(KeyCode::Down, fast) && self.map_cursor_y < 31 {
-            self.map_cursor_y = (self.map_cursor_y + step).min(31);
-            moved = true;
-        }
-
-        // Keep viewport following cursor
-        if self.map_cursor_x < self.map_viewport_x {
-            self.map_viewport_x = self.map_cursor_x;
-        }
-        if self.map_cursor_x >= self.map_viewport_x + 16 {
-            self.map_viewport_x = self.map_cursor_x - 15;
-        }
-        if self.map_cursor_y < self.map_viewport_y {
-            self.map_viewport_y = self.map_cursor_y;
-        }
-        if self.map_cursor_y >= self.map_viewport_y + 16 {
-            self.map_viewport_y = self.map_cursor_y - 15;
-        }
-
-        // Space/Enter: paint tile (hold Space to paint continuously while moving)
-        if is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::Enter) {
-            self.map_painting = true;
-            self.map_place_tile(self.map_selected_tile);
-        } else if is_key_down(KeyCode::Space) {
-            if moved {
-                self.map_place_tile(self.map_selected_tile);
-            }
-        } else {
-            self.map_painting = false;
-        }
-
-        if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
-            self.map_place_tile(0);
-        }
-
-        if is_key_pressed(KeyCode::C) {
-            let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
-            self.select_map_tile(self.map_data[idx]);
-        }
-    }
-
-    fn select_map_tile(&mut self, idx: u8) {
-        self.map_selected_tile = idx;
-        let sel_col = idx % 16;
-        let visible_cols = 4u8;
-        if sel_col < self.map_picker_col {
-            self.map_picker_col = sel_col;
-        } else if sel_col >= self.map_picker_col + visible_cols {
-            self.map_picker_col = sel_col + 1 - visible_cols;
-        }
-    }
-
-    fn map_place_tile(&mut self, tile: u8) {
-        let idx = self.map_cursor_y as usize * 128 + self.map_cursor_x as usize;
-        let old = self.map_data[idx];
-        if old != tile {
-            self.map_undo
-                .push((self.map_cursor_x, self.map_cursor_y, old));
-            if self.map_undo.len() > 64 {
-                self.map_undo.remove(0);
-            }
-            self.map_redo.clear();
-            self.map_data[idx] = tile;
+        let output = self.map_editor.update();
+        if output.modified {
             self.is_modified = true;
         }
-    }
-
-    fn map_undo(&mut self) {
-        if let Some((x, y, old_tile)) = self.map_undo.pop() {
-            let idx = y as usize * 128 + x as usize;
-            let current = self.map_data[idx];
-            self.map_redo.push((x, y, current));
-            self.map_data[idx] = old_tile;
-            self.is_modified = true;
+        match output.action {
+            MapEditorAction::None => {}
+            MapEditorAction::ExitToSpriteEditor => self.mode = AppMode::SpriteEditor,
+            MapEditorAction::ExitToTerminal => self.mode = AppMode::Terminal,
+            MapEditorAction::Save => self.save_and_show_message(),
+            MapEditorAction::Run => self.run_program(),
         }
     }
 
-    fn map_redo(&mut self) {
-        if let Some((x, y, tile)) = self.map_redo.pop() {
-            let idx = y as usize * 128 + x as usize;
-            let current = self.map_data[idx];
-            self.map_undo.push((x, y, current));
-            self.map_data[idx] = tile;
-            self.is_modified = true;
-        }
-    }
-
-    fn draw_map_editor(&self, helpers: &DrawHelpers) {
-        let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
-
-        // Map viewport: 16x16 tiles at 8x8 each = 128x128 px (top-left)
-        for ty in 0..16u16 {
-            for tx in 0..16u16 {
-                let mx = self.map_viewport_x + tx;
-                let my = self.map_viewport_y + ty;
-                if mx < 128 && my < 32 {
-                    let tile = self.map_data[my as usize * 128 + mx as usize];
-                    let sx = tx as f32 * 8.0;
-                    let sy = ty as f32 * 8.0;
-                    for py in 0..8u8 {
-                        for px in 0..8u8 {
-                            let c = self.get_sprite_pixel(tile, px, py);
-                            if c != 0 {
-                                helpers.draw_rect(
-                                    sx + px as f32,
-                                    sy + py as f32,
-                                    1.0,
-                                    1.0,
-                                    palette[c as usize],
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Grid lines
-        let grid_color = Color::new(0.15, 0.15, 0.15, 1.0);
-        for i in 1..16 {
-            let pos = i as f32 * 8.0;
-            helpers.draw_rect(pos, 0.0, 1.0, 128.0, grid_color);
-            helpers.draw_rect(0.0, pos, 128.0, 1.0, grid_color);
-        }
-
-        // Cursor
-        let cx = (self.map_cursor_x - self.map_viewport_x) as f32 * 8.0;
-        let cy = (self.map_cursor_y - self.map_viewport_y) as f32 * 8.0;
-        helpers.draw_rect(cx, cy, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy + 7.0, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy, 1.0, 8.0, COLOR_WHITE);
-        helpers.draw_rect(cx + 7.0, cy, 1.0, 8.0, COLOR_WHITE);
-
-        // Sprite picker: 4 cols x 16 rows at x=128
-        let sheet_x = 128.0f32;
-        let picker_col_offset = self.map_picker_col;
-        for row in 0..16u8 {
-            for col in 0..4u8 {
-                let si = row * 16 + picker_col_offset + col;
-                let bx = sheet_x + col as f32 * 8.0;
-                let by = row as f32 * 8.0;
-                for py in 0..8u8 {
-                    for px in 0..8u8 {
-                        let c = self.get_sprite_pixel(si, px, py);
-                        if c != 0 {
-                            helpers.draw_rect(
-                                bx + px as f32,
-                                by + py as f32,
-                                1.0,
-                                1.0,
-                                palette[c as usize],
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        // Highlight selected tile in picker
-        let sel_row = self.map_selected_tile / 16;
-        let sel_col = self.map_selected_tile % 16 - picker_col_offset;
-        if sel_col < 4 {
-            let sx = sheet_x + sel_col as f32 * 8.0;
-            let sy = sel_row as f32 * 8.0;
-            helpers.draw_rect(sx, sy, 8.0, 1.0, COLOR_WHITE);
-            helpers.draw_rect(sx, sy + 7.0, 8.0, 1.0, COLOR_WHITE);
-            helpers.draw_rect(sx, sy, 1.0, 8.0, COLOR_WHITE);
-            helpers.draw_rect(sx + 7.0, sy, 1.0, 8.0, COLOR_WHITE);
-        }
-
-        // Status bar at y=130
-        let tw = TILE_WIDTH as f32;
-        let label = format!(
-            "t:{} {},{}",
-            self.map_selected_tile, self.map_cursor_x, self.map_cursor_y
-        );
-        for (i, ch) in label.chars().enumerate() {
-            helpers.draw_char(ch, i as f32 * tw, 130.0, COLOR_WHITE);
-        }
-
-        // Preview selected tile at bottom-right
-        for py in 0..8u8 {
-            for px in 0..8u8 {
-                let c = self.get_sprite_pixel(self.map_selected_tile, px, py);
-                if c != 0 {
-                    helpers.draw_rect(
-                        144.0 + px as f32,
-                        130.0 + py as f32,
-                        1.0,
-                        1.0,
-                        palette[c as usize],
-                    );
-                }
-            }
+    fn save_and_show_message(&mut self) {
+        if self.current_filename.is_some() && self.save_current_file() {
+            let name = self.current_filename.as_deref().unwrap_or("");
+            self.show_message(&format!("Saved {name}"));
         }
     }
 
@@ -2492,7 +1767,7 @@ impl App {
             || (self.mode == AppMode::Message && self.message_return_mode == AppMode::SpriteEditor)
         {
             clear_background(COLOR_BLACK);
-            self.draw_sprite_editor(&helpers);
+            self.sprite_editor.draw(&helpers);
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
@@ -2500,7 +1775,7 @@ impl App {
             || (self.mode == AppMode::Message && self.message_return_mode == AppMode::MapEditor)
         {
             clear_background(COLOR_BLACK);
-            self.draw_map_editor(&helpers);
+            self.map_editor.draw(&self.sprite_editor, &helpers);
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
