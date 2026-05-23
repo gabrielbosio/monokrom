@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::compiler::lir::LirFunc;
 
-use super::{has_side_effects, inst_operands, terminator_operands};
+use super::has_side_effects;
 
 pub fn eliminate(func: &mut LirFunc) {
     loop {
@@ -11,11 +11,11 @@ pub fn eliminate(func: &mut LirFunc) {
         // Count uses across all instructions and terminators
         for block in &func.blocks {
             for (_, inst) in &block.insts {
-                for op in inst_operands(inst) {
+                for op in inst.operands() {
                     *uses.entry(op.0).or_default() += 1;
                 }
             }
-            for op in terminator_operands(&block.terminator) {
+            for op in block.terminator.operands() {
                 *uses.entry(op.0).or_default() += 1;
             }
         }

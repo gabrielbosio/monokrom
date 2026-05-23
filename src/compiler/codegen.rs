@@ -75,36 +75,15 @@ fn count_uses(func: &LirFunc) -> HashMap<Value, u32> {
     let mut uses: HashMap<Value, u32> = HashMap::new();
     for block in &func.blocks {
         for (_, inst) in &block.insts {
-            for v in inst_operands(inst) {
+            for v in inst.operands() {
                 *uses.entry(v).or_default() += 1;
             }
         }
-        for v in terminator_operands(&block.terminator) {
+        for v in block.terminator.operands() {
             *uses.entry(v).or_default() += 1;
         }
     }
     uses
-}
-
-fn inst_operands(inst: &LirInst) -> Vec<Value> {
-    match inst {
-        LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => vec![],
-        LirInst::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
-        LirInst::UnaryOp { val, .. } => vec![*val],
-        LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => args.clone(),
-        LirInst::Load { addr, .. } => vec![*addr],
-        LirInst::Store { addr, val, .. } => vec![*addr, *val],
-        LirInst::Phi(entries) => entries.iter().map(|(_, v)| *v).collect(),
-    }
-}
-
-fn terminator_operands(term: &Terminator) -> Vec<Value> {
-    match term {
-        Terminator::Jump(_) => vec![],
-        Terminator::Branch { cond, .. } => vec![*cond],
-        Terminator::Return(Some(v)) => vec![*v],
-        Terminator::Return(None) => vec![],
-    }
 }
 
 fn emit_store_or_pop(bc: &mut Bytecode, val: Value, used: bool) {

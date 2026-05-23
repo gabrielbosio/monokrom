@@ -4,34 +4,13 @@ pub mod simplify;
 
 use std::collections::HashMap;
 
-use crate::compiler::lir::{LirFunc, LirInst, LirModule, Terminator, Value};
+use crate::compiler::lir::{LirFunc, LirInst, LirModule, Value};
 
 pub fn optimize(module: &mut LirModule) {
     for func in &mut module.functions {
         simplify::simplify(func);
         cse::eliminate(func);
         dce::eliminate(func);
-    }
-}
-
-fn inst_operands(inst: &LirInst) -> Vec<Value> {
-    match inst {
-        LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => vec![],
-        LirInst::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
-        LirInst::UnaryOp { val, .. } => vec![*val],
-        LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => args.clone(),
-        LirInst::Load { addr, .. } => vec![*addr],
-        LirInst::Store { addr, val, .. } => vec![*addr, *val],
-        LirInst::Phi(entries) => entries.iter().map(|(_, v)| *v).collect(),
-    }
-}
-
-fn terminator_operands(term: &Terminator) -> Vec<Value> {
-    match term {
-        Terminator::Jump(_) => vec![],
-        Terminator::Branch { cond, .. } => vec![*cond],
-        Terminator::Return(Some(v)) => vec![*v],
-        Terminator::Return(None) => vec![],
     }
 }
 

@@ -43,6 +43,18 @@ pub enum LirInst {
 }
 
 impl LirInst {
+    pub fn operands(&self) -> Vec<Value> {
+        match self {
+            LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => vec![],
+            LirInst::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
+            LirInst::UnaryOp { val, .. } => vec![*val],
+            LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => args.clone(),
+            LirInst::Load { addr, .. } => vec![*addr],
+            LirInst::Store { addr, val, .. } => vec![*addr, *val],
+            LirInst::Phi(entries) => entries.iter().map(|(_, v)| *v).collect(),
+        }
+    }
+
     pub fn replace_values(&mut self, mut f: impl FnMut(Value) -> Value) {
         match self {
             LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => {}
@@ -82,6 +94,15 @@ pub enum Terminator {
 }
 
 impl Terminator {
+    pub fn operands(&self) -> Vec<Value> {
+        match self {
+            Terminator::Jump(_) => vec![],
+            Terminator::Branch { cond, .. } => vec![*cond],
+            Terminator::Return(Some(v)) => vec![*v],
+            Terminator::Return(None) => vec![],
+        }
+    }
+
     pub fn replace_values(&mut self, mut f: impl FnMut(Value) -> Value) {
         match self {
             Terminator::Jump(_) => {}
