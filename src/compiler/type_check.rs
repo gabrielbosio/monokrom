@@ -1065,11 +1065,9 @@ fn always_returns(stmts: &[HirStmt]) -> bool {
     false
 }
 
-const FP_SCALE: f64 = 128.0;
-
 fn parse_fixed(s: &str) -> i16 {
     let val: f64 = s.parse().unwrap_or(0.0);
-    (val * FP_SCALE).round() as i16
+    (val * 128.0).round() as i16
 }
 
 #[cfg(test)]
