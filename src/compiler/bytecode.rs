@@ -1,51 +1,51 @@
 use crate::compiler::hir::Intrinsic;
 
 // Opcode constants
-pub const PUSH0: u8 = 0x00;
-pub const PUSH1: u8 = 0x01;
-pub const PUSH_I8: u8 = 0x02;
-pub const PUSH_I16: u8 = 0x03;
-pub const POP: u8 = 0x04;
-pub const LOAD_LOCAL: u8 = 0x05;
-pub const STORE_LOCAL: u8 = 0x06;
+pub const OP_PUSH0: u8 = 0x00;
+pub const OP_PUSH1: u8 = 0x01;
+pub const OP_PUSH_I8: u8 = 0x02;
+pub const OP_PUSH_I16: u8 = 0x03;
+pub const OP_POP: u8 = 0x04;
+pub const OP_LOAD_LOCAL: u8 = 0x05;
+pub const OP_STORE_LOCAL: u8 = 0x06;
 
-pub const ADD: u8 = 0x10;
-pub const SUB: u8 = 0x11;
-pub const MUL: u8 = 0x12;
-pub const DIV: u8 = 0x13;
-pub const MOD: u8 = 0x14;
-pub const NEG: u8 = 0x15;
+pub const OP_ADD: u8 = 0x10;
+pub const OP_SUB: u8 = 0x11;
+pub const OP_MUL: u8 = 0x12;
+pub const OP_DIV: u8 = 0x13;
+pub const OP_MOD: u8 = 0x14;
+pub const OP_NEG: u8 = 0x15;
 
-pub const EQ: u8 = 0x16;
-pub const NEQ: u8 = 0x17;
-pub const LT: u8 = 0x18;
-pub const GT: u8 = 0x19;
-pub const LEQ: u8 = 0x1A;
-pub const GEQ: u8 = 0x1B;
+pub const OP_EQ: u8 = 0x16;
+pub const OP_NEQ: u8 = 0x17;
+pub const OP_LT: u8 = 0x18;
+pub const OP_GT: u8 = 0x19;
+pub const OP_LEQ: u8 = 0x1A;
+pub const OP_GEQ: u8 = 0x1B;
 
-pub const AND: u8 = 0x1C;
-pub const OR: u8 = 0x1D;
-pub const NOT: u8 = 0x1E;
+pub const OP_AND: u8 = 0x1C;
+pub const OP_OR: u8 = 0x1D;
+pub const OP_NOT: u8 = 0x1E;
 
-pub const BAND: u8 = 0x64;
-pub const BOR: u8 = 0x65;
-pub const BNOT: u8 = 0x66;
-pub const SHL: u8 = 0x67;
-pub const SHR: u8 = 0x68;
+pub const OP_BAND: u8 = 0x64;
+pub const OP_BOR: u8 = 0x65;
+pub const OP_BNOT: u8 = 0x66;
+pub const OP_SHL: u8 = 0x67;
+pub const OP_SHR: u8 = 0x68;
 pub const OP_MGET: u8 = 0x69;
 pub const OP_MSET: u8 = 0x6A;
 pub const OP_MAP: u8 = 0x6B;
 
-pub const LOAD1: u8 = 0x20;
-pub const LOAD2: u8 = 0x21;
-pub const STORE1: u8 = 0x22;
-pub const STORE2: u8 = 0x23;
+pub const OP_LOAD1: u8 = 0x20;
+pub const OP_LOAD2: u8 = 0x21;
+pub const OP_STORE1: u8 = 0x22;
+pub const OP_STORE2: u8 = 0x23;
 
-pub const JUMP: u8 = 0x30;
-pub const JUMP_IF_FALSE: u8 = 0x31;
-pub const CALL: u8 = 0x32;
-pub const RET: u8 = 0x33;
-pub const HALT: u8 = 0x34;
+pub const OP_JUMP: u8 = 0x30;
+pub const OP_JUMP_IF_FALSE: u8 = 0x31;
+pub const OP_CALL: u8 = 0x32;
+pub const OP_RET: u8 = 0x33;
+pub const OP_HALT: u8 = 0x34;
 
 pub const OP_PSET: u8 = 0x40;
 pub const OP_PGET: u8 = 0x41;
@@ -81,14 +81,14 @@ pub const OP_FTOI: u8 = 0x5E;
 pub const OP_ITOF: u8 = 0x5F;
 pub const OP_TRACEF: u8 = 0x60;
 pub const OP_PRINTF: u8 = 0x61;
-pub const FMUL: u8 = 0x62;
-pub const FDIV: u8 = 0x63;
+pub const OP_FMUL: u8 = 0x62;
+pub const OP_FDIV: u8 = 0x63;
 
 pub fn inst_size(op: u8) -> usize {
     match op {
-        PUSH_I8 => 2,
-        PUSH_I16 | LOAD_LOCAL | STORE_LOCAL | JUMP | JUMP_IF_FALSE => 3,
-        CALL => 4,
+        OP_PUSH_I8 => 2,
+        OP_PUSH_I16 | OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF_FALSE => 3,
+        OP_CALL => 4,
         _ => 1,
     }
 }
@@ -163,37 +163,37 @@ pub fn intrinsic_has_return_value(op: Intrinsic) -> bool {
 #[cfg(test)]
 fn op_name(b: u8) -> Option<&'static str> {
     match b {
-        PUSH0 => Some("Push0"),
-        PUSH1 => Some("Push1"),
-        PUSH_I8 => Some("PushI8"),
-        PUSH_I16 => Some("PushI16"),
-        POP => Some("Pop"),
-        LOAD_LOCAL => Some("LoadLocal"),
-        STORE_LOCAL => Some("StoreLocal"),
-        ADD => Some("Add"),
-        SUB => Some("Sub"),
-        MUL => Some("Mul"),
-        DIV => Some("Div"),
-        MOD => Some("Mod"),
-        NEG => Some("Neg"),
-        EQ => Some("Eq"),
-        NEQ => Some("Neq"),
-        LT => Some("Lt"),
-        GT => Some("Gt"),
-        LEQ => Some("Leq"),
-        GEQ => Some("Geq"),
-        AND => Some("And"),
-        OR => Some("Or"),
-        NOT => Some("Not"),
-        LOAD1 => Some("Load1"),
-        LOAD2 => Some("Load2"),
-        STORE1 => Some("Store1"),
-        STORE2 => Some("Store2"),
-        JUMP => Some("Jump"),
-        JUMP_IF_FALSE => Some("JumpIfFalse"),
-        CALL => Some("Call"),
-        RET => Some("Ret"),
-        HALT => Some("Halt"),
+        OP_PUSH0 => Some("Push0"),
+        OP_PUSH1 => Some("Push1"),
+        OP_PUSH_I8 => Some("PushI8"),
+        OP_PUSH_I16 => Some("PushI16"),
+        OP_POP => Some("Pop"),
+        OP_LOAD_LOCAL => Some("LoadLocal"),
+        OP_STORE_LOCAL => Some("StoreLocal"),
+        OP_ADD => Some("Add"),
+        OP_SUB => Some("Sub"),
+        OP_MUL => Some("Mul"),
+        OP_DIV => Some("Div"),
+        OP_MOD => Some("Mod"),
+        OP_NEG => Some("Neg"),
+        OP_EQ => Some("Eq"),
+        OP_NEQ => Some("Neq"),
+        OP_LT => Some("Lt"),
+        OP_GT => Some("Gt"),
+        OP_LEQ => Some("Leq"),
+        OP_GEQ => Some("Geq"),
+        OP_AND => Some("And"),
+        OP_OR => Some("Or"),
+        OP_NOT => Some("Not"),
+        OP_LOAD1 => Some("Load1"),
+        OP_LOAD2 => Some("Load2"),
+        OP_STORE1 => Some("Store1"),
+        OP_STORE2 => Some("Store2"),
+        OP_JUMP => Some("Jump"),
+        OP_JUMP_IF_FALSE => Some("JumpIfFalse"),
+        OP_CALL => Some("Call"),
+        OP_RET => Some("Ret"),
+        OP_HALT => Some("Halt"),
         OP_PSET => Some("Pset"),
         OP_PGET => Some("Pget"),
         OP_CLS => Some("Cls"),
@@ -228,13 +228,13 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_ITOF => Some("Itof"),
         OP_TRACEF => Some("Tracef"),
         OP_PRINTF => Some("Printf"),
-        FMUL => Some("Fmul"),
-        FDIV => Some("Fdiv"),
-        BAND => Some("Band"),
-        BOR => Some("Bor"),
-        BNOT => Some("Bnot"),
-        SHL => Some("Shl"),
-        SHR => Some("Shr"),
+        OP_FMUL => Some("Fmul"),
+        OP_FDIV => Some("Fdiv"),
+        OP_BAND => Some("Band"),
+        OP_BOR => Some("Bor"),
+        OP_BNOT => Some("Bnot"),
+        OP_SHL => Some("Shl"),
+        OP_SHR => Some("Shr"),
         OP_MGET => Some("Mget"),
         OP_MSET => Some("Mset"),
         OP_MAP => Some("Map"),
@@ -244,37 +244,37 @@ fn op_name(b: u8) -> Option<&'static str> {
 
 #[cfg(test)]
 const ALL_OPCODES: [u8; 75] = [
-    PUSH0,
-    PUSH1,
-    PUSH_I8,
-    PUSH_I16,
-    POP,
-    LOAD_LOCAL,
-    STORE_LOCAL,
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    MOD,
-    NEG,
-    EQ,
-    NEQ,
-    LT,
-    GT,
-    LEQ,
-    GEQ,
-    AND,
-    OR,
-    NOT,
-    LOAD1,
-    LOAD2,
-    STORE1,
-    STORE2,
-    JUMP,
-    JUMP_IF_FALSE,
-    CALL,
-    RET,
-    HALT,
+    OP_PUSH0,
+    OP_PUSH1,
+    OP_PUSH_I8,
+    OP_PUSH_I16,
+    OP_POP,
+    OP_LOAD_LOCAL,
+    OP_STORE_LOCAL,
+    OP_ADD,
+    OP_SUB,
+    OP_MUL,
+    OP_DIV,
+    OP_MOD,
+    OP_NEG,
+    OP_EQ,
+    OP_NEQ,
+    OP_LT,
+    OP_GT,
+    OP_LEQ,
+    OP_GEQ,
+    OP_AND,
+    OP_OR,
+    OP_NOT,
+    OP_LOAD1,
+    OP_LOAD2,
+    OP_STORE1,
+    OP_STORE2,
+    OP_JUMP,
+    OP_JUMP_IF_FALSE,
+    OP_CALL,
+    OP_RET,
+    OP_HALT,
     OP_PSET,
     OP_PGET,
     OP_CLS,
@@ -309,13 +309,13 @@ const ALL_OPCODES: [u8; 75] = [
     OP_ITOF,
     OP_TRACEF,
     OP_PRINTF,
-    FMUL,
-    FDIV,
-    BAND,
-    BOR,
-    BNOT,
-    SHL,
-    SHR,
+    OP_FMUL,
+    OP_FDIV,
+    OP_BAND,
+    OP_BOR,
+    OP_BNOT,
+    OP_SHL,
+    OP_SHR,
     OP_MGET,
     OP_MSET,
     OP_MAP,
@@ -510,7 +510,7 @@ mod tests {
     #[test]
     fn serialize_roundtrip_full() {
         let bc = Bytecode {
-            code: vec![PUSH_I8, 42, HALT],
+            code: vec![OP_PUSH_I8, 42, OP_HALT],
             string_pool: vec!["hello".to_string(), "world".to_string()],
             functions: vec![
                 FuncInfo {

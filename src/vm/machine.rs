@@ -193,33 +193,33 @@ impl Vm {
 
         let op = self.read_u8();
         match op {
-            PUSH0 => self.push(0)?,
-            PUSH1 => self.push(1)?,
-            PUSH_I8 => {
+            OP_PUSH0 => self.push(0)?,
+            OP_PUSH1 => self.push(1)?,
+            OP_PUSH_I8 => {
                 let v = self.read_i8() as i16;
                 self.push(v)?;
             }
-            PUSH_I16 => {
+            OP_PUSH_I16 => {
                 let v = self.read_i16();
                 self.push(v)?;
             }
-            POP => {
+            OP_POP => {
                 self.pop()?;
             }
-            LOAD_LOCAL => {
+            OP_LOAD_LOCAL => {
                 let slot = self.read_u16();
                 let v = self.load_local(slot);
                 self.push(v)?;
             }
-            STORE_LOCAL => {
+            OP_STORE_LOCAL => {
                 let slot = self.read_u16();
                 let v = self.pop()?;
                 self.store_local(slot, v);
             }
-            ADD => binop!(i16::wrapping_add),
-            SUB => binop!(i16::wrapping_sub),
-            MUL => binop!(i16::wrapping_mul),
-            DIV => {
+            OP_ADD => binop!(i16::wrapping_add),
+            OP_SUB => binop!(i16::wrapping_sub),
+            OP_MUL => binop!(i16::wrapping_mul),
+            OP_DIV => {
                 let b = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
@@ -227,7 +227,7 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(a.wrapping_div(b))?;
             }
-            MOD => {
+            OP_MOD => {
                 let b = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
@@ -235,12 +235,12 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(a.wrapping_rem(b))?;
             }
-            NEG => {
+            OP_NEG => {
                 let a = self.pop()?;
                 self.push(a.wrapping_neg())?;
             }
-            FMUL => binop!(|a: i16, b| ((a as i32 * b as i32) >> 7) as i16),
-            FDIV => {
+            OP_FMUL => binop!(|a: i16, b| ((a as i32 * b as i32) >> 7) as i16),
+            OP_FDIV => {
                 let b = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
@@ -248,34 +248,34 @@ impl Vm {
                 let a = self.pop()?;
                 self.push((((a as i32) << 7) / b as i32) as i16)?;
             }
-            EQ => binop!(|a: i16, b| if a == b { 1 } else { 0 }),
-            NEQ => binop!(|a: i16, b| if a != b { 1 } else { 0 }),
-            LT => binop!(|a: i16, b| if a < b { 1 } else { 0 }),
-            GT => binop!(|a: i16, b| if a > b { 1 } else { 0 }),
-            LEQ => binop!(|a: i16, b| if a <= b { 1 } else { 0 }),
-            GEQ => binop!(|a: i16, b| if a >= b { 1 } else { 0 }),
-            AND => binop!(|a: i16, b| if a != 0 && b != 0 { 1 } else { 0 }),
-            OR => binop!(|a: i16, b| if a != 0 || b != 0 { 1 } else { 0 }),
-            NOT => {
+            OP_EQ => binop!(|a: i16, b| if a == b { 1 } else { 0 }),
+            OP_NEQ => binop!(|a: i16, b| if a != b { 1 } else { 0 }),
+            OP_LT => binop!(|a: i16, b| if a < b { 1 } else { 0 }),
+            OP_GT => binop!(|a: i16, b| if a > b { 1 } else { 0 }),
+            OP_LEQ => binop!(|a: i16, b| if a <= b { 1 } else { 0 }),
+            OP_GEQ => binop!(|a: i16, b| if a >= b { 1 } else { 0 }),
+            OP_AND => binop!(|a: i16, b| if a != 0 && b != 0 { 1 } else { 0 }),
+            OP_OR => binop!(|a: i16, b| if a != 0 || b != 0 { 1 } else { 0 }),
+            OP_NOT => {
                 let a = self.pop()?;
                 self.push(if a == 0 { 1 } else { 0 })?;
             }
-            BAND => binop!(|a: i16, b| a & b),
-            BOR => binop!(|a: i16, b| a | b),
-            BNOT => {
+            OP_BAND => binop!(|a: i16, b| a & b),
+            OP_BOR => binop!(|a: i16, b| a | b),
+            OP_BNOT => {
                 let a = self.pop()?;
                 self.push(!a)?;
             }
-            SHL => binop!(|a: i16, b| a.wrapping_shl(b as u32)),
-            SHR => binop!(|a: i16, b| a.wrapping_shr(b as u32)),
-            LOAD1 => {
+            OP_SHL => binop!(|a: i16, b| a.wrapping_shl(b as u32)),
+            OP_SHR => binop!(|a: i16, b| a.wrapping_shr(b as u32)),
+            OP_LOAD1 => {
                 let addr = self.pop()? as u16 as usize;
                 if addr >= MEMORY_SIZE {
                     return Err(VmError::OutOfBounds(format!("memory read at {addr}")));
                 }
                 self.push(self.memory[addr] as i16)?;
             }
-            LOAD2 => {
+            OP_LOAD2 => {
                 let addr = self.pop()? as u16 as usize;
                 if addr + 1 >= MEMORY_SIZE {
                     return Err(VmError::OutOfBounds(format!("memory read at {addr}")));
@@ -283,7 +283,7 @@ impl Vm {
                 let v = i16::from_le_bytes([self.memory[addr], self.memory[addr + 1]]);
                 self.push(v)?;
             }
-            STORE1 => {
+            OP_STORE1 => {
                 let val = self.pop()?;
                 let addr = self.pop()? as u16 as usize;
                 if addr >= MEMORY_SIZE {
@@ -291,7 +291,7 @@ impl Vm {
                 }
                 self.memory[addr] = val as u8;
             }
-            STORE2 => {
+            OP_STORE2 => {
                 let val = self.pop()?;
                 let addr = self.pop()? as u16 as usize;
                 if addr + 1 >= MEMORY_SIZE {
@@ -301,18 +301,18 @@ impl Vm {
                 self.memory[addr] = bytes[0];
                 self.memory[addr + 1] = bytes[1];
             }
-            JUMP => {
+            OP_JUMP => {
                 let offset = self.read_i16();
                 self.pc = (self.pc as isize + offset as isize) as usize;
             }
-            JUMP_IF_FALSE => {
+            OP_JUMP_IF_FALSE => {
                 let offset = self.read_i16();
                 let cond = self.pop()?;
                 if cond == 0 {
                     self.pc = (self.pc as isize + offset as isize) as usize;
                 }
             }
-            CALL => {
+            OP_CALL => {
                 let func_idx = self.read_u16() as usize;
                 let argc = self.read_u8();
                 if func_idx >= self.functions.len() {
@@ -342,7 +342,7 @@ impl Vm {
 
                 self.pc = code_offset;
             }
-            RET => {
+            OP_RET => {
                 let frame = self.call_stack.pop().ok_or(VmError::CallStackUnderflow)?;
                 if frame.return_pc == usize::MAX {
                     self.halted = true;
@@ -352,7 +352,7 @@ impl Vm {
                 self.locals.truncate(frame.locals_base);
                 self.pc = frame.return_pc;
             }
-            HALT => {
+            OP_HALT => {
                 self.halted = true;
                 return Ok(VmResult::Halted);
             }
@@ -764,7 +764,7 @@ mod tests {
 
     #[test]
     fn halt_immediately() {
-        let bc = make_bc(vec![HALT], 0);
+        let bc = make_bc(vec![OP_HALT], 0);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert_eq!(vm.step().unwrap(), VmResult::Halted);
         assert!(vm.halted);
@@ -773,7 +773,7 @@ mod tests {
     #[test]
     fn push_and_store() {
         // Push 42, store to slot 0, halt
-        let bc = make_bc(vec![PUSH_I8, 42, STORE_LOCAL, 0, 0, HALT], 1);
+        let bc = make_bc(vec![OP_PUSH_I8, 42, OP_STORE_LOCAL, 0, 0, OP_HALT], 1);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 42);
@@ -784,27 +784,27 @@ mod tests {
         // Push 10, store 0, push 3, store 1, load 0, load 1, add, store 2, halt
         let bc = make_bc(
             vec![
-                PUSH_I8,
+                OP_PUSH_I8,
                 10,
-                STORE_LOCAL,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                PUSH_I8,
+                OP_PUSH_I8,
                 3,
-                STORE_LOCAL,
+                OP_STORE_LOCAL,
                 1,
                 0,
-                LOAD_LOCAL,
+                OP_LOAD_LOCAL,
                 0,
                 0,
-                LOAD_LOCAL,
+                OP_LOAD_LOCAL,
                 1,
                 0,
-                ADD,
-                STORE_LOCAL,
+                OP_ADD,
+                OP_STORE_LOCAL,
                 2,
                 0,
-                HALT,
+                OP_HALT,
             ],
             3,
         );
@@ -815,7 +815,7 @@ mod tests {
 
     #[test]
     fn division_by_zero() {
-        let bc = make_bc(vec![PUSH1, PUSH0, DIV], 0);
+        let bc = make_bc(vec![OP_PUSH1, OP_PUSH0, OP_DIV], 0);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert!(matches!(vm.run_until_flip(), Err(VmError::DivisionByZero)));
     }
@@ -823,7 +823,7 @@ mod tests {
     #[test]
     fn cls_fills_framebuffer() {
         // cls(2): push 2, OP_CLS, halt
-        let bc = make_bc(vec![PUSH_I8, 2, OP_CLS, HALT], 0);
+        let bc = make_bc(vec![OP_PUSH_I8, 2, OP_CLS, OP_HALT], 0);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert!(vm.framebuffer.iter().all(|&p| p == 2));
@@ -831,7 +831,7 @@ mod tests {
 
     #[test]
     fn flip_yields() {
-        let bc = make_bc(vec![OP_FLIP, HALT], 0);
+        let bc = make_bc(vec![OP_FLIP, OP_HALT], 0);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert_eq!(vm.step().unwrap(), VmResult::Flip);
         assert!(!vm.halted);
@@ -843,22 +843,22 @@ mod tests {
         // pset(5, 3, 3), pget(5, 3) -> store slot 0, halt
         let bc = make_bc(
             vec![
-                PUSH_I8,
+                OP_PUSH_I8,
                 5,
-                PUSH_I8,
+                OP_PUSH_I8,
                 3,
-                PUSH_I8,
+                OP_PUSH_I8,
                 3,
                 OP_PSET,
-                PUSH_I8,
+                OP_PUSH_I8,
                 5,
-                PUSH_I8,
+                OP_PUSH_I8,
                 3,
                 OP_PGET,
-                STORE_LOCAL,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                HALT,
+                OP_HALT,
             ],
             1,
         );
@@ -874,16 +874,16 @@ mod tests {
         // On false: skip push_i8(99) [2 bytes] + store_local(0) [3 bytes] = 5 bytes
         let bc = make_bc(
             vec![
-                PUSH0,
-                JUMP_IF_FALSE,
+                OP_PUSH0,
+                OP_JUMP_IF_FALSE,
                 5,
                 0, // offset +5 (skip next 5 bytes)
-                PUSH_I8,
+                OP_PUSH_I8,
                 99,
-                STORE_LOCAL,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                HALT,
+                OP_HALT,
             ],
             1,
         );
@@ -895,7 +895,7 @@ mod tests {
 
     #[test]
     fn ret_from_main_halts() {
-        let bc = make_bc(vec![RET], 0);
+        let bc = make_bc(vec![OP_RET], 0);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         assert_eq!(vm.step().unwrap(), VmResult::Halted);
     }
@@ -903,7 +903,10 @@ mod tests {
     #[test]
     fn btn_reads_buttons() {
         // btn(4): push 4, OP_BTN, store 0, halt
-        let bc = make_bc(vec![PUSH_I8, 4, OP_BTN, STORE_LOCAL, 0, 0, HALT], 1);
+        let bc = make_bc(
+            vec![OP_PUSH_I8, 4, OP_BTN, OP_STORE_LOCAL, 0, 0, OP_HALT],
+            1,
+        );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.buttons = 0b0001_0000; // bit 4 set
         vm.run_until_flip().unwrap();
@@ -915,18 +918,18 @@ mod tests {
         // poke(100, 42), peek(100) -> store 0, halt
         let bc = make_bc(
             vec![
-                PUSH_I8,
+                OP_PUSH_I8,
                 100,
-                PUSH_I8,
+                OP_PUSH_I8,
                 42,
                 OP_POKE,
-                PUSH_I8,
+                OP_PUSH_I8,
                 100,
                 OP_PEEK,
-                STORE_LOCAL,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                HALT,
+                OP_HALT,
             ],
             1,
         );
@@ -939,25 +942,25 @@ mod tests {
     #[test]
     fn memory_store_load() {
         // Store2 500 at addr 200, Load2 from addr 200 -> slot 0
-        // push addr 200, push val 500, STORE2
-        // push addr 200, LOAD2, store slot 0, halt
+        // push addr 200, push val 500, OP_STORE2
+        // push addr 200, OP_LOAD2, store slot 0, halt
         let bc = make_bc(
             vec![
-                PUSH_I16,
+                OP_PUSH_I16,
                 200u8,
                 0, // addr=200
-                PUSH_I16,
+                OP_PUSH_I16,
                 0xF4u8,
                 0x01, // val=500
-                STORE2,
-                PUSH_I16,
+                OP_STORE2,
+                OP_PUSH_I16,
                 200u8,
                 0,
-                LOAD2,
-                STORE_LOCAL,
+                OP_LOAD2,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                HALT,
+                OP_HALT,
             ],
             1,
         );
@@ -969,26 +972,26 @@ mod tests {
     #[test]
     fn function_call() {
         // Two functions: add(a, b) at offset 0, main at offset N
-        // add: load 0, load 1, ADD, RET  (returns a+b on stack)
-        // main: push 10, push 20, CALL #0 (2 args), store 0, HALT
-        let add_code = vec![LOAD_LOCAL, 0, 0, LOAD_LOCAL, 1, 0, ADD, RET];
+        // add: load 0, load 1, OP_ADD, OP_RET  (returns a+b on stack)
+        // main: push 10, push 20, OP_CALL #0 (2 args), store 0, OP_HALT
+        let add_code = vec![OP_LOAD_LOCAL, 0, 0, OP_LOAD_LOCAL, 1, 0, OP_ADD, OP_RET];
         let add_len = add_code.len();
         let main_offset = add_len;
 
         let mut code = add_code;
         code.extend_from_slice(&[
-            PUSH_I8,
+            OP_PUSH_I8,
             10,
-            PUSH_I8,
+            OP_PUSH_I8,
             20,
-            CALL,
+            OP_CALL,
             0,
             0, // func_idx=0
             2, // argc=2
-            STORE_LOCAL,
+            OP_STORE_LOCAL,
             0,
             0,
-            HALT,
+            OP_HALT,
         ]);
 
         let bc = Bytecode {
@@ -1033,7 +1036,7 @@ mod tests {
                 );
             }
         }
-        // Pixel at (3,0) should NOT be set
+        // Pixel at (3,0) should OP_NOT be set
         assert_eq!(vm.framebuffer[3], 0);
     }
 
@@ -1053,17 +1056,17 @@ mod tests {
         // 1.5 * 2.0 = 3.0 (192 * 256 >> 7 = 384)
         let bc = make_bc(
             vec![
-                PUSH_I16,
+                OP_PUSH_I16,
                 0xC0,
                 0x00,
-                PUSH_I16,
+                OP_PUSH_I16,
                 0x00,
                 0x01,
-                FMUL,
-                STORE_LOCAL,
+                OP_FMUL,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                HALT,
+                OP_HALT,
             ],
             1,
         );
@@ -1077,17 +1080,17 @@ mod tests {
         // 3.0 / 1.5 = 2.0 (384 << 7 / 192 = 256)
         let bc = make_bc(
             vec![
-                PUSH_I16,
+                OP_PUSH_I16,
                 0x80,
                 0x01,
-                PUSH_I16,
+                OP_PUSH_I16,
                 0xC0,
                 0x00,
-                FDIV,
-                STORE_LOCAL,
+                OP_FDIV,
+                OP_STORE_LOCAL,
                 0,
                 0,
-                HALT,
+                OP_HALT,
             ],
             1,
         );

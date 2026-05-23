@@ -16,20 +16,20 @@ pub fn optimize(bc: &mut Bytecode) {
         let end = func_end(bc, fi);
         let insts = parse_insts(&bc.code, start, end);
 
-        // Count LOAD_LOCAL per slot within this function
+        // Count OP_LOAD_LOCAL per slot within this function
         let mut load_count: HashMap<u16, u32> = HashMap::new();
         for &(off, op, _) in &insts {
-            if op == LOAD_LOCAL {
+            if op == OP_LOAD_LOCAL {
                 let slot = u16::from_le_bytes([bc.code[off + 1], bc.code[off + 2]]);
                 *load_count.entry(slot).or_default() += 1;
             }
         }
 
-        // Find removable adjacent STORE_LOCAL N / LOAD_LOCAL N pairs
+        // Find removable adjacent OP_STORE_LOCAL N / OP_LOAD_LOCAL N pairs
         for i in 0..insts.len().saturating_sub(1) {
             let (off_a, op_a, sz_a) = insts[i];
             let (off_b, op_b, sz_b) = insts[i + 1];
-            if op_a == STORE_LOCAL && op_b == LOAD_LOCAL {
+            if op_a == OP_STORE_LOCAL && op_b == OP_LOAD_LOCAL {
                 let slot_a = u16::from_le_bytes([bc.code[off_a + 1], bc.code[off_a + 2]]);
                 let slot_b = u16::from_le_bytes([bc.code[off_b + 1], bc.code[off_b + 2]]);
                 if slot_a == slot_b && load_count.get(&slot_a).copied().unwrap_or(0) == 1 {
@@ -59,7 +59,7 @@ pub fn optimize(bc: &mut Bytecode) {
             continue;
         }
         match op {
-            JUMP | JUMP_IF_FALSE => {
+            OP_JUMP | OP_JUMP_IF_FALSE => {
                 new_code.push(op);
                 let rel = i16::from_le_bytes([bc.code[pc + 1], bc.code[pc + 2]]);
                 let old_target = (pc + 3).wrapping_add(rel as usize);
@@ -94,7 +94,7 @@ pub fn optimize(bc: &mut Bytecode) {
         let mut max_slot: Option<u16> = None;
         let insts = parse_insts(&bc.code, start, end);
         for &(off, op, _) in &insts {
-            if op == STORE_LOCAL || op == LOAD_LOCAL {
+            if op == OP_STORE_LOCAL || op == OP_LOAD_LOCAL {
                 let slot = u16::from_le_bytes([bc.code[off + 1], bc.code[off + 2]]);
                 max_slot = Some(max_slot.map_or(slot, |m: u16| m.max(slot)));
             }
@@ -161,14 +161,14 @@ mod tests {
         let bc = compile("fn f(): int\n  return 42\nend").unwrap();
         let insts = super::parse_insts(&bc.code, 0, bc.code.len());
         for &(_, op, _) in &insts {
-            assert!(op != STORE_LOCAL, "STORE_LOCAL should be eliminated");
-            assert!(op != LOAD_LOCAL, "LOAD_LOCAL should be eliminated");
+            assert!(op != OP_STORE_LOCAL, "OP_STORE_LOCAL should be eliminated");
+            assert!(op != OP_LOAD_LOCAL, "OP_LOAD_LOCAL should be eliminated");
         }
     }
 
     #[test]
     fn multi_use_preserved() {
-        // x = a + 1 produces a value used twice in x + x, so its STORE_LOCAL must survive
+        // x = a + 1 produces a value used twice in x + x, so its OP_STORE_LOCAL must survive
         let src = "fn f(a: int): int\n  x: int = a + 1\n  return x + x\nend";
         let bc = compile(src).unwrap();
         let start = bc.functions[0].code_offset;
@@ -178,8 +178,11 @@ mod tests {
             bc.code.len()
         };
         let insts = super::parse_insts(&bc.code, start, end);
-        let has_store = insts.iter().any(|&(_, op, _)| op == STORE_LOCAL);
-        assert!(has_store, "STORE_LOCAL should be preserved for multi-use");
+        let has_store = insts.iter().any(|&(_, op, _)| op == OP_STORE_LOCAL);
+        assert!(
+            has_store,
+            "OP_STORE_LOCAL should be preserved for multi-use"
+        );
     }
 
     #[test]
@@ -230,7 +233,7 @@ mod tests {
         // Compile with peephole (default) and compare to unoptimized
         let src = "fn main()\n  x: int = 0\n  while x < 10\n    pset(x, 0, 3)\n    x = x + 1\n  end\n  flip()\nend";
         let bc = compile(src).unwrap();
-        // Without peephole this would have many STORE_LOCAL/LOAD_LOCAL pairs
+        // Without peephole this would have many OP_STORE_LOCAL/OP_LOAD_LOCAL pairs
         // Just verify it's reasonably small
         assert!(
             bc.code.len() < 100,

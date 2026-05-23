@@ -120,23 +120,23 @@ fn terminator_operands(term: &Terminator) -> Vec<Value> {
 
 fn emit_store_or_pop(bc: &mut Bytecode, val: Value, used: bool) {
     if used {
-        bc.emit_op(STORE_LOCAL);
+        bc.emit_op(OP_STORE_LOCAL);
         bc.emit_u16(val.0 as u16);
     } else {
-        bc.emit_op(POP);
+        bc.emit_op(OP_POP);
     }
 }
 
 fn emit_const(bc: &mut Bytecode, n: i16) {
     match n {
-        0 => bc.emit_op(PUSH0),
-        1 => bc.emit_op(PUSH1),
+        0 => bc.emit_op(OP_PUSH0),
+        1 => bc.emit_op(OP_PUSH1),
         -128..=127 => {
-            bc.emit_op(PUSH_I8);
+            bc.emit_op(OP_PUSH_I8);
             bc.emit_i8(n as i8);
         }
         _ => {
-            bc.emit_op(PUSH_I16);
+            bc.emit_op(OP_PUSH_I16);
             bc.emit_i16(n);
         }
     }
@@ -144,31 +144,31 @@ fn emit_const(bc: &mut Bytecode, n: i16) {
 
 fn binop_opcode(op: BinOp) -> u8 {
     match op {
-        BinOp::Add => ADD,
-        BinOp::Sub => SUB,
-        BinOp::Mul => MUL,
-        BinOp::Div => DIV,
-        BinOp::Mod => MOD,
-        BinOp::Eq => EQ,
-        BinOp::Neq => NEQ,
-        BinOp::Lt => LT,
-        BinOp::Gt => GT,
-        BinOp::Leq => LEQ,
-        BinOp::Geq => GEQ,
-        BinOp::And => AND,
-        BinOp::Or => OR,
-        BinOp::BitAnd => BAND,
-        BinOp::BitOr => BOR,
-        BinOp::Shl => SHL,
-        BinOp::Shr => SHR,
+        BinOp::Add => OP_ADD,
+        BinOp::Sub => OP_SUB,
+        BinOp::Mul => OP_MUL,
+        BinOp::Div => OP_DIV,
+        BinOp::Mod => OP_MOD,
+        BinOp::Eq => OP_EQ,
+        BinOp::Neq => OP_NEQ,
+        BinOp::Lt => OP_LT,
+        BinOp::Gt => OP_GT,
+        BinOp::Leq => OP_LEQ,
+        BinOp::Geq => OP_GEQ,
+        BinOp::And => OP_AND,
+        BinOp::Or => OP_OR,
+        BinOp::BitAnd => OP_BAND,
+        BinOp::BitOr => OP_BOR,
+        BinOp::Shl => OP_SHL,
+        BinOp::Shr => OP_SHR,
     }
 }
 
 fn unaryop_opcode(op: UnaryOp) -> u8 {
     match op {
-        UnaryOp::Neg => NEG,
-        UnaryOp::Not => NOT,
-        UnaryOp::BitNot => BNOT,
+        UnaryOp::Neg => OP_NEG,
+        UnaryOp::Not => OP_NOT,
+        UnaryOp::BitNot => OP_BNOT,
     }
 }
 
@@ -229,9 +229,9 @@ fn emit_instruction(
         }
         LirInst::ConstBool(b) => {
             if *b {
-                bc.emit_op(PUSH1);
+                bc.emit_op(OP_PUSH1);
             } else {
-                bc.emit_op(PUSH0);
+                bc.emit_op(OP_PUSH0);
             }
             emit_store_or_pop(bc, val, used);
         }
@@ -245,14 +245,14 @@ fn emit_instruction(
             rhs,
             is_fixed,
         } => {
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(lhs.0 as u16);
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(rhs.0 as u16);
             if *is_fixed {
                 match op {
-                    BinOp::Mul => bc.emit_op(FMUL),
-                    BinOp::Div => bc.emit_op(FDIV),
+                    BinOp::Mul => bc.emit_op(OP_FMUL),
+                    BinOp::Div => bc.emit_op(OP_FDIV),
                     _ => bc.emit_op(binop_opcode(*op)),
                 }
             } else {
@@ -261,32 +261,32 @@ fn emit_instruction(
             emit_store_or_pop(bc, val, used);
         }
         LirInst::UnaryOp { op, val: operand } => {
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(operand.0 as u16);
             bc.emit_op(unaryop_opcode(*op));
             emit_store_or_pop(bc, val, used);
         }
         LirInst::Call { name, args } => {
             for arg in args {
-                bc.emit_op(LOAD_LOCAL);
+                bc.emit_op(OP_LOAD_LOCAL);
                 bc.emit_u16(arg.0 as u16);
             }
             let func_idx = func_indices
                 .get(name.as_str())
                 .ok_or_else(|| CompileError::new(format!("undefined function: {name}")))?;
-            bc.emit_op(CALL);
+            bc.emit_op(OP_CALL);
             bc.emit_u16(*func_idx);
             bc.emit_u8(args.len() as u8);
             if used {
-                bc.emit_op(STORE_LOCAL);
+                bc.emit_op(OP_STORE_LOCAL);
                 bc.emit_u16(val.0 as u16);
             } else if !void_funcs.contains(name.as_str()) {
-                bc.emit_op(POP);
+                bc.emit_op(OP_POP);
             }
         }
         LirInst::Intrinsic { op, args } => {
             for arg in args {
-                bc.emit_op(LOAD_LOCAL);
+                bc.emit_op(OP_LOAD_LOCAL);
                 bc.emit_u16(arg.0 as u16);
             }
             bc.emit_op(intrinsic_opcode(*op));
@@ -295,11 +295,11 @@ fn emit_instruction(
             }
         }
         LirInst::Load { addr, size } => {
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(addr.0 as u16);
             match size {
-                1 => bc.emit_op(LOAD1),
-                _ => bc.emit_op(LOAD2),
+                1 => bc.emit_op(OP_LOAD1),
+                _ => bc.emit_op(OP_LOAD2),
             }
             emit_store_or_pop(bc, val, used);
         }
@@ -308,13 +308,13 @@ fn emit_instruction(
             val: store_val,
             size,
         } => {
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(addr.0 as u16);
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(store_val.0 as u16);
             match size {
-                1 => bc.emit_op(STORE1),
-                _ => bc.emit_op(STORE2),
+                1 => bc.emit_op(OP_STORE1),
+                _ => bc.emit_op(OP_STORE2),
             }
         }
         LirInst::Phi(_) => {}
@@ -331,9 +331,9 @@ fn emit_phi_copies(bc: &mut Bytecode, from_block: BlockId, to_block: BlockId, fu
         if let LirInst::Phi(entries) = inst {
             for (block_id, source_val) in entries {
                 if *block_id == from_block {
-                    bc.emit_op(LOAD_LOCAL);
+                    bc.emit_op(OP_LOAD_LOCAL);
                     bc.emit_u16(source_val.0 as u16);
-                    bc.emit_op(STORE_LOCAL);
+                    bc.emit_op(OP_STORE_LOCAL);
                     bc.emit_u16(phi_val.0 as u16);
                     break;
                 }
@@ -352,7 +352,7 @@ fn emit_terminator(
     match term {
         Terminator::Jump(target) => {
             emit_phi_copies(bc, current_block, *target, func);
-            bc.emit_op(JUMP);
+            bc.emit_op(OP_JUMP);
             let patch_offset = bc.pos();
             bc.emit_i16(0);
             patches.push(JumpPatch {
@@ -365,15 +365,15 @@ fn emit_terminator(
             then_block,
             else_block,
         } => {
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(cond.0 as u16);
-            bc.emit_op(JUMP_IF_FALSE);
+            bc.emit_op(OP_JUMP_IF_FALSE);
             let else_patch_offset = bc.pos();
             bc.emit_i16(0); // placeholder for else copies
 
             // Then path: phi copies + jump to then_block
             emit_phi_copies(bc, current_block, *then_block, func);
-            bc.emit_op(JUMP);
+            bc.emit_op(OP_JUMP);
             let then_patch_offset = bc.pos();
             bc.emit_i16(0);
             patches.push(JumpPatch {
@@ -387,7 +387,7 @@ fn emit_terminator(
             bc.patch_i16(else_patch_offset, rel as i16);
 
             emit_phi_copies(bc, current_block, *else_block, func);
-            bc.emit_op(JUMP);
+            bc.emit_op(OP_JUMP);
             let else_jump_patch = bc.pos();
             bc.emit_i16(0);
             patches.push(JumpPatch {
@@ -396,12 +396,12 @@ fn emit_terminator(
             });
         }
         Terminator::Return(None) => {
-            bc.emit_op(RET);
+            bc.emit_op(OP_RET);
         }
         Terminator::Return(Some(val)) => {
-            bc.emit_op(LOAD_LOCAL);
+            bc.emit_op(OP_LOAD_LOCAL);
             bc.emit_u16(val.0 as u16);
-            bc.emit_op(RET);
+            bc.emit_op(OP_RET);
         }
     }
 }
@@ -428,27 +428,27 @@ mod tests {
     fn empty_function() {
         let bc = compile("fn f()\nend");
         assert!(!bc.functions.is_empty());
-        assert!(has_opcode(&bc.code, RET));
+        assert!(has_opcode(&bc.code, OP_RET));
     }
 
     #[test]
     fn constant_return() {
         let bc = compile("fn f(): int\n  return 42\nend");
-        assert!(has_opcode(&bc.code, PUSH_I8));
-        assert!(has_opcode(&bc.code, RET));
+        assert!(has_opcode(&bc.code, OP_PUSH_I8));
+        assert!(has_opcode(&bc.code, OP_RET));
     }
 
     #[test]
     fn arithmetic_folded() {
         let bc = compile("fn f(): int\n  return 3 + 5\nend");
-        assert!(has_opcode(&bc.code, PUSH_I8));
-        assert!(has_opcode(&bc.code, RET));
+        assert!(has_opcode(&bc.code, OP_PUSH_I8));
+        assert!(has_opcode(&bc.code, OP_RET));
     }
 
     #[test]
     fn intrinsic_cls() {
         let bc = compile("fn f()\n  cls(0)\nend");
-        assert!(has_opcode(&bc.code, PUSH0));
+        assert!(has_opcode(&bc.code, OP_PUSH0));
         assert!(has_opcode(&bc.code, OP_CLS));
     }
 
@@ -457,26 +457,26 @@ mod tests {
         let bc = compile(
             "fn add(a: int, b: int): int\n  return a + b\nend\nfn f(): int\n  return add(1, 2)\nend",
         );
-        assert!(has_opcode(&bc.code, CALL));
+        assert!(has_opcode(&bc.code, OP_CALL));
     }
 
     #[test]
     fn if_branch() {
         let bc = compile("fn f(x: bool)\n  if x\n    cls(0)\n  end\nend");
-        assert!(has_opcode(&bc.code, JUMP_IF_FALSE));
+        assert!(has_opcode(&bc.code, OP_JUMP_IF_FALSE));
     }
 
     #[test]
     fn while_loop() {
         let bc = compile("fn f()\n  x: int = 0\n  while x < 10\n    x = x + 1\n  end\nend");
-        assert!(has_opcode(&bc.code, JUMP));
+        assert!(has_opcode(&bc.code, OP_JUMP));
     }
 
     #[test]
     fn global_store_load() {
         let bc = compile("g: int\nfn f()\n  g = 5\n  cls(g)\nend");
-        assert!(has_opcode(&bc.code, STORE2));
-        assert!(has_opcode(&bc.code, LOAD2));
+        assert!(has_opcode(&bc.code, OP_STORE2));
+        assert!(has_opcode(&bc.code, OP_LOAD2));
     }
 
     #[test]
@@ -496,12 +496,12 @@ mod tests {
         let bc = compile(
             "buf: array[128] of int\nfn mutate(idx: int)\n  buf[idx] = 0\nend\nfn main()\n  mutate(1)\nend",
         );
-        // Find the CALL in main's code and verify no POP follows it
+        // Find the OP_CALL in main's code and verify no OP_POP follows it
         let main_info = bc.functions.last().unwrap();
         let code = &bc.code[main_info.code_offset..];
-        let call_pos = code.windows(1).position(|w| w[0] == CALL).unwrap();
-        // CALL is followed by u16 func_idx + u8 n_args = 3 bytes
+        let call_pos = code.windows(1).position(|w| w[0] == OP_CALL).unwrap();
+        // OP_CALL is followed by u16 func_idx + u8 n_args = 3 bytes
         let after_call = call_pos + 1 + 3;
-        assert_ne!(code[after_call], POP, "void call should not emit POP");
+        assert_ne!(code[after_call], OP_POP, "void call should not emit OP_POP");
     }
 }
