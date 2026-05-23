@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::compiler::ast::BinOp;
-use crate::compiler::hir::{HirExpr, HirExprKind, HirFunc, HirModule, HirStmt, HirType};
+use crate::compiler::hir::{type_size, HirExpr, HirExprKind, HirFunc, HirModule, HirStmt, HirType};
 use crate::compiler::lir::{BasicBlock, BlockId, LirFunc, LirInst, LirModule, Terminator, Value};
 
 struct LowerCtx<'a> {
@@ -250,19 +250,7 @@ impl<'a> LowerCtx<'a> {
     // --- Type helpers ---
 
     fn type_size(&self, ty: &HirType) -> u16 {
-        match ty {
-            HirType::Int | HirType::Fixed | HirType::Str | HirType::Ref(_) => 2,
-            HirType::Bool => 1,
-            HirType::Void => 0,
-            HirType::Array(elem, count) => self.type_size(elem) * (*count as u16),
-            HirType::Struct(name) => self
-                .module
-                .structs
-                .iter()
-                .find(|s| s.name == *name)
-                .map(|s| s.size)
-                .unwrap_or(0),
-        }
+        type_size(ty, &self.module.structs)
     }
 
     fn is_scalar(&self, ty: &HirType) -> bool {
@@ -1156,7 +1144,7 @@ pub fn lower_to_lir(module: &HirModule) -> LirModule {
     let globals_size = module
         .globals
         .iter()
-        .map(|g| g.address + super::type_check::type_size_standalone(&g.ty, &module.structs))
+        .map(|g| g.address + type_size(&g.ty, &module.structs))
         .max()
         .unwrap_or(0);
 

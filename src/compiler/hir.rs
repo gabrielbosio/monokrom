@@ -199,3 +199,17 @@ pub struct HirModule {
     pub global_init: Vec<HirStmt>,
     pub string_pool: Vec<String>,
 }
+
+pub fn type_size(ty: &HirType, structs: &[HirStruct]) -> u16 {
+    match ty {
+        HirType::Int | HirType::Fixed | HirType::Str | HirType::Ref(_) => 2,
+        HirType::Bool => 1,
+        HirType::Void => 0,
+        HirType::Array(elem, count) => type_size(elem, structs) * (*count as u16),
+        HirType::Struct(name) => structs
+            .iter()
+            .find(|s| s.name == *name)
+            .map(|s| s.size)
+            .unwrap_or(0),
+    }
+}

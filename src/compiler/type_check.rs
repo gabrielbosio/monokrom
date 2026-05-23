@@ -18,7 +18,7 @@ struct GlobalInfo {
 }
 
 struct TypeCheckCtx {
-    structs: HashMap<String, HirStruct>,
+    structs: Vec<HirStruct>,
     globals: HashMap<String, GlobalInfo>,
     functions: HashMap<String, (Vec<HirType>, HirType)>,
     intrinsics: HashMap<String, IntrinsicSig>,
@@ -32,7 +32,7 @@ struct TypeCheckCtx {
 impl TypeCheckCtx {
     fn new() -> Self {
         let mut ctx = Self {
-            structs: HashMap::new(),
+            structs: Vec::new(),
             globals: HashMap::new(),
             functions: HashMap::new(),
             intrinsics: HashMap::new(),
@@ -149,23 +149,13 @@ impl TypeCheckCtx {
                 HirType::Ref(Box::new(inner_ty))
             }
             TypeExpr::Named(name) => {
-                if self.structs.contains_key(name) {
+                if self.structs.iter().any(|s| s.name == *name) {
                     HirType::Struct(name.clone())
                 } else {
                     self.error(format!("unknown type: {name}"));
                     HirType::Void
                 }
             }
-        }
-    }
-
-    fn type_size(&self, ty: &HirType) -> u16 {
-        match ty {
-            HirType::Int | HirType::Fixed | HirType::Str | HirType::Ref(_) => 2,
-            HirType::Bool => 1,
-            HirType::Void => 0,
-            HirType::Array(elem, count) => self.type_size(elem) * (*count as u16),
-            HirType::Struct(name) => self.structs.get(name).map(|s| s.size).unwrap_or(0),
         }
     }
 
@@ -181,7 +171,7 @@ impl TypeCheckCtx {
 
     fn alloc_global(&mut self, ty: &HirType) -> u16 {
         let addr = self.next_global_addr;
-        self.next_global_addr += self.type_size(ty);
+        self.next_global_addr += type_size(ty, &self.structs);
         if self.next_global_addr as usize > SPRITE_REGION_START {
             self.error(format!(
                 "global variables exceed memory limit (0x{:04X} > 0x{:04X})",
@@ -561,7 +551,7 @@ impl TypeCheckCtx {
                 };
             }
         };
-        if let Some(s) = self.structs.get(&struct_name) {
+        if let Some(s) = self.structs.iter().find(|s| s.name == struct_name) {
             if let Some(f) = s.fields.iter().find(|f| f.name == field) {
                 let ty = f.ty.clone();
                 let offset = f.offset;
@@ -846,7 +836,6 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
     let mut ctx = TypeCheckCtx::new();
 
     // Pass 1: Register structs
-    let mut hir_structs = Vec::new();
     for item in &module.items {
         if let ast::TopLevel::Struct(s) = item {
             let mut fields = Vec::new();
@@ -856,20 +845,19 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
                 if matches!(&ty, HirType::Ref(_)) {
                     ctx.error(format!("struct field '{}' cannot be ref", f.name));
                 }
+                let field_size = type_size(&ty, &ctx.structs);
                 fields.push(HirStructField {
                     name: f.name.clone(),
-                    ty: ty.clone(),
+                    ty,
                     offset,
                 });
-                offset += ctx.type_size(&ty);
+                offset += field_size;
             }
-            let hir_struct = HirStruct {
+            ctx.structs.push(HirStruct {
                 name: s.name.clone(),
                 fields,
                 size: offset,
-            };
-            ctx.structs.insert(s.name.clone(), hir_struct.clone());
-            hir_structs.push(hir_struct);
+            });
         }
     }
 
@@ -974,7 +962,7 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
 
     if ctx.errors.is_empty() {
         Ok(HirModule {
-            structs: hir_structs,
+            structs: ctx.structs,
             globals: hir_globals,
             functions: hir_functions,
             global_init,
@@ -1075,20 +1063,6 @@ fn always_returns(stmts: &[HirStmt]) -> bool {
         }
     }
     false
-}
-
-pub fn type_size_standalone(ty: &HirType, structs: &[HirStruct]) -> u16 {
-    match ty {
-        HirType::Int | HirType::Fixed | HirType::Str | HirType::Ref(_) => 2,
-        HirType::Bool => 1,
-        HirType::Void => 0,
-        HirType::Array(elem, count) => type_size_standalone(elem, structs) * (*count as u16),
-        HirType::Struct(name) => structs
-            .iter()
-            .find(|s| s.name == *name)
-            .map(|s| s.size)
-            .unwrap_or(0),
-    }
 }
 
 const FP_SCALE: f64 = 128.0;
