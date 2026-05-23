@@ -649,20 +649,9 @@ impl App {
                 if self.is_in_search_mode() {
                     return;
                 }
-                // On first key press, try reading system clipboard with a timeout.
-                // This supports pasting from external apps. A new arboard instance
-                // is used in a thread to avoid deadlocking the main event loop
-                // (arboard on X11 can block when our process owns the clipboard).
                 #[cfg(not(target_arch = "wasm32"))]
                 if is_key_pressed(KeyCode::V) {
-                    let (tx, rx) = std::sync::mpsc::channel();
-                    std::thread::spawn(move || {
-                        let text = arboard::Clipboard::new()
-                            .ok()
-                            .and_then(|mut cb| cb.get_text().ok());
-                        let _ = tx.send(text);
-                    });
-                    if let Ok(Some(text)) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                    if let Some(text) = try_read_system_clipboard() {
                         self.paste_cache = Some(text);
                     }
                 }
@@ -2826,6 +2815,24 @@ fn parse_hex_section(hex: &str, buf: &mut [u8]) {
             i += 2;
         }
     }
+}
+
+/// Read the system clipboard with a short timeout, on a worker thread.
+///
+/// arboard on X11 can block indefinitely when our process owns the clipboard, so a fresh
+/// instance is used inside a thread and the main loop drops the result if it takes too long.
+#[cfg(not(target_arch = "wasm32"))]
+fn try_read_system_clipboard() -> Option<String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let text = arboard::Clipboard::new()
+            .ok()
+            .and_then(|mut cb| cb.get_text().ok());
+        let _ = tx.send(text);
+    });
+    rx.recv_timeout(std::time::Duration::from_millis(100))
+        .ok()
+        .flatten()
 }
 
 fn sample_buttons() -> u8 {
