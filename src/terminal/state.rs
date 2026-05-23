@@ -1,7 +1,9 @@
+use std::collections::VecDeque;
+
 use crate::config::{SCREEN_TILES_X, SCREEN_TILES_Y, TERMINAL_MAX_SCROLLBACK};
 
 pub struct TerminalState {
-    pub output_lines: Vec<String>,
+    pub output_lines: VecDeque<String>,
     pub input_line: String,
     pub cursor_pos: usize,
     pub command_history: Vec<String>,
@@ -13,7 +15,7 @@ pub struct TerminalState {
 impl TerminalState {
     pub fn new() -> Self {
         Self {
-            output_lines: Vec::new(),
+            output_lines: VecDeque::new(),
             input_line: String::new(),
             cursor_pos: 0,
             command_history: Vec::new(),
@@ -26,17 +28,17 @@ impl TerminalState {
     pub fn push_output(&mut self, line: &str) {
         let width = SCREEN_TILES_X as usize;
         if line.len() <= width {
-            self.output_lines.push(line.to_string());
+            self.output_lines.push_back(line.to_string());
         } else {
             let mut remaining = line;
             while !remaining.is_empty() {
                 let end = remaining.len().min(width);
-                self.output_lines.push(remaining[..end].to_string());
+                self.output_lines.push_back(remaining[..end].to_string());
                 remaining = &remaining[end..];
             }
         }
         while self.output_lines.len() > TERMINAL_MAX_SCROLLBACK {
-            self.output_lines.remove(0);
+            self.output_lines.pop_front();
         }
         self.scroll_to_bottom();
     }
