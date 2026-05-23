@@ -10,11 +10,9 @@ pub fn simplify(func: &mut LirFunc) {
     let mut bools: HashMap<Value, bool> = HashMap::new();
     let mut replace: HashMap<Value, Value> = HashMap::new();
 
-    // Record params as non-constant (they're just not in the maps)
-    // Process all blocks
-    for block_idx in 0..func.blocks.len() {
-        for inst_idx in 0..func.blocks[block_idx].insts.len() {
-            let (val, ref inst) = func.blocks[block_idx].insts[inst_idx];
+    for block in &mut func.blocks {
+        for (val, inst) in &mut block.insts {
+            let val = *val;
             match inst.clone() {
                 LirInst::Const(n) => {
                     consts.insert(val, n);
@@ -31,7 +29,6 @@ pub fn simplify(func: &mut LirFunc) {
                     let lhs = resolve(&replace, lhs);
                     let rhs = resolve(&replace, rhs);
 
-                    // Try constant fold
                     let l_const = consts.get(&lhs).copied();
                     let r_const = consts.get(&rhs).copied();
                     let l_bool = bools.get(&lhs).copied();
@@ -41,17 +38,16 @@ pub fn simplify(func: &mut LirFunc) {
                         if let Some(result) = eval_binop(op, l, r, is_fixed) {
                             if is_comparison(op) || is_logical(op) {
                                 let b = result != 0;
-                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(b);
+                                *inst = LirInst::ConstBool(b);
                                 bools.insert(val, b);
                             } else {
-                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::Const(result);
+                                *inst = LirInst::Const(result);
                                 consts.insert(val, result);
                             }
                             continue;
                         }
                     }
 
-                    // Bool constant fold for logical ops
                     if is_logical(op) {
                         if let (Some(l), Some(r)) = (l_bool, r_bool) {
                             let result = match op {
@@ -59,26 +55,18 @@ pub fn simplify(func: &mut LirFunc) {
                                 BinOp::Or => l || r,
                                 _ => unreachable!(),
                             };
-                            func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(result);
+                            *inst = LirInst::ConstBool(result);
                             bools.insert(val, result);
                             continue;
                         }
                     }
 
-                    // Algebraic simplifications
-                    if let Some(new) = algebraic_simplify(
-                        op,
-                        lhs,
-                        rhs,
-                        is_fixed,
-                        &consts,
-                        &bools,
-                        &mut func.blocks[block_idx].insts[inst_idx].1,
-                    ) {
+                    if let Some(new) =
+                        algebraic_simplify(op, lhs, rhs, is_fixed, &consts, &bools, inst)
+                    {
                         match new {
                             Simplified::Replace(target) => {
                                 replace.insert(val, target);
-                                // Copy const/bool info
                                 if let Some(&n) = consts.get(&target) {
                                     consts.insert(val, n);
                                 }
@@ -100,20 +88,19 @@ pub fn simplify(func: &mut LirFunc) {
                     match op {
                         UnaryOp::Neg => {
                             if let Some(&n) = consts.get(&operand) {
-                                func.blocks[block_idx].insts[inst_idx].1 =
-                                    LirInst::Const(n.wrapping_neg());
+                                *inst = LirInst::Const(n.wrapping_neg());
                                 consts.insert(val, n.wrapping_neg());
                             }
                         }
                         UnaryOp::Not => {
                             if let Some(&b) = bools.get(&operand) {
-                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::ConstBool(!b);
+                                *inst = LirInst::ConstBool(!b);
                                 bools.insert(val, !b);
                             }
                         }
                         UnaryOp::BitNot => {
                             if let Some(&n) = consts.get(&operand) {
-                                func.blocks[block_idx].insts[inst_idx].1 = LirInst::Const(!n);
+                                *inst = LirInst::Const(!n);
                                 consts.insert(val, !n);
                             }
                         }
