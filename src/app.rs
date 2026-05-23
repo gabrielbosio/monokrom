@@ -2786,26 +2786,24 @@ impl App {
 }
 
 pub fn split_data_sections(content: &str) -> (&str, [u8; 4096], [u8; 4096]) {
+    const SPR: &str = "\n__spr__\n";
+    const MAP: &str = "\n__map__\n";
     let mut spr = [0u8; 4096];
     let mut map = [0u8; 4096];
 
-    let source_end = content
-        .find("\n__spr__\n")
-        .or_else(|| content.find("\n__map__\n"))
-        .unwrap_or(content.len());
+    let spr_marker = content.find(SPR);
+    let map_marker = content.find(MAP);
+
+    let source_end = spr_marker.or(map_marker).unwrap_or(content.len());
     let source = &content[..source_end];
 
-    if let Some(pos) = content.find("\n__spr__\n") {
-        let start = pos + "\n__spr__\n".len();
-        let end = content[start..]
-            .find("\n__map__\n")
-            .map(|p| start + p)
-            .unwrap_or(content.len());
+    if let Some(pos) = spr_marker {
+        let start = pos + SPR.len();
+        let end = map_marker.unwrap_or(content.len());
         parse_hex_section(&content[start..end], &mut spr);
     }
-
-    if let Some(pos) = content.find("\n__map__\n") {
-        let start = pos + "\n__map__\n".len();
+    if let Some(pos) = map_marker {
+        let start = pos + MAP.len();
         parse_hex_section(&content[start..], &mut map);
     }
 
