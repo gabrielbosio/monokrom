@@ -948,39 +948,36 @@ impl App {
     }
 
     fn update_save_dialog(&mut self) {
-        if let Some(result) = self.input_dialog.update() {
-            match result {
-                DialogResult::Confirm(filename) => {
-                    if filename.is_empty() {
-                        self.input_dialog.show("Save as:");
-                        self.show_message("Error: Filename cannot be empty");
-                        return;
-                    }
-                    if !filesystem::is_valid_filename(&filename) {
-                        self.input_dialog.show("Save as:");
-                        self.show_message("Error: Invalid filename");
-                        return;
-                    }
-                    self.current_filename = Some(filename.clone());
-                    self.mode = AppMode::Editing;
-                    if self.save_current_file() {
-                        // Check if we have a pending action after saving
-                        if self.pending_action != PendingAction::None {
-                            self.after_close_confirm_action();
-                            return;
-                        }
-                        self.show_message(&format!("Saved {filename}"));
-                        return;
-                    } else {
-                        // Save failed, error message already shown
-                        return;
-                    }
-                }
-                DialogResult::Reject | DialogResult::Cancel => {
-                    self.pending_action = PendingAction::None;
-                }
+        let Some(result) = self.input_dialog.update() else {
+            return;
+        };
+        let filename = match result {
+            DialogResult::Confirm(name) => name,
+            DialogResult::Reject | DialogResult::Cancel => {
+                self.pending_action = PendingAction::None;
+                self.mode = AppMode::Editing;
+                return;
             }
-            self.mode = AppMode::Editing;
+        };
+        if filename.is_empty() {
+            self.input_dialog.show("Save as:");
+            self.show_message("Error: Filename cannot be empty");
+            return;
+        }
+        if !filesystem::is_valid_filename(&filename) {
+            self.input_dialog.show("Save as:");
+            self.show_message("Error: Invalid filename");
+            return;
+        }
+        self.current_filename = Some(filename.clone());
+        self.mode = AppMode::Editing;
+        if !self.save_current_file() {
+            return;
+        }
+        if self.pending_action != PendingAction::None {
+            self.after_close_confirm_action();
+        } else {
+            self.show_message(&format!("Saved {filename}"));
         }
     }
 
