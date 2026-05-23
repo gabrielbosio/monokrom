@@ -1490,6 +1490,7 @@ impl App {
 
         if is_key_pressed(KeyCode::Escape) {
             if self.player_mode {
+                // TODO: prompt for confirmation before quitting an exported game.
                 std::process::exit(0);
             }
             self.terminal.push_output("stopped");
