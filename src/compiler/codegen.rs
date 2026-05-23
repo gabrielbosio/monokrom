@@ -152,6 +152,8 @@ fn emit_function(
     void_funcs: &HashSet<&str>,
 ) -> Result<(), CompileError> {
     let uses = count_uses(func);
+    let block_by_id: HashMap<BlockId, &BasicBlock> =
+        func.blocks.iter().map(|b| (b.id, b)).collect();
 
     // Pass 1: emit with placeholder jumps
     let mut block_offsets: HashMap<BlockId, usize> = HashMap::new();
@@ -167,7 +169,7 @@ fn emit_function(
             emit_instruction(bc, *val, inst, &uses, func_indices, void_funcs)?;
         }
 
-        emit_terminator(bc, block.id, &block.terminator, func, &mut patches);
+        emit_terminator(bc, block.id, &block.terminator, &block_by_id, &mut patches);
     }
 
     // Pass 2: patch jumps
@@ -291,8 +293,13 @@ fn emit_instruction(
     Ok(())
 }
 
-fn emit_phi_copies(bc: &mut Bytecode, from_block: BlockId, to_block: BlockId, func: &LirFunc) {
-    let Some(target) = func.blocks.iter().find(|b| b.id == to_block) else {
+fn emit_phi_copies(
+    bc: &mut Bytecode,
+    from_block: BlockId,
+    to_block: BlockId,
+    block_by_id: &HashMap<BlockId, &BasicBlock>,
+) {
+    let Some(target) = block_by_id.get(&to_block) else {
         return;
     };
     for (phi_val, inst) in &target.insts {
@@ -314,12 +321,12 @@ fn emit_terminator(
     bc: &mut Bytecode,
     current_block: BlockId,
     term: &Terminator,
-    func: &LirFunc,
+    block_by_id: &HashMap<BlockId, &BasicBlock>,
     patches: &mut Vec<JumpPatch>,
 ) {
     match term {
         Terminator::Jump(target) => {
-            emit_phi_copies(bc, current_block, *target, func);
+            emit_phi_copies(bc, current_block, *target, block_by_id);
             bc.emit_op(OP_JUMP);
             let patch_offset = bc.pos();
             bc.emit_i16(0);
@@ -340,7 +347,7 @@ fn emit_terminator(
             bc.emit_i16(0); // placeholder for else copies
 
             // Then path: phi copies + jump to then_block
-            emit_phi_copies(bc, current_block, *then_block, func);
+            emit_phi_copies(bc, current_block, *then_block, block_by_id);
             bc.emit_op(OP_JUMP);
             let then_patch_offset = bc.pos();
             bc.emit_i16(0);
@@ -354,7 +361,7 @@ fn emit_terminator(
             let rel = else_copies_pos as isize - (else_patch_offset as isize + 2);
             bc.patch_i16(else_patch_offset, rel as i16);
 
-            emit_phi_copies(bc, current_block, *else_block, func);
+            emit_phi_copies(bc, current_block, *else_block, block_by_id);
             bc.emit_op(OP_JUMP);
             let else_jump_patch = bc.pos();
             bc.emit_i16(0);
