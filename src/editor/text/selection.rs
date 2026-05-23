@@ -1,5 +1,5 @@
-use crate::editor::buffer::TextBuffer;
-use crate::editor::cursor::CursorPosition;
+use super::buffer::TextBuffer;
+use super::cursor::CursorPosition;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Selection {

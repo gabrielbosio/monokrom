@@ -1,4 +1,4 @@
-use crate::editor::buffer::TextBuffer;
+use super::buffer::TextBuffer;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CursorPosition {

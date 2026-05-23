@@ -1,7 +1,7 @@
-use crate::editor::buffer::TextBuffer;
-use crate::editor::cursor::Cursor;
-use crate::editor::history::History;
-use crate::editor::selection::Selection;
+use super::buffer::TextBuffer;
+use super::cursor::Cursor;
+use super::history::History;
+use super::selection::Selection;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub type Clipboard = Option<arboard::Clipboard>;
@@ -396,8 +396,8 @@ pub fn redo(
 
 #[cfg(test)]
 mod tests {
+    use super::super::cursor::CursorPosition;
     use super::*;
-    use crate::editor::cursor::CursorPosition;
 
     fn setup() -> (TextBuffer, Cursor, Selection, History) {
         (

@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
-use crate::editor::buffer::TextBuffer;
-use crate::editor::cursor::CursorPosition;
+use super::buffer::TextBuffer;
+use super::cursor::CursorPosition;
 
 const MAX_HISTORY_SIZE: usize = 100;
 

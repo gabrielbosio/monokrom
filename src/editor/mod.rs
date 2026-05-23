@@ -1,10 +1,3 @@
-pub mod buffer;
-pub mod cursor;
-pub mod history;
-pub mod operations;
-pub mod selection;
+pub mod text;
 
-pub use buffer::TextBuffer;
-pub use cursor::{Cursor, CursorPosition};
-pub use history::History;
-pub use selection::Selection;
+pub use text::{operations, Cursor, CursorPosition, History, Selection, TextBuffer};
