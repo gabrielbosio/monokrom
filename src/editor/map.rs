@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use macroquad::prelude::*;
 
 use crate::config::{COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, TILE_WIDTH};
@@ -52,8 +54,8 @@ pub struct MapEditor {
     cursor_x: u16,
     cursor_y: u16,
     selected_tile: u8,
-    undo: Vec<(u16, u16, u8)>,
-    redo: Vec<(u16, u16, u8)>,
+    undo: VecDeque<(u16, u16, u8)>,
+    redo: VecDeque<(u16, u16, u8)>,
     viewport_x: u16,
     viewport_y: u16,
     painting: bool,
@@ -73,8 +75,8 @@ impl MapEditor {
             cursor_x: 0,
             cursor_y: 0,
             selected_tile: 0,
-            undo: Vec::new(),
-            redo: Vec::new(),
+            undo: VecDeque::new(),
+            redo: VecDeque::new(),
             viewport_x: 0,
             viewport_y: 0,
             painting: false,
@@ -336,9 +338,9 @@ impl MapEditor {
         if old == tile {
             return false;
         }
-        self.undo.push((self.cursor_x, self.cursor_y, old));
+        self.undo.push_back((self.cursor_x, self.cursor_y, old));
         if self.undo.len() > UNDO_LIMIT {
-            self.undo.remove(0);
+            self.undo.pop_front();
         }
         self.redo.clear();
         self.data[idx] = tile;
@@ -346,10 +348,10 @@ impl MapEditor {
     }
 
     fn do_undo(&mut self) -> MapEditorOutput {
-        if let Some((x, y, old_tile)) = self.undo.pop() {
+        if let Some((x, y, old_tile)) = self.undo.pop_back() {
             let idx = y as usize * 128 + x as usize;
             let current = self.data[idx];
-            self.redo.push((x, y, current));
+            self.redo.push_back((x, y, current));
             self.data[idx] = old_tile;
             return MapEditorOutput::modified();
         }
@@ -357,10 +359,10 @@ impl MapEditor {
     }
 
     fn do_redo(&mut self) -> MapEditorOutput {
-        if let Some((x, y, tile)) = self.redo.pop() {
+        if let Some((x, y, tile)) = self.redo.pop_back() {
             let idx = y as usize * 128 + x as usize;
             let current = self.data[idx];
-            self.undo.push((x, y, current));
+            self.undo.push_back((x, y, current));
             self.data[idx] = tile;
             return MapEditorOutput::modified();
         }

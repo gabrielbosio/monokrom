@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use macroquad::prelude::*;
 
 use crate::config::{
@@ -53,8 +55,8 @@ pub struct SpriteEditor {
     cursor_x: u8,
     cursor_y: u8,
     color: u8,
-    undo: Vec<(u8, [u8; SPRITE_SIZE])>,
-    redo: Vec<(u8, [u8; SPRITE_SIZE])>,
+    undo: VecDeque<(u8, [u8; SPRITE_SIZE])>,
+    redo: VecDeque<(u8, [u8; SPRITE_SIZE])>,
     clipboard: Option<[u8; SPRITE_SIZE]>,
     painting: bool,
     sheet_col: u8,
@@ -74,8 +76,8 @@ impl SpriteEditor {
             cursor_x: 0,
             cursor_y: 0,
             color: 1,
-            undo: Vec::new(),
-            redo: Vec::new(),
+            undo: VecDeque::new(),
+            redo: VecDeque::new(),
             clipboard: None,
             painting: false,
             sheet_col: 0,
@@ -101,7 +103,8 @@ impl SpriteEditor {
         if modifier && !shift && is_key_pressed(KeyCode::Z) {
             return self.do_undo();
         }
-        if modifier && is_key_pressed(KeyCode::Y) || modifier && shift && is_key_pressed(KeyCode::Z)
+        if (modifier && is_key_pressed(KeyCode::Y))
+            || (modifier && shift && is_key_pressed(KeyCode::Z))
         {
             return self.do_redo();
         }
@@ -403,17 +406,17 @@ impl SpriteEditor {
 
     fn push_undo(&mut self) {
         let data = self.get_bytes(self.selected);
-        self.undo.push((self.selected, data));
+        self.undo.push_back((self.selected, data));
         if self.undo.len() > UNDO_LIMIT {
-            self.undo.remove(0);
+            self.undo.pop_front();
         }
         self.redo.clear();
     }
 
     fn do_undo(&mut self) -> SpriteEditorOutput {
-        if let Some((sprite, data)) = self.undo.pop() {
+        if let Some((sprite, data)) = self.undo.pop_back() {
             let current = self.get_bytes(sprite);
-            self.redo.push((sprite, current));
+            self.redo.push_back((sprite, current));
             self.set_bytes(sprite, &data);
             self.select(sprite);
             return SpriteEditorOutput::modified();
@@ -422,9 +425,9 @@ impl SpriteEditor {
     }
 
     fn do_redo(&mut self) -> SpriteEditorOutput {
-        if let Some((sprite, data)) = self.redo.pop() {
+        if let Some((sprite, data)) = self.redo.pop_back() {
             let current = self.get_bytes(sprite);
-            self.undo.push((sprite, current));
+            self.undo.push_back((sprite, current));
             self.set_bytes(sprite, &data);
             self.select(sprite);
             return SpriteEditorOutput::modified();
