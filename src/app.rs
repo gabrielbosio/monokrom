@@ -596,13 +596,13 @@ impl App {
                         self.paste_cache = Some(text);
                     }
                 }
-                if let Some(text) = self.paste_cache.clone() {
+                if let Some(text) = self.paste_cache.as_deref() {
                     operations::paste(
                         &mut self.editor.buffer,
                         &mut self.editor.cursor,
                         &mut self.editor.selection,
                         &mut self.editor.history,
-                        &text,
+                        text,
                     );
                     self.is_modified = true;
                     self.highlight_valid = false;
@@ -1627,18 +1627,14 @@ impl App {
     fn handle_terminal_autocomplete(&mut self) {
         let input = &self.terminal.input_line;
         let already_shown = self.terminal.last_tab_input.as_deref() == Some(input);
-        if input.contains(' ') {
-            // Complete filename argument
-            let space_pos = input.find(' ').unwrap();
-            let prefix = &input[space_pos + 1..];
+        if let Some((cmd, prefix)) = input.split_once(' ') {
             let files = match filesystem::list_files() {
                 Ok(f) => f,
                 Err(_) => return,
             };
             let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
             if let Some((common, matches)) = complete(prefix, &file_refs) {
-                let new_input = format!("{} {common}", &input[..space_pos]);
-                self.terminal.input_line = new_input;
+                self.terminal.input_line = format!("{cmd} {common}");
                 self.terminal.cursor_pos = self.terminal.input_line.len();
                 self.terminal.last_tab_input = Some(self.terminal.input_line.clone());
                 if matches.len() > 1 && !already_shown {
@@ -1647,16 +1643,13 @@ impl App {
                     }
                 }
             }
-        } else {
-            // Complete command name
-            if let Some((common, matches)) = complete(input, COMMAND_NAMES) {
-                self.terminal.input_line = common;
-                self.terminal.cursor_pos = self.terminal.input_line.len();
-                self.terminal.last_tab_input = Some(self.terminal.input_line.clone());
-                if matches.len() > 1 && !already_shown {
-                    for m in &matches {
-                        self.terminal.push_output(m);
-                    }
+        } else if let Some((common, matches)) = complete(input, COMMAND_NAMES) {
+            self.terminal.input_line = common;
+            self.terminal.cursor_pos = self.terminal.input_line.len();
+            self.terminal.last_tab_input = Some(self.terminal.input_line.clone());
+            if matches.len() > 1 && !already_shown {
+                for m in &matches {
+                    self.terminal.push_output(m);
                 }
             }
         }
@@ -1906,10 +1899,8 @@ impl App {
 
                 let c = line_text.chars().nth(buffer_col).unwrap_or(' ');
 
-                let is_selected = match selection_range {
-                    Some((start, end)) => buffer_col >= start && buffer_col < end,
-                    None => false,
-                };
+                let is_selected = selection_range
+                    .is_some_and(|(start, end)| buffer_col >= start && buffer_col < end);
 
                 if is_selected {
                     // Draw selection background
