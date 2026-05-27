@@ -90,6 +90,7 @@ On macOS, word operations use Option instead of Ctrl. On WASM, all Ctrl shortcut
 - **Delete/Backspace** clear tile (place tile 0)
 - **C** eyedropper (pick tile under cursor)
 - **Alt+Arrow** navigate the tile picker (picker scrolls one column at a time)
+- **Tab** (hold) peek a 20×18 tile region as it will appear at runtime
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+S** save
 
