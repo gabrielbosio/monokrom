@@ -11,6 +11,8 @@ use crate::render::DrawHelpers;
 
 const UNDO_LIMIT: usize = 64;
 const VIEWPORT_TILES: u16 = 16;
+const PEEK_TILES_X: u16 = 20;
+const PEEK_TILES_Y: u16 = 18;
 const PICKER_COLS: u8 = 4;
 
 pub enum MapEditorAction {
@@ -59,6 +61,7 @@ pub struct MapEditor {
     viewport_x: u16,
     viewport_y: u16,
     painting: bool,
+    peeking: bool,
     picker_col: u8,
 }
 
@@ -80,6 +83,7 @@ impl MapEditor {
             viewport_x: 0,
             viewport_y: 0,
             painting: false,
+            peeking: false,
             picker_col: 0,
         }
     }
@@ -87,11 +91,18 @@ impl MapEditor {
     pub fn update(&mut self) -> MapEditorOutput {
         if is_key_pressed(KeyCode::Escape) {
             self.painting = false;
+            self.peeking = false;
             return MapEditorOutput::action(if is_shift_pressed() {
                 MapEditorAction::ExitToSpriteEditor
             } else {
                 MapEditorAction::ExitToTerminal
             });
+        }
+
+        self.peeking = is_key_down(KeyCode::Tab);
+        if self.peeking {
+            self.painting = false;
+            return MapEditorOutput::none();
         }
 
         let modifier = is_modifier_pressed();
@@ -215,8 +226,13 @@ impl MapEditor {
         let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
 
         // Map viewport
-        for ty in 0..VIEWPORT_TILES {
-            for tx in 0..VIEWPORT_TILES {
+        let (cols, rows) = if self.peeking {
+            (PEEK_TILES_X, PEEK_TILES_Y)
+        } else {
+            (VIEWPORT_TILES, VIEWPORT_TILES)
+        };
+        for ty in 0..rows {
+            for tx in 0..cols {
                 let mx = self.viewport_x + tx;
                 let my = self.viewport_y + ty;
                 if mx < 128 && my < 32 {
@@ -239,6 +255,10 @@ impl MapEditor {
                     }
                 }
             }
+        }
+
+        if self.peeking {
+            return;
         }
 
         // Grid
