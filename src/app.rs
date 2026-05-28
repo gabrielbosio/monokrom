@@ -25,6 +25,7 @@ use crate::filesystem::web_io;
 
 const EXAMPLES: &[(&str, &str)] = &[
     ("bricks", include_str!("../examples/bricks.mkr")),
+    ("crates", include_str!("../examples/crates.mkr")),
     ("tictactoe", include_str!("../examples/tictactoe.mkr")),
 ];
 
