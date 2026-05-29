@@ -6,10 +6,10 @@ Built in Rust with Macroquad.
 
 ## Specs
 
-- Screen: 160x144 pixels (40x24 chars with 4x6 font, scaled 4x)
+- Screen: 160x144 pixels (40x24 chars with 4x6 font), integer-scaled to fit the window
 - Palette: 4-color monochrome (black, dark gray, light gray, white)
 - Bytecode limit: 32KB
-- Runtime memory: 16KB flat
+- Runtime memory: 20KB flat
 - Sprites: 256 sprites, 8x8 pixels, 2bpp (4 colors), memory-mapped at 0x3000
 
 ## Language
@@ -20,7 +20,7 @@ Monokrom programs are written in a statically-typed language with type inference
 Source -> AST -> HIR -> LIR (SSA) -> Bytecode
 ```
 
-Optimization passes: constant folding, constant propagation, dead code elimination, CSE, strength reduction, function inlining, peephole store-load elimination.
+Optimization passes: constant folding, constant propagation, dead code elimination, CSE, peephole store-load elimination.
 
 See [LANGUAGE.md](LANGUAGE.md) for the full language reference.
 
@@ -47,10 +47,11 @@ On macOS, word operations use Option instead of Ctrl. On WASM, all Ctrl shortcut
 
 - `run`: compile and run the current file
 - `stat`: show bytecode size vs 32KB limit
-- `open <file>` / `save <file>`: file operations
+- `new` / `open <file>` / `save <file>`: file operations
 - `ls` / `rm <file>` / `cp <src> <dst>`: file management
 - `export <name>`: export game as a standalone binary
 - `example`: list/load built-in examples
+- `clear`: clear the terminal
 - `help`: show all commands
 
 ### Code editor
