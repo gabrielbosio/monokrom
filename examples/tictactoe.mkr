@@ -29,13 +29,13 @@ fn main()
   game: Game
   // Call reset function to initialize
   // the game instance.
-  reset(game)
+  reset(ref game)
 
   // Basic game loop divided in
   // game logic and drawing logic
   while true
-    update(game)
-    draw(game)
+    update(ref game)
+    draw(ref game)
   end
 end
 
@@ -43,7 +43,7 @@ end
 // handling player input. How the game
 // reacts to player input depends if
 // the game is finished or not.
-fn update(game: Game)
+fn update(game: ref Game)
   // The game state machine only
   // consists of 2 states and it
   // changes wether the game is
@@ -68,7 +68,7 @@ end
 // Given player input, change the
 // game struct and check for winners
 // or if the game ends in a draw.
-fn handle_input(game: Game)
+fn handle_input(game: ref Game)
   // Press Left key to move the cursor
   // to the left, if possible
   if btnp(0) and not btnp(1)
@@ -124,7 +124,7 @@ end
 // - 0 if there is no winner yet
 // - 1 if the player 1 won
 // - 2 if the player 2 won
-fn check_winner(game: Game): int
+fn check_winner(game: ref Game): int
   /*
   Board:
   0 1 2
@@ -161,7 +161,7 @@ end
 
 // Draw the game board and the marks
 // the players have done at the moment
-fn draw(game: Game)
+fn draw(game: ref Game)
   cls(0)
   // Draw board
   line(20 + 40, 12, 20 + 40, 12 + 120, 1)
@@ -217,7 +217,7 @@ end
 // Resets game state. Cleans game
 // board. Useful to restart the game
 // once finished.
-fn reset(game: Game)
+fn reset(game: ref Game)
   game.cursor.x = 0
   game.cursor.y = 0
   game.turn = 1
