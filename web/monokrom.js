@@ -4,7 +4,31 @@
 // the browser's default actions (Save Page, Open File, New Window, etc).
 var _mkr_macos = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
+// sapp keycode for Escape (matches gl.js into_sapp_keycode).
+var _MKR_SAPP_ESCAPE = 256;
+
+function _mkr_sapp_modifiers(e) {
+    var m = 0;
+    if (e.shiftKey) m |= 1;
+    if (e.ctrlKey)  m |= 2;
+    if (e.altKey)   m |= 4;
+    if (e.metaKey)  m |= 8;
+    return m;
+}
+
+// Forward Escape directly to miniquad from the document level. Firefox blurs
+// the focused element on Esc (even with preventDefault), which would leave
+// canvas.onkeydown deaf to subsequent presses. stopPropagation avoids double
+// dispatch when the canvas is still focused.
 document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof wasm_exports !== "undefined" && wasm_exports) {
+            wasm_exports.key_down(_MKR_SAPP_ESCAPE, _mkr_sapp_modifiers(e), e.repeat);
+        }
+        return;
+    }
     // Alt+key: block OS special char insertion for app shortcuts
     if (e.altKey) {
         var k = e.key.toLowerCase();
@@ -24,6 +48,15 @@ document.addEventListener("keydown", function (e) {
         if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
             e.key === "ArrowLeft" || e.key === "ArrowRight") {
             e.preventDefault();
+        }
+    }
+}, true);
+
+document.addEventListener("keyup", function (e) {
+    if (e.key === "Escape") {
+        e.stopPropagation();
+        if (typeof wasm_exports !== "undefined" && wasm_exports) {
+            wasm_exports.key_up(_MKR_SAPP_ESCAPE, _mkr_sapp_modifiers(e));
         }
     }
 }, true);
