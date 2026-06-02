@@ -57,6 +57,19 @@ jobs:
       - name: Run clippy
         run: cargo clippy -- -D warnings
 
+  clippy-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Run clippy (wasm32)
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+
   fmt:
     runs-on: ubuntu-latest
     steps:

@@ -410,6 +410,7 @@ impl Bytecode {
         buf
     }
 
+    #[cfg(any(not(target_arch = "wasm32"), test))]
     pub fn deserialize(data: &[u8]) -> Result<Self, String> {
         let mut pos = 0;
         let read_u32 = |pos: &mut usize| -> Result<u32, String> {
