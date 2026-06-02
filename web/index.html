@@ -32,14 +32,16 @@
     <script src="monokrom.js"></script>
     <script>load("monokrom.wasm");</script>
     <script>
-    // Scale canvas to fit viewport without changing buffer size
+    // Scale canvas to fit viewport without changing buffer size.
+    // Integer scale only so each emulated pixel stays a uniform square.
     (function() {
         var canvas = document.getElementById('glcanvas');
         function fit() {
             var sx = window.innerWidth / 640;
             var sy = window.innerHeight / 576;
-            var s = Math.min(sx, sy, 1);
-            canvas.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+            var s = Math.min(sx, sy);
+            s = s >= 1 ? Math.floor(s) : s;
+            canvas.style.transform = s !== 1 ? 'scale(' + s + ')' : '';
         }
         window.addEventListener('resize', fit);
         fit();
