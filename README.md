@@ -23,7 +23,8 @@ Monokrom was built in [Rust](https://rust-lang.org/) with [Macroquad](https://ma
 - Palette: 4-color monochrome (black, dark gray, light gray, white)
 - Bytecode limit: 32KB
 - Runtime memory: 20KB flat
-- Sprites: 256 sprites, 8x8 pixels, 2bpp (4 colors), memory-mapped at 0x3000
+- Sprites: 256 sprites, 8x8 pixels, 2bpp (4 colors)
+- Map: 128 cols x 32 rows, 1 byte per cell
 
 ## Language
 
