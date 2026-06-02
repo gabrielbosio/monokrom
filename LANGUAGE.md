@@ -1,6 +1,7 @@
 # Monokrom Language Reference
 
-Monokrom uses a statically-typed language with type inference. Programs compile through `Source -> AST -> HIR -> LIR (SSA) -> Bytecode`. Blocks are delimited with `end`.
+Monokrom uses a statically-typed language with type inference. The language was designed and implemented specifically for the technical limitations of the console. All the design decisions aimed towards Monokrom programs being the language's only use case.
+To run a Monokrom program, the source code gets compiled into bytecode so that the console's VM interprets each instruction at runtime.
 
 ## Example
 
@@ -21,13 +22,11 @@ end
 
 ## Types
 
-| Type | Description |
-|------|-------------|
-| `int` | 16-bit signed integer (-32768 to 32767) |
-| `fixed` | 9.7 fixed-point. Compiler sugar over `int` that compiles to pure integer operations |
-| `bool` | `true` or `false` |
-| `str` | Immutable string |
-| `void` | For functions that return nothing |
+- `int`: 16-bit signed integer. Range goes from -32768 to 32767.
+- `fixed`: 9.7 fixed-point. Range goes from -256.0 to 255.9921875. Precision is 0.0078125. Compiler sugar over `int`.
+- `bool`: `true` or `false`.
+- `str`: Immutable string.
+- `void`: For functions that return nothing.
 
 Integer literals support decimal, hexadecimal, binary, and octal:
 
@@ -56,7 +55,7 @@ x: int = 5
 y: fixed = 3.14
 ```
 
-Declaration without initialization (must specify type):
+Declaration without intialization must specify type:
 
 ```
 x: int
@@ -68,20 +67,16 @@ Top-level variables are globals. Variables inside functions are locals. Variable
 
 Precedence from lowest to highest:
 
-| Precedence | Operators | Description |
-|-----------|-----------|-------------|
-| 1 | `or` | Logical OR |
-| 2 | `and` | Logical AND |
-| 3 | `\|` | Bitwise OR |
-| 4 | `&` | Bitwise AND |
-| 5 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
-| 6 | `<<` `>>` | Bit shift left, right |
-| 7 | `+` `-` | Addition, subtraction |
-| 8 | `*` `/` `%` | Multiplication, division, modulo |
-| 9 | `-` `not` `~` | Unary negation, logical NOT, bitwise NOT |
-| 10 | `()` `[]` `.` | Call, index, field access |
-
-Bitwise operators work on `int` only. `>>` is arithmetic (sign-extending).
+1. `or`: Logical OR
+2. `and`: Logical AND
+3. `\|`: Bitwise OR
+4. `&`: Bitwise AND
+5. `==` `!=` `<` `>` `<=` `>=`: Comparison
+6. `<<` `>>`: Shift left, arithmetic shift right (sign-extending)
+7. `+` `-`: Addition, subtraction
+8. `*` `/` `%`: Multiplication, division, modulo
+9. `-` `not` `~`: Unary negation, logical NOT, bitwise NOT
+10. `()` `[]` `.`: Call, index, field access
 
 ## Control Flow
 
@@ -107,9 +102,9 @@ end
 
 `break` exits the loop. `continue` skips to the next iteration.
 
-## For Loops
+### For Loops
 
-### Range (exclusive)
+#### Range (exclusive)
 
 ```
 for i in 0..10
@@ -117,7 +112,7 @@ for i in 0..10
 end
 ```
 
-### Range (inclusive)
+#### Range (inclusive)
 
 ```
 for i in 0..=10
@@ -125,7 +120,9 @@ for i in 0..=10
 end
 ```
 
-### Array iteration
+`break` exits the loop. `continue` skips to the next iteration.
+
+#### Array iteration
 
 Both index and element variables are required. Use `_` to discard either:
 
@@ -139,7 +136,7 @@ for _, e in enemies
 end
 ```
 
-For scalar types (`int`, `fixed`, `bool`), the element is a copy. For structs, the element has type `ref T` (a reference to the array entry), so modifications are written back to the array:
+For scalar types (`int`, `fixed`, `bool`), the element is a copy. For structs and arrays, the element has type `ref T` (a reference to the array entry), so modifications are written back to the array:
 
 ```
 for _, e in enemies
@@ -312,48 +309,40 @@ Built-in functions that compile to single opcodes.
 
 ### Graphics
 
-| Function | Description |
-|----------|-------------|
-| `cls(col)` | Clear screen with color |
-| `pset(x, y, col)` | Set pixel |
-| `pget(x, y): int` | Get pixel color |
-| `line(x0, y0, x1, y1, col)` | Draw line |
-| `rect(x, y, w, h, col)` | Draw rectangle |
-| `circ(x, y, r, col)` | Draw circle |
-| `spr(n, x, y)` | Draw sprite |
-| `map(sx, sy, dx, dy, w, h)` | Draw map region: tiles at (sx,sy) to screen at (dx,dy), w×h tiles |
-| `prints(s, x, y, col)` | Print string |
-| `printi(val, x, y, col)` | Print integer |
-| `printf(val, x, y, col)` | Print fixed-point as decimal (e.g. "1.50") |
+- `cls(col)`: Clear screen with color
+- `pset(x, y, col)`: Set pixel.
+- `pget(x, y): int`: Get pixel color.
+- `line(x0, y0, x1, y1, col)`: Draw line.
+- `rect(x, y, w, h, col)`: Draw rectangle.
+- `circ(x, y, r, col)`: Draw circle
+- `spr(n, x, y)`: Draw sprite.
+- `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), w×h tiles.
+- `prints(s, x, y, col)`: Print string.
+- `printi(val, x, y, col)`: Print integer.
+- `printf(val, x, y, col)`: Print fixed-point as decimal (e.g. "1.50").
 
 ### Input
 
-| Function | Description |
-|----------|-------------|
-| `btn(n): bool` | Button held down |
-| `btnp(n): bool` | Button just pressed |
+- `btn(n): bool`: Button held down
+- `btnp(n): bool`: Button just pressed
 
 Button mapping:
 
-| n | Button |
-|---|--------|
-| 0 | Left |
-| 1 | Right |
-| 2 | Up |
-| 3 | Down |
-| 4 | Z |
-| 5 | X |
-| 6 | Enter |
-| 7 | Right Shift |
+- 0: Left
+- 1: Right
+- 2: Up
+- 3: Down
+- 4: Z
+- 5: X
+- 6: Enter
+- 7: Right Shift
 
 ### Memory
 
-| Function | Description |
-|----------|-------------|
-| `peek(addr): int` | Read byte from memory |
-| `poke(addr, val)` | Write byte to memory |
-| `mget(x, y): int` | Get map tile (sprite index) at position |
-| `mset(x, y, tile)` | Set map tile at position |
+- `peek(addr): int`: Read byte from memory
+- `poke(addr, val)`: Write byte to memory
+- `mget(x, y): int`: Get map tile (sprite index) at position
+- `mset(x, y, tile)`: Set map tile at position
 
 Memory layout:
 
@@ -371,25 +360,21 @@ val = peek(addr) + peek(addr + 1) * 256
 
 ### Math
 
-| Function | Description |
-|----------|-------------|
-| `sin(x): fixed` | Sine |
-| `cos(x): fixed` | Cosine |
-| `sqrt(x): fixed` | Square root |
-| `abs(x): int` | Absolute value |
-| `min(a, b): int` | Minimum |
-| `max(a, b): int` | Maximum |
-| `exp(x): fixed` | e^x |
-| `log(x): fixed` | Natural logarithm (ln). Returns 0 for x <= 0 |
-| `pow(x, y): fixed` | x raised to the power y |
-| `atan2(y, x): fixed` | Two-argument arctangent (radians) |
+- `sin(x): fixed`: Sine.
+- `cos(x): fixed`: Cosine.
+- `sqrt(x): fixed`: Square root.
+- `abs(x): int`: Absolute value.
+- `min(a, b): int`: Minimum.
+- `max(a, b): int`: Maximum.
+- `exp(x): fixed`: e^x.
+- `log(x): fixed`: Natural logarithm (ln). Returns 0 for x <= 0.
+- `pow(x, y): fixed`: x raised to the power y.
+- `atan2(y, x): fixed`: Two-argument arctangent (radians).
 
 ### Conversion
 
-| Function | Description |
-|----------|-------------|
-| `ftoi(x): int` | Fixed to integer (truncates fractional part) |
-| `itof(x): fixed` | Integer to fixed-point |
+- `ftoi(x): int`: Fixed to integer (truncates fractional part)
+- `itof(x): fixed`: Integer to fixed-point
 
 ### Constants
 
@@ -402,26 +387,20 @@ Constants are inlined at compile time as fixed-point literals.
 
 ### System
 
-| Function | Description |
-|----------|-------------|
-| `flip()` | End frame, present screen |
-| `time(): int` | Seconds since program start |
-| `rnd(max): int` | Random integer in [0, max) |
+- `flip()`: End frame, present screen
+- `time(): int`: Seconds since program start
+- `rnd(max): int`: Random integer in [0, max)
 
 ### Debug
 
-| Function | Description |
-|----------|-------------|
-| `tracei(val)` | Print integer to terminal |
-| `traces(s)` | Print string to terminal |
-| `tracef(val)` | Print fixed-point as decimal to terminal |
+- `tracei(val)`: Print integer to terminal
+- `traces(s)`: Print string to terminal
+- `tracef(val)`: Print fixed-point as decimal to terminal
 
 ### Audio (deferred)
 
-| Function | Description |
-|----------|-------------|
-| `sfx(n)` | Play sound effect |
-| `music(n)` | Play music |
+- `sfx(n)`: Play sound effect
+- `music(n)`: Play music
 
 ## Game Loop
 
@@ -437,11 +416,4 @@ fn main()
 end
 ```
 
-Programs that don't call `flip()` run once and exit, which is useful for one-shot scripts that just print output.
-
-## Limits
-
-- **Bytecode**: 32KB max
-- **Runtime memory**: 20KB flat (static allocation, no GC)
-- **Sprites**: 256 sprites, 8×8 pixels, 2bpp (4 colors)
-- **Map**: 128×32 tiles, 1 byte per cell (sprite index)
+When `main()` returns, the program exits. You can omit the game loop for programs that are one-shot scripts that just print output.
