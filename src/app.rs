@@ -154,7 +154,14 @@ impl App {
         player_mode: bool,
     ) -> Self {
         let font = BitmapFont::new().await;
-        let rt = render_target(SCREEN_WIDTH, SCREEN_HEIGHT);
+        let rt = render_target_ex(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+            RenderTargetParams {
+                sample_count: 0,
+                depth: false,
+            },
+        );
         rt.texture.set_filter(FilterMode::Nearest);
         #[cfg(not(target_arch = "wasm32"))]
         let clipboard = arboard::Clipboard::new().ok();
@@ -718,7 +725,7 @@ impl App {
             }
         };
         let bc_bytes = bc.serialize();
-        let mut payload = Vec::new();
+        let mut payload: Vec<u8> = Vec::new();
         payload.extend(&(bc_bytes.len() as u32).to_le_bytes());
         payload.extend(&bc_bytes);
         payload.extend(&self.sprite_editor.data);
