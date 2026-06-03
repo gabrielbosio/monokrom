@@ -1,6 +1,6 @@
 # Monokrom Language Reference
 
-Monokrom uses a statically-typed language with type inference. The language was designed and implemented specifically for the technical limitations of the console. All the design decisions aimed towards Monokrom programs being the language's only use case.
+Monokrom uses a statically-typed language with type inference. The language was designed and implemented specifically for the technical limitations of the console. All the design decisions were made taking into account that programs that run in the console are the only use case of the language.
 To run a Monokrom program, the source code gets compiled into bytecode so that the console's VM interprets each instruction at runtime.
 
 ## Example
@@ -8,6 +8,7 @@ To run a Monokrom program, the source code gets compiled into bytecode so that t
 ```
 fn main()
   prints("Hello, world!", 55, 70, 3)
+  flip()
 end
 ```
 
@@ -43,7 +44,7 @@ Type is inferred from the right-hand side:
 
 ```
 x = 5        // int
-y = 3.14     // fixed
+y = 3.75     // fixed
 alive = true // bool
 name = "hi"  // str
 ```
@@ -52,10 +53,10 @@ Explicit type annotation:
 
 ```
 x: int = 5
-y: fixed = 3.14
+y: fixed = 3.75
 ```
 
-Declaration without intialization must specify type:
+Declaration without initialization must specify type:
 
 ```
 x: int
@@ -65,18 +66,18 @@ Top-level variables are globals. Variables inside functions are locals. Variable
 
 ## Operators
 
-Precedence from lowest to highest:
+Precedence from highest to lowest:
 
-1. `or`: Logical OR
-2. `and`: Logical AND
-3. `\|`: Bitwise OR
-4. `&`: Bitwise AND
-5. `==` `!=` `<` `>` `<=` `>=`: Comparison
-6. `<<` `>>`: Shift left, arithmetic shift right (sign-extending)
-7. `+` `-`: Addition, subtraction
-8. `*` `/` `%`: Multiplication, division, modulo
-9. `-` `not` `~`: Unary negation, logical NOT, bitwise NOT
-10. `()` `[]` `.`: Call, index, field access
+1. `()` `[]` `.`: Call, index, field access
+2. `-` `not` `~`: Unary negation, logical NOT, bitwise NOT
+3. `*` `/` `%`: Multiplication, division, modulo
+4. `+` `-`: Addition, subtraction
+5. `<<` `>>`: Shift left, arithmetic shift right (sign-extending)
+6. `==` `!=` `<` `>` `<=` `>=`: Comparison
+7. `&`: Bitwise AND
+8. `|`: Bitwise OR
+9. `and`: Logical AND
+10. `or`: Logical OR
 
 ## Control Flow
 
@@ -124,7 +125,7 @@ end
 
 #### Array iteration
 
-Both index and element variables are required. Use `_` to discard either:
+Both index and element variables are required. Variables with name `_` are discarded:
 
 ```
 for i, e in enemies
@@ -136,27 +137,21 @@ for _, e in enemies
 end
 ```
 
-For scalar types (`int`, `fixed`, `bool`), the element is a copy. For structs and arrays, the element has type `ref T` (a reference to the array entry), so modifications are written back to the array:
+By default, iterating an array will copy each element so modifying the element does not affect the array:
 
 ```
 for _, e in enemies
+    e.x = e.x + 1  // modifies the copy, enemies[i] is unchanged
+end
+```
+
+Prefixing the element with `ref` binds it as `ref T` and allows modifying the array inside the loop block:
+
+```
+for _, ref e in enemies
     e.x = e.x + 1  // modifies enemies[i].x
 end
 ```
-
-Because the element is already a ref, it can be passed directly to a function expecting `ref T`, with no `ref` keyword at the call site:
-
-```
-fn update(en: ref Enemy)
-    en.x = en.x + 1
-end
-
-for _, e in enemies
-    update(e)       // e is already ref Enemy
-end
-```
-
-Passing it to a by-value parameter (`fn update(en: Enemy)`) is also fine. The struct auto-derefs and gets copied on entry.
 
 ## Functions
 
@@ -319,7 +314,7 @@ Built-in functions that compile to single opcodes.
 - `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), w×h tiles.
 - `prints(s, x, y, col)`: Print string.
 - `printi(val, x, y, col)`: Print integer.
-- `printf(val, x, y, col)`: Print fixed-point as decimal (e.g. "1.50").
+- `printf(val, x, y, col)`: Print fixed-point as decimal (e.g. "1.25").
 
 ### Input
 
@@ -341,8 +336,8 @@ Button mapping:
 
 - `peek(addr): int`: Read byte from memory
 - `poke(addr, val)`: Write byte to memory
-- `mget(x, y): int`: Get map tile (sprite index) at position
-- `mset(x, y, tile)`: Set map tile at position
+- `mget(x, y): int`: Get sprite index of the map tile at position
+- `mset(x, y, tile)`: Set sprite index of the map tile at position
 
 Memory layout:
 
@@ -366,9 +361,9 @@ val = peek(addr) + peek(addr + 1) * 256
 - `abs(x): int`: Absolute value.
 - `min(a, b): int`: Minimum.
 - `max(a, b): int`: Maximum.
-- `exp(x): fixed`: e^x.
-- `log(x): fixed`: Natural logarithm (ln). Returns 0 for x <= 0.
-- `pow(x, y): fixed`: x raised to the power y.
+- `exp(x): fixed`: Euler's number raised to the power `x`.
+- `log(x): fixed`: Natural logarithm (ln). Returns `0` for `x <= 0`.
+- `pow(x, y): fixed`: `x` raised to the power `y`.
 - `atan2(y, x): fixed`: Two-argument arctangent (radians).
 
 ### Conversion
@@ -380,8 +375,8 @@ val = peek(addr) + peek(addr + 1) * 256
 
 | Name | Value | Description |
 |------|-------|-------------|
-| `PI` | 3.14159265 | The mathematical constant pi |
-| `E` | 2.71828182 | Euler's number |
+| `PI` | `3.140625` | The mathematical constant pi, approximated to `fixed` precision |
+| `E` | `2.71875` | Euler's number, approximated to `fixed` precision |
 
 Constants are inlined at compile time as fixed-point literals.
 
@@ -416,4 +411,4 @@ fn main()
 end
 ```
 
-When `main()` returns, the program exits. You can omit the game loop for programs that are one-shot scripts that just print output.
+When `main()` returns, the program exits. You can omit the game loop for programs that are one-shot scripts that only print output.

@@ -1,48 +1,17 @@
 # Monokrom
 
-Monokrom is a fantasy console where it's imposed technical limitations make it ressemble a game framework for retro monochrome handhelds. The framework itself it's exposed via an editor whose graphical interface share the same technical limitations of the games the framework allows to create.
-Monokrom is inspired by PICO-8 and TIC-80, especially in the editor's architecture. The main difference relays in that the code limit is measured in bytecode size instead of source code size. This means that the following code snippets:
-
-```
-greet_message = "Hello world!"
-```
-
-And:
-
-```
-g_msg="Hello world!"
-```
-
-Use the same memory space reserved for code. This is not true for fantasy consoles whose code limit is measured in source code size: The former snippet uses more space than the latter.
-
-Monokrom was built in [Rust](https://rust-lang.org/) with [Macroquad](https://macroquad.rs/).
+Monokrom is a fantasy console where its imposed technical limitations make it ressemble a game framework for retro monochrome handhelds. Its interface is heavily inspired by PICO-8 and TIC-80. The main difference with the reference consoles is that the code limit is imposed to the bytecode size instead of the source code size or token count.
 
 ## Specs
 
-- Screen: 160x144 pixels (40x24 chars with 4x6 font). Actual size will depend on the window size but the ratio is always preserved.
-- Palette: 4-color monochrome (black, dark gray, light gray, white)
-- Bytecode limit: 32KB
-- Runtime memory: 20KB flat
-- Sprites: 256 sprites, 8x8 pixels, 2bpp (4 colors)
-- Map: 128 cols x 32 rows, 1 byte per cell
+- **Screen:** 160x144 pixels (40x24 chars with 4x6 font). Actual size will depend on the window size but the ratio is always preserved.
+- **Palette:** 4-color monochrome (black, dark gray, light gray, white)
+- **Bytecode limit:** 32KB
+- **Runtime memory:** 20KB flat
+- **Sprites:** 256 sprites, 8x8 pixels, 2bpp (4 colors)
+- **Map:** 128 cols x 32 rows, 1 byte per cell
 
 ## Language
-
-Monokrom programs are written in a statically-typed language with type inference. The compiler pipeline is:
-
-1. Source
-2. AST
-3. HIR
-4. LIR (SSA)
-5. Bytecode
-
-The compiler also performs the following ptimization passes before generating the bytecode output:
-
-- Constant folding
-- Constant propagation
-- Dead code elimination
-- CSE
-- Peephole store-load elimination
 
 See [LANGUAGE.md](LANGUAGE.md) for the full language reference.
 
@@ -71,15 +40,16 @@ Monokrom boots into a terminal. Press **Escape** to cycle through the following 
 **Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and returns to whichever mode launched it. Any error triggered during program execution will switch to the terminal and show the corresponding error message, regardless of the editor set before starting the program.
 
 This section shows how to navigate through each screen. Depending on the screen, navigation may consist of running commands by writing them and/or triggering them using specific hotkeys.
-The docs show that some hotkeys involve pressing the Ctrl key. Due to context-specific restrictions, some hotkeys are mapped differently depending where Monokrom is running:
 
-- On macOS, word operations (i.e. Ctrl+Arrow) use Option instead of Ctrl.
-- On WASM, all Ctrl hotkeys use Alt instead.
+> *NOTE:* The docs show that some hotkeys involve pressing the Ctrl key. Due to context-specific restrictions, some hotkeys are mapped differently depending where Monokrom is running:
+>
+> - On macOS, word operations (i.e. Ctrl+Arrow) use Option instead of Ctrl.
+> - On WASM, all Ctrl hotkeys use Alt instead.
 
 ### Terminal
 
 - `run`: compile and run the current file
-- `stat`: show bytecode size vs 32KB limit
+- `stat`: show bytecode size vs limit
 - `new` / `open <file>` / `save <file>`: file operations
 - `ls` / `rm <file>` / `cp <src> <dst>`: file management
 - `export <name>`: export game as a standalone binary
