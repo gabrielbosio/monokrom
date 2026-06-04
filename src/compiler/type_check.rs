@@ -696,6 +696,7 @@ impl TypeCheckCtx {
             ast::StmtKind::ForIn {
                 index,
                 elem,
+                elem_is_ref,
                 iter,
                 body,
             } => {
@@ -712,11 +713,10 @@ impl TypeCheckCtx {
                     self.define_local(index, HirType::Int);
                 }
                 if elem != "_" {
-                    let bind_ty = match &elem_ty {
-                        HirType::Struct(_) | HirType::Array(_, _) => {
-                            HirType::Ref(Box::new(elem_ty))
-                        }
-                        _ => elem_ty,
+                    let bind_ty = if *elem_is_ref {
+                        HirType::Ref(Box::new(elem_ty))
+                    } else {
+                        elem_ty
                     };
                     self.define_local(elem, bind_ty);
                 }
@@ -725,6 +725,7 @@ impl TypeCheckCtx {
                 HirStmt::ForIn {
                     index: index.clone(),
                     elem: elem.clone(),
+                    elem_is_ref: *elem_is_ref,
                     iter: hir_iter,
                     body: hir_body,
                 }
@@ -1459,35 +1460,41 @@ mod tests {
     }
 
     #[test]
-    fn for_in_struct_element_pass_to_ref_param() {
-        // Struct element from for-in can be passed directly to a ref param,
-        // since the element is typed as ref T.
+    fn for_in_struct_ref_element_forwards_to_ref_param() {
+        // `ref e` makes the element type ref En; passes through to a ref param.
         let _hir = lower(
-            "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: ref En)\nend\nfn f()\n  for _, e in es\n    upd(e)\n  end\nend",
+            "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: ref En)\nend\nfn f()\n  for _, ref e in es\n    upd(e)\n  end\nend",
         );
     }
 
     #[test]
-    fn for_in_struct_element_pass_to_value_param() {
-        // Struct element can also be passed to a by-value param (auto-deref + copy).
+    fn for_in_struct_value_element_pass_to_value_param() {
+        // Without `ref`, the element is a per-iter copy and matches a value param.
         let _hir = lower(
             "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: En)\nend\nfn f()\n  for _, e in es\n    upd(e)\n  end\nend",
         );
     }
 
     #[test]
-    fn for_in_struct_element_explicit_ref_at_call_site() {
-        // Explicit ref e is also accepted (forwarding rule, no nesting).
+    fn for_in_struct_value_element_explicit_ref_at_call_site() {
+        // `ref e` at the call site is also accepted: takes the address of the per-iter copy.
         let _hir = lower(
             "struct En\n  x: int\nend\nes: array[4] of En\nfn upd(e: ref En)\nend\nfn f()\n  for _, e in es\n    upd(ref e)\n  end\nend",
         );
     }
 
     #[test]
-    fn for_in_scalar_element_is_value() {
-        // Scalar elements remain plain values, and can be passed to int params without ref.
+    fn for_in_scalar_value_element() {
+        // Scalar value element can be passed to int params without ref.
         let _hir = lower(
             "xs: array[4] of int\nfn upd(v: int)\nend\nfn f()\n  for _, v in xs\n    upd(v)\n  end\nend",
         );
+    }
+
+    #[test]
+    fn for_in_scalar_ref_element_writes_through() {
+        // `ref v` makes the scalar element a ref int; writes go back to the array.
+        let _hir =
+            lower("xs: array[4] of int\nfn f()\n  for _, ref v in xs\n    v = v + 1\n  end\nend");
     }
 }

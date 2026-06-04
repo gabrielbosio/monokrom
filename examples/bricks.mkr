@@ -190,11 +190,11 @@ fn update(game: ref Game)
     // We make the ball bounce through
     // every brick and break them if
     // that happens
-    for _, brick in game.bricks
+    for _, ref brick in game.bricks
       if brick.dead
         continue
       end
-      
+
       if (ball.x >= itof(brick.x) and
           ball.x <= itof(brick.x + 16) and
           ball.y >= itof(brick.y) and
@@ -257,7 +257,7 @@ fn draw(game: ref Game)
     circ(ftoi(ball.x), ftoi(ball.y), 1, 3)
     
     // Draw the bricks
-    for _, brick in game.bricks
+    for _, ref brick in game.bricks
       if brick.dead
         continue
       end

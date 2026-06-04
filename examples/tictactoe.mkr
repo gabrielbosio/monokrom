@@ -169,7 +169,7 @@ fn draw(game: ref Game)
   line(20, 12 + 40, 20 + 120, 12 + 40, 1)
   line(20, 12 + 80, 20 + 120, 12 + 80, 1)
   // Draw marks
-  for i, cell in game.board
+  for i, ref cell in game.board
     cell_x = i % 3
     cell_y = i / 3
     if cell == 1

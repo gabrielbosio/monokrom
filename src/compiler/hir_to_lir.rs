@@ -679,10 +679,11 @@ impl<'a> LowerCtx<'a> {
             HirStmt::ForIn {
                 index,
                 elem,
+                elem_is_ref,
                 iter,
                 body,
             } => {
-                self.lower_for_in(index, elem, iter, body);
+                self.lower_for_in(index, elem, *elem_is_ref, iter, body);
             }
 
             HirStmt::Return(expr) => {
@@ -941,7 +942,14 @@ impl<'a> LowerCtx<'a> {
         self.start_block(exit);
     }
 
-    fn lower_for_in(&mut self, index_var: &str, elem_var: &str, iter: &HirExpr, body: &[HirStmt]) {
+    fn lower_for_in(
+        &mut self,
+        index_var: &str,
+        elem_var: &str,
+        elem_is_ref: bool,
+        iter: &HirExpr,
+        body: &[HirStmt],
+    ) {
         let (elem_ty, count) = match &iter.ty {
             HirType::Array(elem, count) => (elem.as_ref().clone(), *count),
             _ => return,
@@ -953,6 +961,14 @@ impl<'a> LowerCtx<'a> {
         } else {
             index_var.to_string()
         };
+
+        // Reserve storage for the per-iter copy of a compound value element.
+        let needs_compound_copy = elem_var != "_" && !elem_is_ref && !self.is_scalar(&elem_ty);
+        if needs_compound_copy && !self.compound_local_addrs.contains_key(elem_var) {
+            let addr = self.next_compound_addr;
+            self.next_compound_addr += self.type_size(&elem_ty);
+            self.compound_local_addrs.insert(elem_var.to_string(), addr);
+        }
 
         // Init index = 0
         let zero = self.emit(LirInst::Const(0));
@@ -1008,7 +1024,10 @@ impl<'a> LowerCtx<'a> {
                 rhs: offset,
                 is_fixed: false,
             });
-            if self.is_scalar(&elem_ty) {
+            if elem_is_ref {
+                let block = self.current_block;
+                self.write_variable(elem_var, block, elem_addr);
+            } else if self.is_scalar(&elem_ty) {
                 let size = self.type_size(&elem_ty) as u8;
                 let elem_val = self.emit(LirInst::Load {
                     addr: elem_addr,
@@ -1017,8 +1036,9 @@ impl<'a> LowerCtx<'a> {
                 let block = self.current_block;
                 self.write_variable(elem_var, block, elem_val);
             } else {
-                let block = self.current_block;
-                self.write_variable(elem_var, block, elem_addr);
+                let dst_addr = self.compound_local_addrs[elem_var];
+                let dst = self.emit(LirInst::GlobalAddr(dst_addr));
+                self.emit_compound_copy(dst, elem_addr, elem_size);
             }
         }
 

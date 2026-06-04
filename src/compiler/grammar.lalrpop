@@ -176,10 +176,10 @@ WhileStmt: Stmt = {
 };
 
 ForStmt: Stmt = {
-    <l:@L> "for" <index:IDENT> "," <elem:IDENT> "in" <iter:Expr> NL1
+    <l:@L> "for" <index:IDENT> "," <elem_ref:"ref"?> <elem:IDENT> "in" <iter:Expr> NL1
         <body:Body>
     "end" <r:@R> => {
-        Stmt::new(StmtKind::ForIn { index, elem, iter, body }, (l, r))
+        Stmt::new(StmtKind::ForIn { index, elem, elem_is_ref: elem_ref.is_some(), iter, body }, (l, r))
     },
     <l:@L> "for" <var:IDENT> "in" <start:Expr> ".." <end:Expr> NL1
         <body:Body>

@@ -92,6 +92,7 @@ pub enum StmtKind {
     ForIn {
         index: String,
         elem: String,
+        elem_is_ref: bool,
         iter: Expr,
         body: Vec<Stmt>,
     },

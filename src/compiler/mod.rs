@@ -720,4 +720,23 @@ mod tests {
         };
         assert!(matches!(&inner.kind, ExprKind::FieldAccess { .. }));
     }
+
+    #[test]
+    fn examples_compile() {
+        for path in [
+            "examples/bricks.mkr",
+            "examples/crates.mkr",
+            "examples/tictactoe.mkr",
+        ] {
+            let src =
+                std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {}", path, e));
+            let end = src
+                .find("\n__spr__\n")
+                .or_else(|| src.find("\n__map__\n"))
+                .unwrap_or(src.len());
+            if let Err(errs) = super::compile(&src[..end]) {
+                panic!("{}: {}", path, errs.join("\n  "));
+            }
+        }
+    }
 }

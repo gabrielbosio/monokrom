@@ -228,12 +228,12 @@ fn update(game: ref Game)
   // Check how many crates are placed
   // on a spot.
   game.score = 0
-  for _, crate in game.level.crates
+  for _, ref crate in game.level.crates
     if not crate.alive
       continue
     end
     crate.highlight = false
-    for _, spot in game.level.spots
+    for _, ref spot in game.level.spots
       if not spot.alive
         continue
       end
@@ -267,7 +267,7 @@ fn draw(game: ref Game)
   map(bounds.x0, bounds.y0, 0, 8, bounds.x1 - bounds.x0, bounds.y1 - bounds.y0)
   
   // Draw spots
-  for _, spot in game.level.spots
+  for _, ref spot in game.level.spots
     if spot.alive
       spr(4, spot.x - bounds.x0 * 8, spot.y - bounds.y0 * 8 + 8)
     end
@@ -275,7 +275,7 @@ fn draw(game: ref Game)
   // Draw crates. Sprite depends
   // wether the crate is highlighted
   // or not.
-  for _, crate in game.level.crates
+  for _, ref crate in game.level.crates
     if not crate.alive
       continue
     end
@@ -345,7 +345,7 @@ fn move_player(game: ref Game, dx: int, dy: int): bool
   player.x = player.x + dx
   player.y = player.y + dy
   
-  for _, crate in game.level.crates
+  for _, ref crate in game.level.crates
     if player.x == crate.x and player.y == crate.y
       crate.x = crate.x + dx
       crate.y = crate.y + dy
@@ -373,7 +373,7 @@ end
 // is not blocked by a wall or a
 // crate.
 fn move_crate(game: ref Game, target: ref Crate, dx: int, dy: int): bool
-  for _, crate in game.level.crates
+  for _, ref crate in game.level.crates
     if crate == target
       continue
     end
