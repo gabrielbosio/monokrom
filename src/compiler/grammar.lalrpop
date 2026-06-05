@@ -34,6 +34,8 @@ extern {
         "void" => Token::Void,
         "PI" => Token::Pi,
         "E" => Token::Euler,
+        "INT_MIN" => Token::IntMin,
+        "INT_MAX" => Token::IntMax,
         INT => Token::IntLit(<i16>),
         FIXED => Token::FixedLit(<String>),
         STRING => Token::StrLit(<String>),
@@ -309,6 +311,8 @@ AtomExpr: Expr = {
     <l:@L> <s:STRING> <r:@R> => Expr::new(ExprKind::StrLit(s), (l, r)),
     <l:@L> "PI" <r:@R> => Expr::new(ExprKind::FixedLit("3.14159265".to_string()), (l, r)),
     <l:@L> "E" <r:@R> => Expr::new(ExprKind::FixedLit("2.71828182".to_string()), (l, r)),
+    <l:@L> "INT_MIN" <r:@R> => Expr::new(ExprKind::IntLit(i16::MIN), (l, r)),
+    <l:@L> "INT_MAX" <r:@R> => Expr::new(ExprKind::IntLit(i16::MAX), (l, r)),
     <l:@L> <name:IDENT> <r:@R> => Expr::new(ExprKind::Ident(name), (l, r)),
     "(" <Expr> ")",
 };

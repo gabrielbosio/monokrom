@@ -73,6 +73,8 @@ fn token_description(token: &lexer::Token) -> &str {
         Void => "'void'",
         Pi => "'PI'",
         Euler => "'E'",
+        IntMin => "'INT_MIN'",
+        IntMax => "'INT_MAX'",
         Eq => "'=='",
         Neq => "'!='",
         Leq => "'<='",
@@ -119,6 +121,8 @@ fn simplify_expected(expected: &[String]) -> String {
         "\"~\"",
         "\"PI\"",
         "\"E\"",
+        "\"INT_MIN\"",
+        "\"INT_MAX\"",
     ];
 
     let expr_count = expected

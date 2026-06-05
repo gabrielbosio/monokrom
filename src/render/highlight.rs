@@ -49,7 +49,9 @@ fn classify(token: &Token) -> CharStyle {
         | Token::Str
         | Token::Void
         | Token::Pi
-        | Token::Euler => CharStyle::Keyword,
+        | Token::Euler
+        | Token::IntMin
+        | Token::IntMax => CharStyle::Keyword,
 
         Token::LineComment | Token::BlockComment => CharStyle::Comment,
 

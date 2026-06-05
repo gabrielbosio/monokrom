@@ -50,6 +50,10 @@ pub enum Token {
     Pi,
     #[token("E", priority = 3)]
     Euler,
+    #[token("INT_MIN")]
+    IntMin,
+    #[token("INT_MAX")]
+    IntMax,
 
     // Type keywords
     #[token("int")]

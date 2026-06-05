@@ -377,8 +377,10 @@ val = peek(addr) + peek(addr + 1) * 256
 |------|-------|-------------|
 | `PI` | `3.140625` | The mathematical constant pi, approximated to `fixed` precision |
 | `E` | `2.71875` | Euler's number, approximated to `fixed` precision |
+| `INT_MIN` | `-32768` | Minimum `int` value |
+| `INT_MAX` | `32767` | Maximum `int` value |
 
-Constants are inlined at compile time as fixed-point literals.
+Constants are inlined at compile time.
 
 ### System
 
