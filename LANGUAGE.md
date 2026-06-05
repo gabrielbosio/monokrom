@@ -169,7 +169,7 @@ fn greet(name: str)
 end
 ```
 
-All functions are global. No methods, no closures.
+All functions are global. No methods, no closures. Function overloading is not supported.
 
 ## Structs
 

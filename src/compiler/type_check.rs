@@ -865,6 +865,10 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
     // Pass 2: Register function signatures
     for item in &module.items {
         if let ast::TopLevel::Function(f) = item {
+            if ctx.functions.contains_key(&f.name) {
+                ctx.error(format!("function '{}' is already defined", f.name));
+                continue;
+            }
             let param_types: Vec<HirType> =
                 f.params.iter().map(|p| ctx.resolve_type(&p.ty)).collect();
             let ret_type = f
@@ -919,8 +923,12 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
 
     // Pass 4: Check function bodies
     let mut hir_functions = Vec::new();
+    let mut seen_funcs: HashSet<String> = HashSet::new();
     for item in &module.items {
         if let ast::TopLevel::Function(f) = item {
+            if !seen_funcs.insert(f.name.clone()) {
+                continue;
+            }
             let (param_types, ret_type) = ctx.functions.get(&f.name).cloned().unwrap();
             if matches!(&ret_type, HirType::Ref(_)) {
                 ctx.error(format!("{}: cannot return ref", f.name));
@@ -1321,6 +1329,17 @@ mod tests {
     fn all_paths_return_ok() {
         let _hir =
             lower("fn f(x: int): int\n  if x > 0\n    return x\n  else\n    return 0\n  end\nend");
+    }
+
+    #[test]
+    fn duplicate_function_name_error() {
+        let errs = lower_err("fn f()\nend\nfn f(x: int)\nend");
+        assert_eq!(
+            errs.iter()
+                .filter(|e| e.message.contains("function 'f' is already defined"))
+                .count(),
+            1
+        );
     }
 
     // --- Ref semantics tests ---
