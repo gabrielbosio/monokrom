@@ -180,6 +180,7 @@ fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
         BinOp::Or => ((l != 0) || (r != 0)) as i16,
         BinOp::BitAnd => l & r,
         BinOp::BitOr => l | r,
+        BinOp::BitXor => l ^ r,
         BinOp::Shl => l.wrapping_shl(r as u32),
         BinOp::Shr => l.wrapping_shr(r as u32),
     })

@@ -262,6 +262,7 @@ impl Vm {
             }
             OP_BAND => binop!(|a: i16, b| a & b),
             OP_BOR => binop!(|a: i16, b| a | b),
+            OP_BXOR => binop!(|a: i16, b| a ^ b),
             OP_BNOT => {
                 let a = self.pop()?;
                 self.push(!a)?;
@@ -1074,6 +1075,27 @@ mod tests {
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.locals[0], 384); // 3.0 in 9.7
+    }
+
+    #[test]
+    fn bxor_opcode() {
+        let bc = make_bc(
+            vec![
+                OP_PUSH_I8,
+                0b1100,
+                OP_PUSH_I8,
+                0b1010,
+                OP_BXOR,
+                OP_STORE_LOCAL,
+                0,
+                0,
+                OP_HALT,
+            ],
+            1,
+        );
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.locals[0], 0b0110);
     }
 
     #[test]

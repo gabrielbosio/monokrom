@@ -130,6 +130,8 @@ pub enum Token {
     Ampersand,
     #[token("|")]
     Pipe,
+    #[token("^")]
+    Caret,
     #[token("~")]
     Tilde,
     #[token(":")]

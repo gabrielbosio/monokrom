@@ -127,6 +127,7 @@ fn binop_opcode(op: BinOp) -> u8 {
         BinOp::Or => OP_OR,
         BinOp::BitAnd => OP_BAND,
         BinOp::BitOr => OP_BOR,
+        BinOp::BitXor => OP_BXOR,
         BinOp::Shl => OP_SHL,
         BinOp::Shr => OP_SHR,
     }

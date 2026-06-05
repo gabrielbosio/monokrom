@@ -89,6 +89,7 @@ fn token_description(token: &lexer::Token) -> &str {
         Shr => "'>>'",
         Ampersand => "'&'",
         Pipe => "'|'",
+        Caret => "'^'",
         Tilde => "'~'",
         Lt => "'<'",
         Gt => "'>'",
@@ -410,6 +411,34 @@ mod tests {
         assert_eq!(*op, BinOp::Mul);
         assert_eq!(lhs.kind, ExprKind::IntLit(2));
         assert_eq!(rhs.kind, ExprKind::IntLit(3));
+    }
+
+    #[test]
+    fn xor_precedence() {
+        // 1 | 2 ^ 3 & 4 should parse as 1 | (2 ^ (3 & 4))
+        let m = p("1 | 2 ^ 3 & 4");
+        let TopLevel::Global(s) = &m.items[0] else {
+            panic!("expected global")
+        };
+        let StmtKind::Expression(e) = &s.kind else {
+            panic!("expected expression")
+        };
+        let ExprKind::BinOp { op, lhs, rhs } = &e.kind else {
+            panic!("expected binop")
+        };
+        assert_eq!(*op, BinOp::BitOr);
+        assert_eq!(lhs.kind, ExprKind::IntLit(1));
+        let ExprKind::BinOp { op, lhs, rhs } = &rhs.kind else {
+            panic!("expected xor")
+        };
+        assert_eq!(*op, BinOp::BitXor);
+        assert_eq!(lhs.kind, ExprKind::IntLit(2));
+        let ExprKind::BinOp { op, lhs, rhs } = &rhs.kind else {
+            panic!("expected and")
+        };
+        assert_eq!(*op, BinOp::BitAnd);
+        assert_eq!(lhs.kind, ExprKind::IntLit(3));
+        assert_eq!(rhs.kind, ExprKind::IntLit(4));
     }
 
     #[test]

@@ -280,7 +280,10 @@ impl TypeCheckCtx {
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Gt | BinOp::Leq | BinOp::Geq
         );
         let is_logical = matches!(op, BinOp::And | BinOp::Or);
-        let is_bitwise = matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::Shl | BinOp::Shr);
+        let is_bitwise = matches!(
+            op,
+            BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr
+        );
 
         if is_bitwise {
             if *lhs_ty != HirType::Int {

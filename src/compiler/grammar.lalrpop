@@ -54,6 +54,7 @@ extern {
         ">>" => Token::Shr,
         "&" => Token::Ampersand,
         "|" => Token::Pipe,
+        "^" => Token::Caret,
         "~" => Token::Tilde,
         "<" => Token::Lt,
         ">" => Token::Gt,
@@ -214,8 +215,15 @@ AndExpr: Expr = {
 };
 
 BitOrExpr: Expr = {
-    <l:@L> <lhs:BitOrExpr> "|" <rhs:BitAndExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+    <l:@L> <lhs:BitOrExpr> "|" <rhs:BitXorExpr> <r:@R> => Expr::new(ExprKind::BinOp {
         op: BinOp::BitOr, lhs: Box::new(lhs), rhs: Box::new(rhs)
+    }, (l, r)),
+    BitXorExpr,
+};
+
+BitXorExpr: Expr = {
+    <l:@L> <lhs:BitXorExpr> "^" <rhs:BitAndExpr> <r:@R> => Expr::new(ExprKind::BinOp {
+        op: BinOp::BitXor, lhs: Box::new(lhs), rhs: Box::new(rhs)
     }, (l, r)),
     BitAndExpr,
 };

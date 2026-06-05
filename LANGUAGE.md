@@ -75,9 +75,10 @@ Precedence from highest to lowest:
 5. `<<` `>>`: Shift left, arithmetic shift right (sign-extending)
 6. `==` `!=` `<` `>` `<=` `>=`: Comparison
 7. `&`: Bitwise AND
-8. `|`: Bitwise OR
-9. `and`: Logical AND
-10. `or`: Logical OR
+8. `^`: Bitwise XOR
+9. `|`: Bitwise OR
+10. `and`: Logical AND
+11. `or`: Logical OR
 
 ## Control Flow
 

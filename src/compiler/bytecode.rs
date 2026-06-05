@@ -35,6 +35,7 @@ pub const OP_SHR: u8 = 0x68;
 pub const OP_MGET: u8 = 0x69;
 pub const OP_MSET: u8 = 0x6A;
 pub const OP_MAP: u8 = 0x6B;
+pub const OP_BXOR: u8 = 0x6C;
 
 pub const OP_LOAD1: u8 = 0x20;
 pub const OP_LOAD2: u8 = 0x21;
@@ -232,6 +233,7 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_FDIV => Some("Fdiv"),
         OP_BAND => Some("Band"),
         OP_BOR => Some("Bor"),
+        OP_BXOR => Some("Bxor"),
         OP_BNOT => Some("Bnot"),
         OP_SHL => Some("Shl"),
         OP_SHR => Some("Shr"),
@@ -243,7 +245,7 @@ fn op_name(b: u8) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 75] = [
+const ALL_OPCODES: [u8; 76] = [
     OP_PUSH0,
     OP_PUSH1,
     OP_PUSH_I8,
@@ -313,6 +315,7 @@ const ALL_OPCODES: [u8; 75] = [
     OP_FDIV,
     OP_BAND,
     OP_BOR,
+    OP_BXOR,
     OP_BNOT,
     OP_SHL,
     OP_SHR,
