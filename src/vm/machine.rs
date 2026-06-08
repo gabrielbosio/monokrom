@@ -1,12 +1,13 @@
 use crate::compiler::bytecode::*;
 use crate::config::{
-    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, SPRITE_COUNT, SPRITE_REGION_START, SPRITE_SIZE,
+    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, SFX_COUNT, SPRITE_COUNT, SPRITE_REGION_START,
+    SPRITE_SIZE,
 };
 use crate::render::font::FONT_DATA;
 
 const STACK_LIMIT: usize = 256;
 const CALL_STACK_LIMIT: usize = 64;
-const MEMORY_SIZE: usize = 20480;
+const MEMORY_SIZE: usize = 22528;
 const FB_WIDTH: usize = 160;
 const FB_HEIGHT: usize = 144;
 const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
@@ -73,6 +74,7 @@ pub struct Vm {
     functions: Vec<FuncEntry>,
     pub halted: bool,
     pub trace_output: Vec<String>,
+    pub sfx_queue: Vec<u8>,
     start_time: f64,
     pub current_time: f64,
     rng_state: u32,
@@ -115,6 +117,7 @@ impl Vm {
             functions,
             halted: false,
             trace_output: Vec::new(),
+            sfx_queue: Vec::new(),
             start_time: time,
             current_time: time,
             rng_state: (time * 1_000_000.0) as u32 | 1,
@@ -433,7 +436,10 @@ impl Vm {
                 self.push(if cur != 0 && prev == 0 { 1 } else { 0 })?;
             }
             OP_SFX => {
-                self.pop()?; // stub
+                let n = self.pop()?;
+                if n >= 0 && (n as usize) < SFX_COUNT {
+                    self.sfx_queue.push(n as u8);
+                }
             }
             OP_MUSIC => {
                 self.pop()?; // stub

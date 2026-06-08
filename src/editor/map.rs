@@ -18,7 +18,7 @@ const PICKER_COLS: u8 = 4;
 pub enum MapEditorAction {
     None,
     ExitToSpriteEditor,
-    ExitToTerminal,
+    ExitToSfxEditor,
     Save,
     Run,
 }
@@ -95,7 +95,7 @@ impl MapEditor {
             return MapEditorOutput::action(if is_shift_pressed() {
                 MapEditorAction::ExitToSpriteEditor
             } else {
-                MapEditorAction::ExitToTerminal
+                MapEditorAction::ExitToSfxEditor
             });
         }
 

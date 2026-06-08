@@ -5,7 +5,7 @@ edition = "2021"
 description = "A fantasy console text editor"
 
 [dependencies]
-macroquad = "0.4"
+macroquad = { version = "0.4", features = ["audio"] }
 ropey = "1.6"
 logos = "0.14"
 lalrpop-util = "0.21"

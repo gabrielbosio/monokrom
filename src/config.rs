@@ -40,3 +40,11 @@ pub const SPRITE_REGION_START: usize = 0x3000; // 12288
 pub const MAP_WIDTH: usize = 128;
 pub const MAP_HEIGHT: usize = 32;
 pub const MAP_REGION_START: usize = 0x4000; // 16384
+
+// SFX
+pub const SFX_COUNT: usize = 16;
+pub const SFX_CELLS: usize = 32;
+pub const SFX_HEADER_BYTES: usize = 4;
+pub const SFX_SIZE: usize = SFX_HEADER_BYTES + SFX_CELLS * 2; // 68
+pub const SFX_REGION_START: usize = 0x5000; // 20480
+pub const SFX_REGION_SIZE: usize = SFX_COUNT * SFX_SIZE; // 1088
