@@ -395,10 +395,10 @@ Constants are inlined at compile time.
 - `traces(s)`: Print string to terminal
 - `tracef(val)`: Print fixed-point as decimal to terminal
 
-### Audio (deferred)
+### Audio
 
 - `sfx(n)`: Play sound effect
-- `music(n)`: Play music
+- `music(n)`: Play music (TODO)
 
 ## Game Loop
 
