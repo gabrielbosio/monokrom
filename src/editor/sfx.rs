@@ -5,7 +5,7 @@ use macroquad::prelude::*;
 use crate::audio::{
     cell_at, cell_effect, cell_pitch, cell_timbre, cell_volume, pack_cell, set_cell,
     set_sfx_header, sfx_channel, sfx_loop_end, sfx_loop_start, sfx_speed, CH_NOISE, CH_PULSE1,
-    CH_PULSE2, CH_WAVE,
+    CH_PULSE2, CH_WAVE, MAX_SPEED,
 };
 use crate::config::{
     COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, SFX_CELLS,
@@ -285,7 +285,7 @@ impl SfxEditor {
                 ch = ((ch as i32 + delta).rem_euclid(4)) as u8;
             }
             HeaderField::Speed => {
-                sp = (sp as i32 + delta).clamp(1, 255) as u8;
+                sp = (sp as i32 + delta).clamp(1, MAX_SPEED as i32) as u8;
             }
             HeaderField::LoopStart => {
                 ls = (ls as i32 + delta).clamp(0, SFX_CELLS as i32) as u8;

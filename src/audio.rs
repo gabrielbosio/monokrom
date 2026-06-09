@@ -10,6 +10,8 @@ const VIBRATO_DEPTH: f32 = 0.03;
 const MAX_LOOP_SECS: f32 = 5.0;
 const MAX_LOOP_ITERS: usize = 64;
 
+pub const MAX_SPEED: u8 = 16;
+
 pub const CH_PULSE1: u8 = 0;
 pub const CH_PULSE2: u8 = 1;
 pub const CH_WAVE: u8 = 2;
@@ -163,8 +165,9 @@ fn envelope(effect: u8, vol: f32, t: f32) -> f32 {
 
 pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
     let channel = sfx_channel(data, idx);
-    let speed = sfx_speed(data, idx).max(1);
-    let cell_samples = (CELL_TICK_SECS * speed as f32 * SAMPLE_RATE as f32).max(1.0) as usize;
+    let speed = sfx_speed(data, idx).clamp(1, MAX_SPEED);
+    let ticks = MAX_SPEED as u32 + 1 - speed as u32;
+    let cell_samples = (CELL_TICK_SECS * ticks as f32 * SAMPLE_RATE as f32).max(1.0) as usize;
     let total = cell_samples * SFX_CELLS;
 
     let mut samples = vec![0i16; total];
