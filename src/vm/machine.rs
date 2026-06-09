@@ -1310,6 +1310,20 @@ end";
     }
 
     #[test]
+    fn sfx_queues_valid_indices_and_drops_others() {
+        let bc = make_bc(
+            vec![
+                OP_PUSH_I8, 0, OP_SFX, OP_PUSH_I8, 15, OP_SFX, OP_PUSH_I8, 16, OP_SFX, OP_PUSH_I8,
+                -1i8 as u8, OP_SFX, OP_HALT,
+            ],
+            0,
+        );
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.sfx_queue, vec![0, (SFX_COUNT - 1) as u8]);
+    }
+
+    #[test]
     fn nested_for_in_wildcard_indices() {
         let src = "\
 n: int
