@@ -197,11 +197,11 @@ impl SfxEditor {
             }
             return SfxEditorOutput::none();
         }
-        if modifier && !shift && is_key_pressed(KeyCode::C) {
+        if modifier && !shift && !self.header_focus && is_key_pressed(KeyCode::C) {
             self.cell_clipboard = Some(cell_at(&self.data, self.selected, self.cursor_cell));
             return SfxEditorOutput::none();
         }
-        if modifier && !shift && is_key_pressed(KeyCode::V) {
+        if modifier && !shift && !self.header_focus && is_key_pressed(KeyCode::V) {
             if let Some(c) = self.cell_clipboard {
                 self.push_undo();
                 set_cell(&mut self.data, self.selected, self.cursor_cell, c);
