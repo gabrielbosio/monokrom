@@ -373,7 +373,7 @@ impl SfxEditor {
         let new = match self.cursor_row {
             Row::Pitch => pack_cell((p + delta).clamp(0, 63) as u8, t as u8, v as u8, f as u8),
             Row::Timbre => pack_cell(p as u8, (t + delta).rem_euclid(8) as u8, v as u8, f as u8),
-            Row::Volume => pack_cell(p as u8, t as u8, (v + delta).clamp(0, 7) as u8, f as u8),
+            Row::Volume => pack_cell(p as u8, t as u8, (v + delta).rem_euclid(8) as u8, f as u8),
             Row::Effect => pack_cell(p as u8, t as u8, v as u8, (f + delta).rem_euclid(8) as u8),
         };
         set_cell(&mut self.data, self.selected, self.cursor_cell, new);
