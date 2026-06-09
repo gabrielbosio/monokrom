@@ -7,6 +7,8 @@ const CELL_TICK_SECS: f32 = 0.020;
 const MASTER_GAIN: f32 = 0.4;
 const VIBRATO_HZ: f32 = 6.0;
 const VIBRATO_DEPTH: f32 = 0.03;
+const MAX_LOOP_SECS: f32 = 5.0;
+const MAX_LOOP_ITERS: usize = 64;
 
 pub const CH_PULSE1: u8 = 0;
 pub const CH_PULSE2: u8 = 1;
@@ -250,8 +252,20 @@ fn apply_loop(samples: &mut Vec<i16>, data: &[u8], idx: u8, cell_samples: usize)
     if lstart >= SFX_CELLS as u8 || lend <= lstart || lend > SFX_CELLS as u8 {
         return;
     }
-    let cut = lend as usize * cell_samples;
-    samples.truncate(cut);
+    let lead_end = lstart as usize * cell_samples;
+    let body_end = lend as usize * cell_samples;
+    let body_len = body_end - lead_end;
+    samples.truncate(body_end);
+    if body_len == 0 {
+        return;
+    }
+    let max_extra = ((MAX_LOOP_SECS * SAMPLE_RATE as f32) as usize) / body_len;
+    let extra = max_extra.min(MAX_LOOP_ITERS.saturating_sub(1));
+    samples.reserve(body_len * extra);
+    let body_range = lead_end..body_end;
+    for _ in 0..extra {
+        samples.extend_from_within(body_range.clone());
+    }
 }
 
 fn make_wav(samples: &[i16]) -> Vec<u8> {
