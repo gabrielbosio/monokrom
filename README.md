@@ -115,7 +115,7 @@ This editor has two panes which you set focus on one of them: The header and the
 
 - **Ctrl+C/V** copy/paste cell
 - **Left/Right** move cell cursor
-- **Up/Down** change row (Pitch, Timbre, Volume, Effect)
+- **Up/Down** change row (Pitch, Timbre, Volume, Detune)
 - **Alt+Up/Down** change current field by 1
 - **Shift+Up/Shift+Down** change current field on Pitch row by an octave
 - **0..7** set current field to that digit

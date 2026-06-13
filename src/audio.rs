@@ -5,8 +5,6 @@ use crate::config::{SFX_CELLS, SFX_COUNT, SFX_HEADER_BYTES, SFX_SIZE};
 const SAMPLE_RATE: u32 = 22050;
 const CELL_TICK_SECS: f32 = 0.020;
 const MASTER_GAIN: f32 = 0.4;
-const VIBRATO_HZ: f32 = 6.0;
-const VIBRATO_DEPTH: f32 = 0.03;
 const MAX_LOOP_SECS: f32 = 5.0;
 const MAX_LOOP_ITERS: usize = 64;
 
@@ -53,11 +51,11 @@ pub fn set_cell(data: &mut [u8], sfx: u8, cell: u8, value: u16) {
     data[off + 1] = bytes[1];
 }
 
-pub fn pack_cell(pitch: u8, timbre: u8, volume: u8, effect: u8) -> u16 {
+pub fn pack_cell(pitch: u8, timbre: u8, volume: u8, detune: u8) -> u16 {
     (pitch as u16 & 0x3F)
         | ((timbre as u16 & 0x07) << 6)
         | ((volume as u16 & 0x07) << 9)
-        | ((effect as u16 & 0x07) << 12)
+        | ((detune as u16 & 0x07) << 12)
 }
 
 pub fn cell_pitch(c: u16) -> u8 {
@@ -72,7 +70,7 @@ pub fn cell_volume(c: u16) -> u8 {
     ((c >> 9) & 0x07) as u8
 }
 
-pub fn cell_effect(c: u16) -> u8 {
+pub fn cell_detune(c: u16) -> u8 {
     ((c >> 12) & 0x07) as u8
 }
 
@@ -137,32 +135,6 @@ fn sample_wave(bank: u8, phase: f32) -> f32 {
     }
 }
 
-fn arp_freq(base: f32, t: f32, fast: bool) -> f32 {
-    let steps_per_cell = if fast { 12.0 } else { 3.0 };
-    let i = (t * steps_per_cell).floor() as i32;
-    let semis = [0, 4, 7][(i.rem_euclid(3)) as usize];
-    base * 2f32.powf(semis as f32 / 12.0)
-}
-
-fn pitch_factor(effect: u8, target: f32, next: f32, t: f32) -> f32 {
-    match effect {
-        1 => target * (1.0 - t) + next * t,
-        2 => target * (1.0 + VIBRATO_DEPTH * (t * VIBRATO_HZ * std::f32::consts::TAU).sin()),
-        3 => target * 2f32.powf(-t),
-        6 => arp_freq(target, t, true),
-        7 => arp_freq(target, t, false),
-        _ => target,
-    }
-}
-
-fn envelope(effect: u8, vol: f32, t: f32) -> f32 {
-    match effect {
-        4 => vol * t,
-        5 => vol * (1.0 - t),
-        _ => vol,
-    }
-}
-
 pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
     let channel = sfx_channel(data, idx);
     let speed = sfx_speed(data, idx).clamp(1, MAX_SPEED);
@@ -179,35 +151,20 @@ pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
         let pitch = cell_pitch(c);
         let timbre = cell_timbre(c);
         let volume = cell_volume(c);
-        let effect = cell_effect(c);
+        let detune = cell_detune(c);
 
         if volume == 0 {
             phase = 0.0;
             continue;
         }
 
-        let target_freq = midi_to_freq(36 + pitch as i32);
-        let next_freq = if ci + 1 < SFX_CELLS {
-            let nc = cell_at(data, idx, (ci + 1) as u8);
-            if cell_volume(nc) == 0 {
-                target_freq
-            } else {
-                midi_to_freq(36 + cell_pitch(nc) as i32)
-            }
-        } else {
-            target_freq
-        };
-
+        let freq = midi_to_freq(36 + pitch as i32) * 2f32.powf(detune as f32 / 96.0);
         let vol = volume as f32 / 7.0;
 
         for s in 0..cell_samples {
-            let t = s as f32 / cell_samples as f32;
-            let f = pitch_factor(effect, target_freq, next_freq, t);
-            let env = envelope(effect, vol, t);
-
             let raw = match channel {
                 CH_PULSE1 | CH_PULSE2 => {
-                    phase += f / SAMPLE_RATE as f32;
+                    phase += freq / SAMPLE_RATE as f32;
                     phase -= phase.floor();
                     let duty = duty_from_timbre(timbre);
                     if phase < duty {
@@ -217,12 +174,12 @@ pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
                     }
                 }
                 CH_WAVE => {
-                    phase += f / SAMPLE_RATE as f32;
+                    phase += freq / SAMPLE_RATE as f32;
                     phase -= phase.floor();
                     sample_wave(timbre, phase)
                 }
                 CH_NOISE => {
-                    phase += f / SAMPLE_RATE as f32;
+                    phase += freq / SAMPLE_RATE as f32;
                     while phase >= 1.0 {
                         let bit = (lfsr ^ (lfsr >> 1)) & 1;
                         lfsr = (lfsr >> 1) | (bit << 14);
@@ -240,7 +197,7 @@ pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
                 _ => 0.0,
             };
 
-            let out = raw * env * MASTER_GAIN;
+            let out = raw * vol * MASTER_GAIN;
             samples[ci * cell_samples + s] = (out.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
         }
     }

@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use macroquad::prelude::*;
 
 use crate::audio::{
-    cell_at, cell_effect, cell_pitch, cell_timbre, cell_volume, pack_cell, set_cell,
+    cell_at, cell_detune, cell_pitch, cell_timbre, cell_volume, pack_cell, set_cell,
     set_sfx_header, sfx_channel, sfx_loop_end, sfx_loop_start, sfx_speed, CH_NOISE, CH_PULSE1,
     CH_PULSE2, CH_WAVE, MAX_SPEED,
 };
@@ -22,7 +22,7 @@ const BARS_TOP: f32 = 8.0;
 const BARS_BOTTOM: f32 = 79.0;
 const ROW_T_Y: f32 = 82.0;
 const ROW_V_Y: f32 = 89.0;
-const ROW_F_Y: f32 = 96.0;
+const ROW_D_Y: f32 = 96.0;
 const INFO_Y: f32 = 110.0;
 const HINT_Y: f32 = SCREEN_HEIGHT as f32 - 7.0;
 
@@ -31,7 +31,7 @@ enum Row {
     Pitch,
     Timbre,
     Volume,
-    Effect,
+    Detune,
 }
 
 impl Row {
@@ -39,16 +39,16 @@ impl Row {
         match self {
             Self::Pitch => Self::Timbre,
             Self::Timbre => Self::Volume,
-            Self::Volume => Self::Effect,
-            Self::Effect => Self::Pitch,
+            Self::Volume => Self::Detune,
+            Self::Detune => Self::Pitch,
         }
     }
     fn prev(self) -> Self {
         match self {
-            Self::Pitch => Self::Effect,
+            Self::Pitch => Self::Detune,
             Self::Timbre => Self::Pitch,
             Self::Volume => Self::Timbre,
-            Self::Effect => Self::Volume,
+            Self::Detune => Self::Volume,
         }
     }
     fn label(self) -> &'static str {
@@ -56,7 +56,7 @@ impl Row {
             Self::Pitch => "PIT",
             Self::Timbre => "TIM",
             Self::Volume => "VOL",
-            Self::Effect => "FX",
+            Self::Detune => "DET",
         }
     }
 }
@@ -369,12 +369,12 @@ impl SfxEditor {
         let p = cell_pitch(c) as i32;
         let t = cell_timbre(c) as i32;
         let v = cell_volume(c) as i32;
-        let f = cell_effect(c) as i32;
+        let d = cell_detune(c) as i32;
         let new = match self.cursor_row {
-            Row::Pitch => pack_cell((p + delta).clamp(0, 63) as u8, t as u8, v as u8, f as u8),
-            Row::Timbre => pack_cell(p as u8, (t + delta).rem_euclid(8) as u8, v as u8, f as u8),
-            Row::Volume => pack_cell(p as u8, t as u8, (v + delta).rem_euclid(8) as u8, f as u8),
-            Row::Effect => pack_cell(p as u8, t as u8, v as u8, (f + delta).rem_euclid(8) as u8),
+            Row::Pitch => pack_cell((p + delta).clamp(0, 63) as u8, t as u8, v as u8, d as u8),
+            Row::Timbre => pack_cell(p as u8, (t + delta).rem_euclid(8) as u8, v as u8, d as u8),
+            Row::Volume => pack_cell(p as u8, t as u8, (v + delta).rem_euclid(8) as u8, d as u8),
+            Row::Detune => pack_cell(p as u8, t as u8, v as u8, (d + delta).rem_euclid(8) as u8),
         };
         set_cell(&mut self.data, self.selected, self.cursor_cell, new);
     }
@@ -384,12 +384,12 @@ impl SfxEditor {
         let p = cell_pitch(c);
         let t = cell_timbre(c);
         let v = cell_volume(c);
-        let f = cell_effect(c);
+        let d = cell_detune(c);
         let new = match self.cursor_row {
-            Row::Pitch => pack_cell(value & 0x3F, t, v, f),
-            Row::Timbre => pack_cell(p, value & 0x07, v, f),
-            Row::Volume => pack_cell(p, t, value & 0x07, f),
-            Row::Effect => pack_cell(p, t, v, value & 0x07),
+            Row::Pitch => pack_cell(value & 0x3F, t, v, d),
+            Row::Timbre => pack_cell(p, value & 0x07, v, d),
+            Row::Volume => pack_cell(p, t, value & 0x07, d),
+            Row::Detune => pack_cell(p, t, v, value & 0x07),
         };
         set_cell(&mut self.data, self.selected, self.cursor_cell, new);
     }
@@ -528,14 +528,14 @@ impl SfxEditor {
                 continue;
             }
             let t = cell_timbre(c);
-            let f = cell_effect(c);
+            let d = cell_detune(c);
             let x = ci as f32 * CELL_PX + 1.0;
             let tc = char::from_digit(t as u32, 10).unwrap_or('?');
             let vc = char::from_digit(vol as u32, 10).unwrap_or('?');
-            let fc = char::from_digit(f as u32, 10).unwrap_or('?');
+            let dc = char::from_digit(d as u32, 10).unwrap_or('?');
             helpers.draw_char(tc, x, ROW_T_Y, COLOR_WHITE);
             helpers.draw_char(vc, x, ROW_V_Y, COLOR_WHITE);
-            helpers.draw_char(fc, x, ROW_F_Y, COLOR_WHITE);
+            helpers.draw_char(dc, x, ROW_D_Y, COLOR_WHITE);
         }
     }
 
@@ -548,7 +548,7 @@ impl SfxEditor {
             Row::Pitch => (BARS_TOP - 1.0, BARS_BOTTOM + 1.0),
             Row::Timbre => (ROW_T_Y - 1.0, ROW_T_Y + 6.0),
             Row::Volume => (ROW_V_Y - 1.0, ROW_V_Y + 6.0),
-            Row::Effect => (ROW_F_Y - 1.0, ROW_F_Y + 6.0),
+            Row::Detune => (ROW_D_Y - 1.0, ROW_D_Y + 6.0),
         };
         let h = bot - top;
         helpers.draw_rect(x, top, 1.0, h, COLOR_LIGHT_GRAY);
@@ -560,13 +560,13 @@ impl SfxEditor {
     fn draw_info(&self, helpers: &DrawHelpers) {
         let c = cell_at(&self.data, self.selected, self.cursor_cell);
         let label = format!(
-            "C:{:02} {} P:{:02} T:{} V:{} F:{}",
+            "C:{:02} {} P:{:02} T:{} V:{} D:{}",
             self.cursor_cell,
             self.cursor_row.label(),
             cell_pitch(c),
             cell_timbre(c),
             cell_volume(c),
-            cell_effect(c),
+            cell_detune(c),
         );
         for (i, ch) in label.chars().enumerate() {
             helpers.draw_char(ch, i as f32 * TILE_WIDTH as f32, INFO_Y, COLOR_WHITE);
