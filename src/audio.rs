@@ -3,7 +3,8 @@ use macroquad::audio::{load_sound_from_bytes, play_sound, stop_sound, PlaySoundP
 use crate::config::{SFX_CELLS, SFX_COUNT, SFX_HEADER_BYTES, SFX_SIZE};
 
 const SAMPLE_RATE: u32 = 22050;
-const CELL_TICK_SECS: f32 = 0.020;
+const SLOWEST_CELL_SECS: f32 = 0.320;
+const FASTEST_CELL_SECS: f32 = 0.020;
 const MASTER_GAIN: f32 = 0.4;
 const MAX_LOOP_SECS: f32 = 5.0;
 const MAX_LOOP_ITERS: usize = 64;
@@ -138,8 +139,9 @@ fn sample_wave(bank: u8, phase: f32) -> f32 {
 pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
     let channel = sfx_channel(data, idx);
     let speed = sfx_speed(data, idx).clamp(1, MAX_SPEED);
-    let ticks = MAX_SPEED as u32 + 1 - speed as u32;
-    let cell_samples = (CELL_TICK_SECS * ticks as f32 * SAMPLE_RATE as f32).max(1.0) as usize;
+    let t = (speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+    let cell_secs = SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(t);
+    let cell_samples = (cell_secs * SAMPLE_RATE as f32).max(1.0) as usize;
     let total = cell_samples * SFX_CELLS;
 
     let mut samples = vec![0i16; total];
