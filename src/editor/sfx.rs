@@ -4,8 +4,8 @@ use macroquad::prelude::*;
 
 use crate::audio::{
     cell_at, cell_detune, cell_pitch, cell_timbre, cell_volume, pack_cell, set_cell,
-    set_sfx_header, sfx_channel, sfx_loop_end, sfx_loop_start, sfx_speed, CH_NOISE, CH_PULSE1,
-    CH_PULSE2, CH_WAVE, MAX_SPEED,
+    set_sfx_header, sfx_channel, sfx_loop_end, sfx_loop_start, sfx_speed, MAX_SPEED, SFX_NOISE,
+    SFX_PULSE, SFX_WAVE,
 };
 use crate::config::{
     COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, SCREEN_HEIGHT, SCREEN_WIDTH, SFX_CELLS,
@@ -282,7 +282,7 @@ impl SfxEditor {
         match self.header_field {
             HeaderField::Sfx => {}
             HeaderField::Channel => {
-                ch = ((ch as i32 + delta).rem_euclid(4)) as u8;
+                ch = ((ch as i32 + delta).rem_euclid(3)) as u8;
             }
             HeaderField::Speed => {
                 sp = (sp as i32 + delta).clamp(1, MAX_SPEED as i32) as u8;
@@ -463,10 +463,9 @@ impl SfxEditor {
         let ls = sfx_loop_start(&self.data, self.selected);
         let le = sfx_loop_end(&self.data, self.selected);
         let ch_name = match ch {
-            CH_PULSE1 => "P1",
-            CH_PULSE2 => "P2",
-            CH_WAVE => "WV",
-            CH_NOISE => "NS",
+            SFX_PULSE => "PU",
+            SFX_WAVE => "WV",
+            SFX_NOISE => "NS",
             _ => "??",
         };
         let lp = if ls < SFX_CELLS as u8 && le > ls && le <= SFX_CELLS as u8 {

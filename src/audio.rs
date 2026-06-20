@@ -1,4 +1,5 @@
 use macroquad::audio::{load_sound_from_bytes, play_sound, stop_sound, PlaySoundParams, Sound};
+use macroquad::time::get_time;
 
 use crate::config::{
     MUSIC_CHANNELS, MUSIC_COUNT, MUSIC_END_LOOP, MUSIC_HEADER_BYTES, MUSIC_PATTERN_SIZE,
@@ -18,6 +19,10 @@ pub const CH_PULSE1: u8 = 0;
 pub const CH_PULSE2: u8 = 1;
 pub const CH_WAVE: u8 = 2;
 pub const CH_NOISE: u8 = 3;
+
+pub const SFX_PULSE: u8 = 0;
+pub const SFX_WAVE: u8 = 1;
+pub const SFX_NOISE: u8 = 2;
 
 pub fn sfx_channel(data: &[u8], idx: u8) -> u8 {
     data[idx as usize * SFX_SIZE] & 0x03
@@ -192,7 +197,7 @@ fn sample_wave(bank: u8, phase: f32) -> f32 {
 }
 
 pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
-    let channel = sfx_channel(data, idx);
+    let sfx_type = sfx_channel(data, idx);
     let speed = sfx_speed(data, idx).clamp(1, MAX_SPEED);
     let t = (speed - 1) as f32 / (MAX_SPEED - 1) as f32;
     let cell_secs = SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(t);
@@ -219,8 +224,8 @@ pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
         let vol = volume as f32 / 7.0;
 
         for s in 0..cell_samples {
-            let raw = match channel {
-                CH_PULSE1 | CH_PULSE2 => {
+            let raw = match sfx_type {
+                SFX_PULSE => {
                     phase += freq / SAMPLE_RATE as f32;
                     phase -= phase.floor();
                     let duty = duty_from_timbre(timbre);
@@ -230,12 +235,12 @@ pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
                         -1.0
                     }
                 }
-                CH_WAVE => {
+                SFX_WAVE => {
                     phase += freq / SAMPLE_RATE as f32;
                     phase -= phase.floor();
                     sample_wave(timbre, phase)
                 }
-                CH_NOISE => {
+                SFX_NOISE => {
                     phase += freq / SAMPLE_RATE as f32;
                     while phase >= 1.0 {
                         let bit = (lfsr ^ (lfsr >> 1)) & 1;
@@ -414,6 +419,7 @@ pub struct SfxPlayer {
     sounds: [Option<Sound>; SFX_COUNT],
     dirty: [bool; SFX_COUNT],
     channel_handles: [Option<Sound>; 4],
+    channel_last_play: [f64; 4],
 }
 
 impl Default for SfxPlayer {
@@ -428,6 +434,7 @@ impl SfxPlayer {
             sounds: std::array::from_fn(|_| None),
             dirty: [true; SFX_COUNT],
             channel_handles: std::array::from_fn(|_| None),
+            channel_last_play: [0.0; 4],
         }
     }
 
@@ -478,10 +485,20 @@ impl SfxPlayer {
         let Some(sound) = self.sounds[i].clone() else {
             return;
         };
-        let channel = sfx_channel(data, idx) as usize;
-        if channel >= self.channel_handles.len() {
-            return;
-        }
+        let channel = match sfx_channel(data, idx) {
+            SFX_PULSE => {
+                if self.channel_last_play[CH_PULSE1 as usize]
+                    <= self.channel_last_play[CH_PULSE2 as usize]
+                {
+                    CH_PULSE1 as usize
+                } else {
+                    CH_PULSE2 as usize
+                }
+            }
+            SFX_WAVE => CH_WAVE as usize,
+            SFX_NOISE => CH_NOISE as usize,
+            _ => return,
+        };
         if let Some(prev) = self.channel_handles[channel].take() {
             stop_sound(&prev);
         }
@@ -493,6 +510,7 @@ impl SfxPlayer {
             },
         );
         self.channel_handles[channel] = Some(sound);
+        self.channel_last_play[channel] = get_time();
     }
 
     pub fn stop_all(&mut self) {
