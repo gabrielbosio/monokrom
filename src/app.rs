@@ -1758,6 +1758,7 @@ impl App {
         if let Some(idx) = output.modified_sfx {
             self.is_modified = true;
             self.sfx_player.mark_dirty(idx);
+            self.music_player.mark_all_dirty();
         }
         match output.action {
             SfxEditorAction::None => {}
@@ -1778,7 +1779,7 @@ impl App {
 
     fn update_music_editor(&mut self) {
         while get_char_pressed().is_some() {}
-        let output = self.music_editor.update();
+        let output = self.music_editor.update(&self.sfx_editor.data);
         if let Some(idx) = output.modified_pattern {
             self.is_modified = true;
             self.music_player.mark_dirty(idx);
@@ -1818,7 +1819,7 @@ impl App {
             for idx in plays {
                 if self
                     .music_player
-                    .ensure_loaded(&self.music_editor.data, idx)
+                    .ensure_loaded(&self.music_editor.data, &self.sfx_editor.data, idx)
                     .await
                 {
                     self.music_player.play(idx);

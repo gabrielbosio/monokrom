@@ -3,14 +3,15 @@ use std::collections::VecDeque;
 use macroquad::prelude::*;
 
 use crate::audio::{
-    cell_detune, cell_pitch, cell_timbre, cell_volume, music_cell_at, music_pattern_end_flag,
-    music_pattern_loop_end, music_pattern_loop_start, music_pattern_speed, pack_cell,
-    set_music_cell, set_music_pattern_header, CH_NOISE, CH_PULSE1, CH_PULSE2, CH_WAVE, MAX_SPEED,
+    is_empty as sfx_is_empty, music_cell_at, music_cell_detune, music_cell_pitch, music_cell_sfx,
+    music_cell_volume, music_column_sfx_type, music_pack_cell, music_pattern_end_flag,
+    music_pattern_loop_end, music_pattern_loop_start, music_pattern_speed, set_music_cell,
+    set_music_pattern_header, sfx_channel, MAX_SPEED,
 };
 use crate::config::{
     COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, MUSIC_CHANNELS, MUSIC_COUNT, MUSIC_END_LOOP,
     MUSIC_END_NEXT, MUSIC_END_STOP, MUSIC_PATTERN_SIZE, MUSIC_REGION_SIZE, MUSIC_ROWS,
-    SCREEN_HEIGHT, TILE_WIDTH,
+    SCREEN_HEIGHT, SFX_COUNT, TILE_WIDTH,
 };
 use crate::input::{
     is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
@@ -30,6 +31,8 @@ const HINT_Y: f32 = SCREEN_HEIGHT as f32 - 6.0;
 const ROW_LABEL_X: f32 = 0.0;
 const CHANNEL_X: [f32; MUSIC_CHANNELS] = [16.0, 52.0, 88.0, 124.0];
 const CHANNEL_SLOT_WIDTH: f32 = 5.0 * TILE_WIDTH as f32;
+
+const DEFAULT_PITCH: u8 = 24;
 
 const CH_NAMES: [&str; MUSIC_CHANNELS] = ["P1", "P2", "WV", "NS"];
 
@@ -51,7 +54,7 @@ const NOTE_NAMES: [(char, char); 12] = [
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Field {
     Pitch,
-    Timbre,
+    Sfx,
     Volume,
     Detune,
 }
@@ -59,8 +62,8 @@ enum Field {
 impl Field {
     fn next(self) -> Self {
         match self {
-            Self::Pitch => Self::Timbre,
-            Self::Timbre => Self::Volume,
+            Self::Pitch => Self::Sfx,
+            Self::Sfx => Self::Volume,
             Self::Volume => Self::Detune,
             Self::Detune => Self::Pitch,
         }
@@ -68,15 +71,15 @@ impl Field {
     fn prev(self) -> Self {
         match self {
             Self::Pitch => Self::Detune,
-            Self::Timbre => Self::Pitch,
-            Self::Volume => Self::Timbre,
+            Self::Sfx => Self::Pitch,
+            Self::Volume => Self::Sfx,
             Self::Detune => Self::Volume,
         }
     }
     fn label(self) -> &'static str {
         match self {
             Self::Pitch => "P",
-            Self::Timbre => "T",
+            Self::Sfx => "S",
             Self::Volume => "V",
             Self::Detune => "D",
         }
@@ -188,7 +191,7 @@ impl MusicEditor {
         }
     }
 
-    pub fn update(&mut self) -> MusicEditorOutput {
+    pub fn update(&mut self, sfx_data: &[u8]) -> MusicEditorOutput {
         if is_key_pressed(KeyCode::Escape) {
             return MusicEditorOutput::action(if is_shift_pressed() {
                 MusicEditorAction::ExitToSfxEditor
@@ -273,7 +276,7 @@ impl MusicEditor {
             return self.update_header(shift);
         }
 
-        self.update_grid(shift)
+        self.update_grid(shift, sfx_data)
     }
 
     fn update_header(&mut self, shift: bool) -> MusicEditorOutput {
@@ -335,7 +338,7 @@ impl MusicEditor {
         set_music_pattern_header(&mut self.data, self.selected, sp, end, ls, le);
     }
 
-    fn update_grid(&mut self, shift: bool) -> MusicEditorOutput {
+    fn update_grid(&mut self, shift: bool, sfx_data: &[u8]) -> MusicEditorOutput {
         let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
 
         if should_key_fire(KeyCode::Left, false) && !alt {
@@ -372,26 +375,11 @@ impl MusicEditor {
             self.ensure_cursor_visible();
         }
 
-        let bump: i32 = if should_key_fire(KeyCode::Up, false) && alt {
-            if shift && matches!(self.cursor_field, Field::Pitch) {
-                12
-            } else {
-                1
-            }
-        } else if should_key_fire(KeyCode::Down, false) && alt {
-            if shift && matches!(self.cursor_field, Field::Pitch) {
-                -12
-            } else {
-                -1
-            }
-        } else {
-            0
-        };
-
-        if bump != 0 {
-            self.push_undo();
-            self.bump_field(bump);
-            return MusicEditorOutput::modified(self.selected);
+        if should_key_fire(KeyCode::Up, false) && alt {
+            return self.bump_or_scroll(sfx_data, shift, 1);
+        }
+        if should_key_fire(KeyCode::Down, false) && alt {
+            return self.bump_or_scroll(sfx_data, shift, -1);
         }
 
         if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
@@ -416,7 +404,7 @@ impl MusicEditor {
         }
 
         for (code, val) in [
-            (KeyCode::Key0, 0),
+            (KeyCode::Key0, 0u8),
             (KeyCode::Key1, 1),
             (KeyCode::Key2, 2),
             (KeyCode::Key3, 3),
@@ -424,10 +412,16 @@ impl MusicEditor {
             (KeyCode::Key5, 5),
             (KeyCode::Key6, 6),
             (KeyCode::Key7, 7),
+            (KeyCode::Key8, 8),
+            (KeyCode::Key9, 9),
+            (KeyCode::A, 10),
+            (KeyCode::B, 11),
+            (KeyCode::C, 12),
+            (KeyCode::D, 13),
+            (KeyCode::E, 14),
+            (KeyCode::F, 15),
         ] {
-            if is_key_pressed(code) {
-                self.push_undo();
-                self.set_field(val);
+            if is_key_pressed(code) && self.try_set_field(val, sfx_data) {
                 return MusicEditorOutput::modified(self.selected);
             }
         }
@@ -435,23 +429,74 @@ impl MusicEditor {
         MusicEditorOutput::none()
     }
 
-    fn bump_field(&mut self, delta: i32) {
+    fn bump_or_scroll(&mut self, sfx_data: &[u8], shift: bool, dir: i32) -> MusicEditorOutput {
+        match self.cursor_field {
+            Field::Sfx => {
+                if let Some(new_sfx) = self.next_matching_sfx(sfx_data, dir) {
+                    self.push_undo();
+                    self.set_sfx(new_sfx);
+                    return MusicEditorOutput::modified(self.selected);
+                }
+                MusicEditorOutput::none()
+            }
+            Field::Pitch => {
+                let delta = if shift { 12 * dir } else { dir };
+                self.push_undo();
+                self.bump_field(delta);
+                MusicEditorOutput::modified(self.selected)
+            }
+            _ => {
+                self.push_undo();
+                self.bump_field(dir);
+                MusicEditorOutput::modified(self.selected)
+            }
+        }
+    }
+
+    fn next_matching_sfx(&self, sfx_data: &[u8], dir: i32) -> Option<u8> {
+        let column_type = music_column_sfx_type(self.cursor_channel);
+        let candidates: Vec<u8> = (0..SFX_COUNT as u8)
+            .filter(|&i| !sfx_is_empty(sfx_data, i) && sfx_channel(sfx_data, i) == column_type)
+            .collect();
+        if candidates.is_empty() {
+            return None;
+        }
+        let cell = music_cell_at(
+            &self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+        );
+        let current = music_cell_sfx(cell);
+        let pos = candidates.iter().position(|&i| i == current);
+        let next_pos = match pos {
+            Some(p) => (p as i32 + dir).rem_euclid(candidates.len() as i32) as usize,
+            None => {
+                if dir > 0 {
+                    0
+                } else {
+                    candidates.len() - 1
+                }
+            }
+        };
+        Some(candidates[next_pos])
+    }
+
+    fn set_sfx(&mut self, sfx_idx: u8) {
         let c = music_cell_at(
             &self.data,
             self.selected,
             self.cursor_row,
             self.cursor_channel,
         );
-        let p = cell_pitch(c) as i32;
-        let t = cell_timbre(c) as i32;
-        let v = cell_volume(c) as i32;
-        let d = cell_detune(c) as i32;
-        let new = match self.cursor_field {
-            Field::Pitch => pack_cell((p + delta).clamp(0, 63) as u8, t as u8, v as u8, d as u8),
-            Field::Timbre => pack_cell(p as u8, (t + delta).rem_euclid(8) as u8, v as u8, d as u8),
-            Field::Volume => pack_cell(p as u8, t as u8, (v + delta).rem_euclid(8) as u8, d as u8),
-            Field::Detune => pack_cell(p as u8, t as u8, v as u8, (d + delta).rem_euclid(8) as u8),
+        let prev_vol = music_cell_volume(c);
+        let (p, v) = if prev_vol == 0 {
+            (DEFAULT_PITCH, 7)
+        } else {
+            (music_cell_pitch(c), prev_vol)
         };
+        let d = music_cell_detune(c);
+        let new = music_pack_cell(p, sfx_idx, v, d);
         set_music_cell(
             &mut self.data,
             self.selected,
@@ -461,22 +506,131 @@ impl MusicEditor {
         );
     }
 
-    fn set_field(&mut self, value: u8) {
+    fn try_set_field(&mut self, value: u8, sfx_data: &[u8]) -> bool {
+        match self.cursor_field {
+            Field::Pitch => {
+                if value > 0x3F {
+                    return false;
+                }
+                self.push_undo();
+                self.write_pitch(value);
+                true
+            }
+            Field::Sfx => {
+                if value as usize >= SFX_COUNT {
+                    return false;
+                }
+                if sfx_is_empty(sfx_data, value) {
+                    return false;
+                }
+                if sfx_channel(sfx_data, value) != music_column_sfx_type(self.cursor_channel) {
+                    return false;
+                }
+                self.push_undo();
+                self.set_sfx(value);
+                true
+            }
+            Field::Volume => {
+                if value > 7 {
+                    return false;
+                }
+                self.push_undo();
+                self.write_volume(value);
+                true
+            }
+            Field::Detune => {
+                if value > 7 {
+                    return false;
+                }
+                self.push_undo();
+                self.write_detune(value);
+                true
+            }
+        }
+    }
+
+    fn write_pitch(&mut self, pitch: u8) {
         let c = music_cell_at(
             &self.data,
             self.selected,
             self.cursor_row,
             self.cursor_channel,
         );
-        let p = cell_pitch(c);
-        let t = cell_timbre(c);
-        let v = cell_volume(c);
-        let d = cell_detune(c);
+        let new = music_pack_cell(
+            pitch & 0x3F,
+            music_cell_sfx(c),
+            music_cell_volume(c),
+            music_cell_detune(c),
+        );
+        set_music_cell(
+            &mut self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+            new,
+        );
+    }
+
+    fn write_volume(&mut self, vol: u8) {
+        let c = music_cell_at(
+            &self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+        );
+        let new = music_pack_cell(
+            music_cell_pitch(c),
+            music_cell_sfx(c),
+            vol & 0x07,
+            music_cell_detune(c),
+        );
+        set_music_cell(
+            &mut self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+            new,
+        );
+    }
+
+    fn write_detune(&mut self, det: u8) {
+        let c = music_cell_at(
+            &self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+        );
+        let new = music_pack_cell(
+            music_cell_pitch(c),
+            music_cell_sfx(c),
+            music_cell_volume(c),
+            det & 0x07,
+        );
+        set_music_cell(
+            &mut self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+            new,
+        );
+    }
+
+    fn bump_field(&mut self, delta: i32) {
+        let c = music_cell_at(
+            &self.data,
+            self.selected,
+            self.cursor_row,
+            self.cursor_channel,
+        );
+        let p = music_cell_pitch(c) as i32;
+        let s = music_cell_sfx(c);
+        let v = music_cell_volume(c) as i32;
+        let d = music_cell_detune(c) as i32;
         let new = match self.cursor_field {
-            Field::Pitch => pack_cell(value & 0x3F, t, v, d),
-            Field::Timbre => pack_cell(p, value & 0x07, v, d),
-            Field::Volume => pack_cell(p, t, value & 0x07, d),
-            Field::Detune => pack_cell(p, t, v, value & 0x07),
+            Field::Pitch => music_pack_cell((p + delta).clamp(0, 63) as u8, s, v as u8, d as u8),
+            Field::Sfx => return,
+            Field::Volume => music_pack_cell(p as u8, s, (v + delta).rem_euclid(8) as u8, d as u8),
+            Field::Detune => music_pack_cell(p as u8, s, v as u8, (d + delta).rem_euclid(8) as u8),
         };
         set_music_cell(
             &mut self.data,
@@ -673,8 +827,8 @@ impl MusicEditor {
     }
 
     fn draw_cell(&self, helpers: &DrawHelpers, cell: u16, x: f32, y: f32, color: Color) {
-        let pitch = cell_pitch(cell);
-        let volume = cell_volume(cell);
+        let pitch = music_cell_pitch(cell);
+        let volume = music_cell_volume(cell);
         if volume == 0 {
             for i in 0..3 {
                 helpers.draw_char('-', x + i as f32 * TILE_WIDTH as f32, y, COLOR_DARK_GRAY);
@@ -686,8 +840,9 @@ impl MusicEditor {
         helpers.draw_char(note, x, y, color);
         helpers.draw_char(sharp, x + TILE_WIDTH as f32, y, color);
         helpers.draw_char(oct, x + 2.0 * TILE_WIDTH as f32, y, color);
-        let vc = char::from_digit(volume as u32, 10).unwrap_or('?');
-        helpers.draw_char(vc, x + 4.0 * TILE_WIDTH as f32, y, color);
+        let sfx = music_cell_sfx(cell);
+        let sc = sfx_hex_char(sfx);
+        helpers.draw_char(sc, x + 4.0 * TILE_WIDTH as f32, y, color);
     }
 
     fn draw_cursor(&self, helpers: &DrawHelpers) {
@@ -718,22 +873,16 @@ impl MusicEditor {
             self.cursor_row,
             self.cursor_channel,
         );
-        let ch_name = match self.cursor_channel {
-            CH_PULSE1 => "P1",
-            CH_PULSE2 => "P2",
-            CH_WAVE => "WV",
-            CH_NOISE => "NS",
-            _ => "??",
-        };
+        let ch_name = CH_NAMES[self.cursor_channel as usize];
         let label = format!(
-            "R:{:02} {} F:{} P:{:02} T:{} V:{} D:{}",
+            "R:{:02} {} F:{} P:{:02} S:{} V:{} D:{}",
             self.cursor_row,
             ch_name,
             self.cursor_field.label(),
-            cell_pitch(cell),
-            cell_timbre(cell),
-            cell_volume(cell),
-            cell_detune(cell),
+            music_cell_pitch(cell),
+            sfx_hex_char(music_cell_sfx(cell)),
+            music_cell_volume(cell),
+            music_cell_detune(cell),
         );
         for (i, ch) in label.chars().enumerate() {
             helpers.draw_char(ch, i as f32 * TILE_WIDTH as f32, INFO_Y, COLOR_WHITE);
@@ -744,7 +893,7 @@ impl MusicEditor {
         let hint = if self.header_focus {
             "tab:grid shift+up/dn:+-10"
         } else {
-            "play:sp tab:hdr alt+up/dn"
+            "play:sp tab:hdr 0-9 A-F alt"
         };
         for (i, c) in hint.chars().enumerate() {
             helpers.draw_char(c, i as f32 * TILE_WIDTH as f32, HINT_Y, COLOR_DARK_GRAY);
@@ -758,4 +907,12 @@ fn pitch_to_note_chars(pitch: u8) -> (char, char, char) {
     let (note, sharp) = NOTE_NAMES[semi];
     let oct_char = char::from_digit(octave as u32, 10).unwrap_or('?');
     (note, sharp, oct_char)
+}
+
+fn sfx_hex_char(idx: u8) -> char {
+    match idx {
+        0..=9 => char::from_digit(idx as u32, 10).unwrap(),
+        10..=15 => (b'A' + (idx - 10)) as char,
+        _ => '?',
+    }
 }

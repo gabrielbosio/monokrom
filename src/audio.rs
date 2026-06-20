@@ -140,6 +140,37 @@ pub fn music_pattern_is_empty(data: &[u8], idx: u8) -> bool {
     data[off..off + MUSIC_PATTERN_SIZE].iter().all(|&b| b == 0)
 }
 
+pub fn music_pack_cell(pitch: u8, sfx: u8, vol: u8, det: u8) -> u16 {
+    (pitch as u16 & 0x3F)
+        | ((sfx as u16 & 0x0F) << 6)
+        | ((vol as u16 & 0x07) << 10)
+        | ((det as u16 & 0x07) << 13)
+}
+
+pub fn music_cell_pitch(c: u16) -> u8 {
+    (c & 0x3F) as u8
+}
+
+pub fn music_cell_sfx(c: u16) -> u8 {
+    ((c >> 6) & 0x0F) as u8
+}
+
+pub fn music_cell_volume(c: u16) -> u8 {
+    ((c >> 10) & 0x07) as u8
+}
+
+pub fn music_cell_detune(c: u16) -> u8 {
+    ((c >> 13) & 0x07) as u8
+}
+
+pub fn music_column_sfx_type(channel: u8) -> u8 {
+    match channel {
+        0 | 1 => SFX_PULSE,
+        2 => SFX_WAVE,
+        _ => SFX_NOISE,
+    }
+}
+
 fn midi_to_freq(note: i32) -> f32 {
     440.0 * 2f32.powf((note - 69) as f32 / 12.0)
 }
@@ -312,9 +343,9 @@ fn make_wav(samples: &[i16]) -> Vec<u8> {
     buf
 }
 
-pub fn render_music(data: &[u8], idx: u8) -> Vec<u8> {
-    let speed = music_pattern_speed(data, idx).clamp(1, MAX_SPEED);
-    let t = (speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
+    let m_speed = music_pattern_speed(music_data, idx).clamp(1, MAX_SPEED);
+    let t = (m_speed - 1) as f32 / (MAX_SPEED - 1) as f32;
     let row_secs = SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(t);
     let row_samples = (row_secs * SAMPLE_RATE as f32).max(1.0) as usize;
     let total = row_samples * MUSIC_ROWS;
@@ -322,47 +353,79 @@ pub fn render_music(data: &[u8], idx: u8) -> Vec<u8> {
     let mut mix = vec![0f32; total];
 
     for ch in 0..MUSIC_CHANNELS {
-        let mut phase: f32 = 0.0;
-        let mut lfsr: u16 = 0x7FFF;
+        let column_type = music_column_sfx_type(ch as u8);
 
         for row in 0..MUSIC_ROWS {
-            let cell = music_cell_at(data, idx, row as u8, ch as u8);
-            let pitch = cell_pitch(cell);
-            let timbre = cell_timbre(cell);
-            let volume = cell_volume(cell);
-            let detune = cell_detune(cell);
+            let m_cell = music_cell_at(music_data, idx, row as u8, ch as u8);
+            let m_pitch = music_cell_pitch(m_cell);
+            let m_sfx = music_cell_sfx(m_cell);
+            let m_vol = music_cell_volume(m_cell);
+            let m_det = music_cell_detune(m_cell);
 
-            if volume == 0 {
-                phase = 0.0;
+            if m_vol == 0 {
+                continue;
+            }
+            if is_empty(sfx_data, m_sfx) || sfx_channel(sfx_data, m_sfx) != column_type {
                 continue;
             }
 
-            let freq = midi_to_freq(36 + pitch as i32) * 2f32.powf(detune as f32 / 96.0);
-            let vol = volume as f32 / 7.0;
+            let s_speed = sfx_speed(sfx_data, m_sfx).clamp(1, MAX_SPEED);
+            let st = (s_speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+            let sfx_cell_secs =
+                SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(st);
+            let sfx_cell_samples = (sfx_cell_secs * SAMPLE_RATE as f32).max(1.0) as usize;
+
+            let sfx_base_pitch = cell_pitch(cell_at(sfx_data, m_sfx, 0)) as i32;
+            let transpose = m_pitch as i32 - sfx_base_pitch;
+            let music_vol = m_vol as f32 / 7.0;
+
+            let mut phase: f32 = 0.0;
+            let mut lfsr: u16 = 0x7FFF;
+            let row_offset = row * row_samples;
 
             for s in 0..row_samples {
-                let raw = match ch as u8 {
-                    CH_PULSE1 | CH_PULSE2 => {
+                let sfx_cell_idx = s / sfx_cell_samples;
+                if sfx_cell_idx >= SFX_CELLS {
+                    break;
+                }
+                let sfx_cell = cell_at(sfx_data, m_sfx, sfx_cell_idx as u8);
+                let s_vol = cell_volume(sfx_cell);
+                if s_vol == 0 {
+                    phase = 0.0;
+                    continue;
+                }
+                let s_pitch = cell_pitch(sfx_cell) as i32;
+                let s_timbre = cell_timbre(sfx_cell);
+                let s_det = cell_detune(sfx_cell);
+
+                let effective_pitch = (s_pitch + transpose).clamp(0, 63);
+                let total_detune = (s_det + m_det).min(7);
+                let freq =
+                    midi_to_freq(36 + effective_pitch) * 2f32.powf(total_detune as f32 / 96.0);
+                let combined_vol = (s_vol as f32 / 7.0) * music_vol;
+
+                let raw = match column_type {
+                    SFX_PULSE => {
                         phase += freq / SAMPLE_RATE as f32;
                         phase -= phase.floor();
-                        let duty = duty_from_timbre(timbre);
+                        let duty = duty_from_timbre(s_timbre);
                         if phase < duty {
                             1.0
                         } else {
                             -1.0
                         }
                     }
-                    CH_WAVE => {
+                    SFX_WAVE => {
                         phase += freq / SAMPLE_RATE as f32;
                         phase -= phase.floor();
-                        sample_wave(timbre, phase)
+                        sample_wave(s_timbre, phase)
                     }
-                    CH_NOISE => {
+                    SFX_NOISE => {
                         phase += freq / SAMPLE_RATE as f32;
                         while phase >= 1.0 {
                             let bit = (lfsr ^ (lfsr >> 1)) & 1;
                             lfsr = (lfsr >> 1) | (bit << 14);
-                            if timbre & 1 != 0 {
+                            if s_timbre & 1 != 0 {
                                 lfsr = (lfsr & !(1 << 6)) | (bit << 6);
                             }
                             phase -= 1.0;
@@ -376,7 +439,7 @@ pub fn render_music(data: &[u8], idx: u8) -> Vec<u8> {
                     _ => 0.0,
                 };
 
-                mix[row * row_samples + s] += raw * vol * MASTER_GAIN / MUSIC_CHANNELS as f32;
+                mix[row_offset + s] += raw * combined_vol * MASTER_GAIN / MUSIC_CHANNELS as f32;
             }
         }
     }
@@ -386,7 +449,7 @@ pub fn render_music(data: &[u8], idx: u8) -> Vec<u8> {
         .map(|v| (v.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
         .collect();
 
-    apply_music_loop(&mut samples, data, idx, row_samples);
+    apply_music_loop(&mut samples, music_data, idx, row_samples);
     make_wav(&samples)
 }
 
@@ -555,7 +618,7 @@ impl MusicPlayer {
         }
     }
 
-    pub async fn ensure_loaded(&mut self, data: &[u8], idx: u8) -> bool {
+    pub async fn ensure_loaded(&mut self, music_data: &[u8], sfx_data: &[u8], idx: u8) -> bool {
         let i = idx as usize;
         if i >= MUSIC_COUNT {
             return false;
@@ -563,7 +626,7 @@ impl MusicPlayer {
         if !self.dirty[i] && self.sounds[i].is_some() {
             return true;
         }
-        if music_pattern_is_empty(data, idx) {
+        if music_pattern_is_empty(music_data, idx) {
             self.sounds[i] = None;
             self.dirty[i] = false;
             return false;
@@ -571,7 +634,7 @@ impl MusicPlayer {
         if let Some(old) = self.sounds[i].take() {
             stop_sound(&old);
         }
-        let wav = render_music(data, idx);
+        let wav = render_music(music_data, sfx_data, idx);
         match load_sound_from_bytes(&wav).await {
             Ok(s) => {
                 self.sounds[i] = Some(s);
