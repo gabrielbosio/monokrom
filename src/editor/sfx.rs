@@ -94,7 +94,7 @@ impl HeaderField {
 pub enum SfxEditorAction {
     None,
     ExitToMapEditor,
-    ExitToTerminal,
+    ExitToMusicEditor,
     Save,
     Run,
     Audition(u8),
@@ -167,7 +167,7 @@ impl SfxEditor {
             return SfxEditorOutput::action(if is_shift_pressed() {
                 SfxEditorAction::ExitToMapEditor
             } else {
-                SfxEditorAction::ExitToTerminal
+                SfxEditorAction::ExitToMusicEditor
             });
         }
 

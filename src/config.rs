@@ -48,3 +48,16 @@ pub const SFX_HEADER_BYTES: usize = 4;
 pub const SFX_SIZE: usize = SFX_HEADER_BYTES + SFX_CELLS * 2; // 68
 pub const SFX_REGION_START: usize = 0x5000; // 20480
 pub const SFX_REGION_SIZE: usize = SFX_COUNT * SFX_SIZE; // 1088
+
+// Music
+pub const MUSIC_COUNT: usize = 16;
+pub const MUSIC_ROWS: usize = 32;
+pub const MUSIC_CHANNELS: usize = 4;
+pub const MUSIC_HEADER_BYTES: usize = 4;
+pub const MUSIC_PATTERN_SIZE: usize = MUSIC_HEADER_BYTES + MUSIC_ROWS * MUSIC_CHANNELS * 2; // 260
+pub const MUSIC_REGION_START: usize = 0x6000; // 24576
+pub const MUSIC_REGION_SIZE: usize = MUSIC_COUNT * MUSIC_PATTERN_SIZE; // 4160
+
+pub const MUSIC_END_STOP: u8 = 0;
+pub const MUSIC_END_LOOP: u8 = 1;
+pub const MUSIC_END_NEXT: u8 = 2;

@@ -1,6 +1,9 @@
 use macroquad::audio::{load_sound_from_bytes, play_sound, stop_sound, PlaySoundParams, Sound};
 
-use crate::config::{SFX_CELLS, SFX_COUNT, SFX_HEADER_BYTES, SFX_SIZE};
+use crate::config::{
+    MUSIC_CHANNELS, MUSIC_COUNT, MUSIC_END_LOOP, MUSIC_HEADER_BYTES, MUSIC_PATTERN_SIZE,
+    MUSIC_ROWS, SFX_CELLS, SFX_COUNT, SFX_HEADER_BYTES, SFX_SIZE,
+};
 
 const SAMPLE_RATE: u32 = 22050;
 const SLOWEST_CELL_SECS: f32 = 0.320;
@@ -78,6 +81,58 @@ pub fn cell_detune(c: u16) -> u8 {
 pub fn is_empty(data: &[u8], idx: u8) -> bool {
     let off = idx as usize * SFX_SIZE;
     data[off..off + SFX_SIZE].iter().all(|&b| b == 0)
+}
+
+pub fn music_pattern_speed(data: &[u8], idx: u8) -> u8 {
+    data[idx as usize * MUSIC_PATTERN_SIZE]
+}
+
+pub fn music_pattern_end_flag(data: &[u8], idx: u8) -> u8 {
+    data[idx as usize * MUSIC_PATTERN_SIZE + 1]
+}
+
+pub fn music_pattern_loop_start(data: &[u8], idx: u8) -> u8 {
+    data[idx as usize * MUSIC_PATTERN_SIZE + 2]
+}
+
+pub fn music_pattern_loop_end(data: &[u8], idx: u8) -> u8 {
+    data[idx as usize * MUSIC_PATTERN_SIZE + 3]
+}
+
+pub fn set_music_pattern_header(
+    data: &mut [u8],
+    idx: u8,
+    speed: u8,
+    end_flag: u8,
+    lstart: u8,
+    lend: u8,
+) {
+    let off = idx as usize * MUSIC_PATTERN_SIZE;
+    data[off] = speed;
+    data[off + 1] = end_flag;
+    data[off + 2] = lstart;
+    data[off + 3] = lend;
+}
+
+pub fn music_cell_at(data: &[u8], pattern: u8, row: u8, channel: u8) -> u16 {
+    let off = pattern as usize * MUSIC_PATTERN_SIZE
+        + MUSIC_HEADER_BYTES
+        + (row as usize * MUSIC_CHANNELS + channel as usize) * 2;
+    u16::from_le_bytes([data[off], data[off + 1]])
+}
+
+pub fn set_music_cell(data: &mut [u8], pattern: u8, row: u8, channel: u8, value: u16) {
+    let off = pattern as usize * MUSIC_PATTERN_SIZE
+        + MUSIC_HEADER_BYTES
+        + (row as usize * MUSIC_CHANNELS + channel as usize) * 2;
+    let bytes = value.to_le_bytes();
+    data[off] = bytes[0];
+    data[off + 1] = bytes[1];
+}
+
+pub fn music_pattern_is_empty(data: &[u8], idx: u8) -> bool {
+    let off = idx as usize * MUSIC_PATTERN_SIZE;
+    data[off..off + MUSIC_PATTERN_SIZE].iter().all(|&b| b == 0)
 }
 
 fn midi_to_freq(note: i32) -> f32 {
@@ -252,6 +307,109 @@ fn make_wav(samples: &[i16]) -> Vec<u8> {
     buf
 }
 
+pub fn render_music(data: &[u8], idx: u8) -> Vec<u8> {
+    let speed = music_pattern_speed(data, idx).clamp(1, MAX_SPEED);
+    let t = (speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+    let row_secs = SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(t);
+    let row_samples = (row_secs * SAMPLE_RATE as f32).max(1.0) as usize;
+    let total = row_samples * MUSIC_ROWS;
+
+    let mut mix = vec![0f32; total];
+
+    for ch in 0..MUSIC_CHANNELS {
+        let mut phase: f32 = 0.0;
+        let mut lfsr: u16 = 0x7FFF;
+
+        for row in 0..MUSIC_ROWS {
+            let cell = music_cell_at(data, idx, row as u8, ch as u8);
+            let pitch = cell_pitch(cell);
+            let timbre = cell_timbre(cell);
+            let volume = cell_volume(cell);
+            let detune = cell_detune(cell);
+
+            if volume == 0 {
+                phase = 0.0;
+                continue;
+            }
+
+            let freq = midi_to_freq(36 + pitch as i32) * 2f32.powf(detune as f32 / 96.0);
+            let vol = volume as f32 / 7.0;
+
+            for s in 0..row_samples {
+                let raw = match ch as u8 {
+                    CH_PULSE1 | CH_PULSE2 => {
+                        phase += freq / SAMPLE_RATE as f32;
+                        phase -= phase.floor();
+                        let duty = duty_from_timbre(timbre);
+                        if phase < duty {
+                            1.0
+                        } else {
+                            -1.0
+                        }
+                    }
+                    CH_WAVE => {
+                        phase += freq / SAMPLE_RATE as f32;
+                        phase -= phase.floor();
+                        sample_wave(timbre, phase)
+                    }
+                    CH_NOISE => {
+                        phase += freq / SAMPLE_RATE as f32;
+                        while phase >= 1.0 {
+                            let bit = (lfsr ^ (lfsr >> 1)) & 1;
+                            lfsr = (lfsr >> 1) | (bit << 14);
+                            if timbre & 1 != 0 {
+                                lfsr = (lfsr & !(1 << 6)) | (bit << 6);
+                            }
+                            phase -= 1.0;
+                        }
+                        if lfsr & 1 == 0 {
+                            1.0
+                        } else {
+                            -1.0
+                        }
+                    }
+                    _ => 0.0,
+                };
+
+                mix[row * row_samples + s] += raw * vol * MASTER_GAIN / MUSIC_CHANNELS as f32;
+            }
+        }
+    }
+
+    let mut samples: Vec<i16> = mix
+        .into_iter()
+        .map(|v| (v.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
+        .collect();
+
+    apply_music_loop(&mut samples, data, idx, row_samples);
+    make_wav(&samples)
+}
+
+fn apply_music_loop(samples: &mut Vec<i16>, data: &[u8], idx: u8, row_samples: usize) {
+    if music_pattern_end_flag(data, idx) != MUSIC_END_LOOP {
+        return;
+    }
+    let lstart = music_pattern_loop_start(data, idx);
+    let lend = music_pattern_loop_end(data, idx);
+    if lstart >= MUSIC_ROWS as u8 || lend <= lstart || lend > MUSIC_ROWS as u8 {
+        return;
+    }
+    let lead_end = lstart as usize * row_samples;
+    let body_end = lend as usize * row_samples;
+    let body_len = body_end - lead_end;
+    samples.truncate(body_end);
+    if body_len == 0 {
+        return;
+    }
+    let max_extra = ((MAX_LOOP_SECS * SAMPLE_RATE as f32) as usize) / body_len;
+    let extra = max_extra.min(MAX_LOOP_ITERS.saturating_sub(1));
+    samples.reserve(body_len * extra);
+    let body_range = lead_end..body_end;
+    for _ in 0..extra {
+        samples.extend_from_within(body_range.clone());
+    }
+}
+
 pub struct SfxPlayer {
     sounds: [Option<Sound>; SFX_COUNT],
     dirty: [bool; SFX_COUNT],
@@ -342,6 +500,94 @@ impl SfxPlayer {
             if let Some(s) = slot.take() {
                 stop_sound(&s);
             }
+        }
+    }
+}
+
+pub struct MusicPlayer {
+    sounds: [Option<Sound>; MUSIC_COUNT],
+    dirty: [bool; MUSIC_COUNT],
+    handle: Option<Sound>,
+}
+
+impl Default for MusicPlayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MusicPlayer {
+    pub fn new() -> Self {
+        Self {
+            sounds: std::array::from_fn(|_| None),
+            dirty: [true; MUSIC_COUNT],
+            handle: None,
+        }
+    }
+
+    pub fn mark_dirty(&mut self, idx: u8) {
+        if (idx as usize) < MUSIC_COUNT {
+            self.dirty[idx as usize] = true;
+        }
+    }
+
+    pub fn mark_all_dirty(&mut self) {
+        for d in &mut self.dirty {
+            *d = true;
+        }
+    }
+
+    pub async fn ensure_loaded(&mut self, data: &[u8], idx: u8) -> bool {
+        let i = idx as usize;
+        if i >= MUSIC_COUNT {
+            return false;
+        }
+        if !self.dirty[i] && self.sounds[i].is_some() {
+            return true;
+        }
+        if music_pattern_is_empty(data, idx) {
+            self.sounds[i] = None;
+            self.dirty[i] = false;
+            return false;
+        }
+        if let Some(old) = self.sounds[i].take() {
+            stop_sound(&old);
+        }
+        let wav = render_music(data, idx);
+        match load_sound_from_bytes(&wav).await {
+            Ok(s) => {
+                self.sounds[i] = Some(s);
+                self.dirty[i] = false;
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub fn play(&mut self, idx: u8) {
+        let i = idx as usize;
+        if i >= MUSIC_COUNT {
+            return;
+        }
+        let Some(sound) = self.sounds[i].clone() else {
+            return;
+        };
+        if let Some(prev) = self.handle.take() {
+            stop_sound(&prev);
+        }
+        play_sound(
+            &sound,
+            PlaySoundParams {
+                looped: false,
+                volume: 1.0,
+            },
+        );
+        self.handle = Some(sound);
+    }
+
+    pub fn stop(&mut self) {
+        if let Some(s) = self.handle.take() {
+            stop_sound(&s);
         }
     }
 }

@@ -1,13 +1,13 @@
 use crate::compiler::bytecode::*;
 use crate::config::{
-    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, SFX_COUNT, SPRITE_COUNT, SPRITE_REGION_START,
-    SPRITE_SIZE,
+    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, MUSIC_COUNT, SFX_COUNT, SPRITE_COUNT,
+    SPRITE_REGION_START, SPRITE_SIZE,
 };
 use crate::render::font::FONT_DATA;
 
 const STACK_LIMIT: usize = 256;
 const CALL_STACK_LIMIT: usize = 64;
-const MEMORY_SIZE: usize = 22528;
+const MEMORY_SIZE: usize = 32768;
 const FB_WIDTH: usize = 160;
 const FB_HEIGHT: usize = 144;
 const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
@@ -75,6 +75,7 @@ pub struct Vm {
     pub halted: bool,
     pub trace_output: Vec<String>,
     pub sfx_queue: Vec<u8>,
+    pub music_queue: Vec<u8>,
     start_time: f64,
     pub current_time: f64,
     rng_state: u32,
@@ -118,6 +119,7 @@ impl Vm {
             halted: false,
             trace_output: Vec::new(),
             sfx_queue: Vec::new(),
+            music_queue: Vec::new(),
             start_time: time,
             current_time: time,
             rng_state: (time * 1_000_000.0) as u32 | 1,
@@ -442,7 +444,10 @@ impl Vm {
                 }
             }
             OP_MUSIC => {
-                self.pop()?; // stub
+                let n = self.pop()?;
+                if n >= 0 && (n as usize) < MUSIC_COUNT {
+                    self.music_queue.push(n as u8);
+                }
             }
             OP_PEEK => {
                 let addr = self.pop()? as u16 as usize;
@@ -1321,6 +1326,20 @@ end";
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.sfx_queue, vec![0, (SFX_COUNT - 1) as u8]);
+    }
+
+    #[test]
+    fn music_queues_valid_indices_and_drops_others() {
+        let bc = make_bc(
+            vec![
+                OP_PUSH_I8, 0, OP_MUSIC, OP_PUSH_I8, 15, OP_MUSIC, OP_PUSH_I8, 16, OP_MUSIC,
+                OP_PUSH_I8, -1i8 as u8, OP_MUSIC, OP_HALT,
+            ],
+            0,
+        );
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.music_queue, vec![0, (MUSIC_COUNT - 1) as u8]);
     }
 
     #[test]

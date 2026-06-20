@@ -1,16 +1,17 @@
 use macroquad::prelude::*;
 
-use crate::audio::SfxPlayer;
+use crate::audio::{MusicPlayer, SfxPlayer};
 use crate::compiler;
 use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
-    EDITOR_TILES_Y, MAP_REGION_START, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
-    SCROLLBAR_WIDTH, SFX_REGION_SIZE, SFX_REGION_START, SPRITE_REGION_START, TILE_HEIGHT,
-    TILE_WIDTH,
+    EDITOR_TILES_Y, MAP_REGION_START, MUSIC_REGION_SIZE, MUSIC_REGION_START, SCREEN_HEIGHT,
+    SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH, SFX_REGION_SIZE,
+    SFX_REGION_START, SPRITE_REGION_START, TILE_HEIGHT, TILE_WIDTH,
 };
 use crate::editor::{
-    operations, Cursor, CursorPosition, History, MapEditor, MapEditorAction, Selection, SfxEditor,
-    SfxEditorAction, SpriteEditor, SpriteEditorAction, TextBuffer,
+    operations, Cursor, CursorPosition, History, MapEditor, MapEditorAction, MusicEditor,
+    MusicEditorAction, Selection, SfxEditor, SfxEditorAction, SpriteEditor, SpriteEditorAction,
+    TextBuffer,
 };
 use crate::filesystem;
 use crate::input::{get_editor_action, get_terminal_action, is_shift_pressed, EditorAction};
@@ -89,6 +90,8 @@ pub enum AppMode {
     MapEditor,
     /// SFX editor
     SfxEditor,
+    /// Music editor
+    MusicEditor,
 }
 
 pub struct App {
@@ -141,6 +144,11 @@ pub struct App {
     sfx_editor: SfxEditor,
     sfx_player: SfxPlayer,
     pending_sfx_plays: Vec<u8>,
+
+    // Music editor + audio
+    music_editor: MusicEditor,
+    music_player: MusicPlayer,
+    pending_music_plays: Vec<u8>,
 }
 
 impl App {
@@ -230,6 +238,10 @@ impl App {
             sfx_editor: SfxEditor::new(),
             sfx_player: SfxPlayer::new(),
             pending_sfx_plays: Vec::new(),
+
+            music_editor: MusicEditor::new(),
+            music_player: MusicPlayer::new(),
+            pending_music_plays: Vec::new(),
         }
     }
 
@@ -275,6 +287,10 @@ impl App {
             self.update_sfx_editor();
             return;
         }
+        if self.mode == AppMode::MusicEditor {
+            self.update_music_editor();
+            return;
+        }
 
         // Update cursor blink
         self.cursor_blink_timer += get_frame_time() as f64;
@@ -293,7 +309,11 @@ impl App {
             AppMode::ReplaceDialog => self.update_replace_dialog(),
             AppMode::GoToLineDialog => self.update_goto_line_dialog(),
             AppMode::Message => self.update_message_dialog(),
-            AppMode::Running | AppMode::SpriteEditor | AppMode::MapEditor | AppMode::SfxEditor => {
+            AppMode::Running
+            | AppMode::SpriteEditor
+            | AppMode::MapEditor
+            | AppMode::SfxEditor
+            | AppMode::MusicEditor => {
                 unreachable!()
             }
         }
@@ -712,6 +732,8 @@ impl App {
                             .copy_from_slice(&self.map_editor.data);
                         vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE]
                             .copy_from_slice(&self.sfx_editor.data);
+                        vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE]
+                            .copy_from_slice(&self.music_editor.data);
                         self.run_state = Some(vm);
                         self.mode = AppMode::Running;
                     }
@@ -752,6 +774,7 @@ impl App {
         payload.extend(&self.sprite_editor.data);
         payload.extend(&self.map_editor.data);
         payload.extend(&self.sfx_editor.data);
+        payload.extend(&self.music_editor.data);
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.export_native(name, &payload);
@@ -811,6 +834,7 @@ impl App {
         self.sprite_editor.append_data(&mut full_source);
         self.map_editor.append_data(&mut full_source);
         self.sfx_editor.append_data(&mut full_source);
+        self.music_editor.append_data(&mut full_source);
         let escaped = full_source
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
@@ -1363,6 +1387,7 @@ impl App {
             self.sprite_editor.append_data(&mut content);
             self.map_editor.append_data(&mut content);
             self.sfx_editor.append_data(&mut content);
+            self.music_editor.append_data(&mut content);
             match filesystem::write_file(filename, &content) {
                 Ok(()) => {
                     self.is_modified = false;
@@ -1393,11 +1418,13 @@ impl App {
     fn open_file(&mut self, filename: &str) -> bool {
         match filesystem::read_file(filename) {
             Ok(content) => {
-                let (source, spr, map, sfx) = split_data_sections(&content);
+                let (source, spr, map, sfx, mus) = split_data_sections(&content);
                 self.sprite_editor.data = spr;
                 self.map_editor.data = map;
                 self.sfx_editor.data = sfx;
+                self.music_editor.data = mus;
                 self.sfx_player.mark_all_dirty();
+                self.music_player.mark_all_dirty();
                 self.reset_editor(TextBuffer::from_str(source), Some(filename.to_string()));
                 true
             }
@@ -1425,7 +1452,7 @@ impl App {
                 }
                 EditorAction::DialogCancel => {
                     self.mode = if is_shift_pressed() {
-                        AppMode::SfxEditor
+                        AppMode::MusicEditor
                     } else {
                         AppMode::Editing
                     };
@@ -1460,6 +1487,7 @@ impl App {
                 std::process::exit(0);
             }
             self.sfx_player.stop_all();
+            self.music_player.stop();
             self.terminal.push_output("stopped");
             self.run_state = None;
             self.mode = self.run_return_mode;
@@ -1485,6 +1513,7 @@ impl App {
                     self.terminal.push_output(&line);
                 }
                 self.pending_sfx_plays.append(&mut vm.sfx_queue);
+                self.pending_music_plays.append(&mut vm.music_queue);
             }
             Ok(VmResult::Continue) => {}
             Err(e) => {
@@ -1539,6 +1568,7 @@ impl App {
                 self.sprite_editor.append_data(&mut content);
                 self.map_editor.append_data(&mut content);
                 self.sfx_editor.append_data(&mut content);
+                self.music_editor.append_data(&mut content);
                 match filesystem::write_file(&name, &content) {
                     Ok(()) => {
                         self.current_filename = Some(name.clone());
@@ -1735,9 +1765,9 @@ impl App {
                 self.sfx_player.stop_all();
                 self.mode = AppMode::MapEditor;
             }
-            SfxEditorAction::ExitToTerminal => {
+            SfxEditorAction::ExitToMusicEditor => {
                 self.sfx_player.stop_all();
-                self.mode = AppMode::Terminal;
+                self.mode = AppMode::MusicEditor;
             }
             SfxEditorAction::Save => self.save_and_show_message(),
             SfxEditorAction::Run => self.run_program(),
@@ -1746,18 +1776,53 @@ impl App {
         }
     }
 
-    pub async fn process_audio(&mut self) {
-        if self.pending_sfx_plays.is_empty() {
-            return;
+    fn update_music_editor(&mut self) {
+        while get_char_pressed().is_some() {}
+        let output = self.music_editor.update();
+        if let Some(idx) = output.modified_pattern {
+            self.is_modified = true;
+            self.music_player.mark_dirty(idx);
         }
-        let plays = std::mem::take(&mut self.pending_sfx_plays);
-        for idx in plays {
-            if self
-                .sfx_player
-                .ensure_loaded(&self.sfx_editor.data, idx)
-                .await
-            {
-                self.sfx_player.play(&self.sfx_editor.data, idx);
+        match output.action {
+            MusicEditorAction::None => {}
+            MusicEditorAction::ExitToSfxEditor => {
+                self.music_player.stop();
+                self.mode = AppMode::SfxEditor;
+            }
+            MusicEditorAction::ExitToTerminal => {
+                self.music_player.stop();
+                self.mode = AppMode::Terminal;
+            }
+            MusicEditorAction::Save => self.save_and_show_message(),
+            MusicEditorAction::Run => self.run_program(),
+            MusicEditorAction::Audition(idx) => self.pending_music_plays.push(idx),
+            MusicEditorAction::Stop => self.music_player.stop(),
+        }
+    }
+
+    pub async fn process_audio(&mut self) {
+        if !self.pending_sfx_plays.is_empty() {
+            let plays = std::mem::take(&mut self.pending_sfx_plays);
+            for idx in plays {
+                if self
+                    .sfx_player
+                    .ensure_loaded(&self.sfx_editor.data, idx)
+                    .await
+                {
+                    self.sfx_player.play(&self.sfx_editor.data, idx);
+                }
+            }
+        }
+        if !self.pending_music_plays.is_empty() {
+            let plays = std::mem::take(&mut self.pending_music_plays);
+            for idx in plays {
+                if self
+                    .music_player
+                    .ensure_loaded(&self.music_editor.data, idx)
+                    .await
+                {
+                    self.music_player.play(idx);
+                }
             }
         }
     }
@@ -1857,6 +1922,14 @@ impl App {
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
+        } else if self.mode == AppMode::MusicEditor
+            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::MusicEditor)
+        {
+            clear_background(COLOR_BLACK);
+            self.music_editor.draw(&helpers);
+            if self.mode == AppMode::Message {
+                self.message_dialog.draw_scaled(&helpers);
+            }
         } else if self.mode == AppMode::Terminal {
             clear_background(COLOR_BLACK);
             self.draw_terminal(&helpers);
@@ -1882,7 +1955,8 @@ impl App {
                 | AppMode::Running
                 | AppMode::SpriteEditor
                 | AppMode::MapEditor
-                | AppMode::SfxEditor => {
+                | AppMode::SfxEditor
+                | AppMode::MusicEditor => {
                     unreachable!()
                 }
             }
@@ -2126,40 +2200,60 @@ impl App {
     }
 }
 
-pub fn split_data_sections(content: &str) -> (&str, [u8; 4096], [u8; 4096], [u8; SFX_REGION_SIZE]) {
+pub fn split_data_sections(
+    content: &str,
+) -> (
+    &str,
+    [u8; 4096],
+    [u8; 4096],
+    [u8; SFX_REGION_SIZE],
+    [u8; MUSIC_REGION_SIZE],
+) {
     const SPR: &str = "\n__spr__\n";
     const MAP: &str = "\n__map__\n";
     const SFX: &str = "\n__sfx__\n";
+    const MUS: &str = "\n__mus__\n";
     let mut spr = [0u8; 4096];
     let mut map = [0u8; 4096];
     let mut sfx = [0u8; SFX_REGION_SIZE];
+    let mut mus = [0u8; MUSIC_REGION_SIZE];
 
     let spr_marker = content.find(SPR);
     let map_marker = content.find(MAP);
     let sfx_marker = content.find(SFX);
+    let mus_marker = content.find(MUS);
 
     let source_end = spr_marker
         .or(map_marker)
         .or(sfx_marker)
+        .or(mus_marker)
         .unwrap_or(content.len());
     let source = &content[..source_end];
 
     if let Some(pos) = spr_marker {
         let start = pos + SPR.len();
-        let end = map_marker.or(sfx_marker).unwrap_or(content.len());
+        let end = map_marker
+            .or(sfx_marker)
+            .or(mus_marker)
+            .unwrap_or(content.len());
         parse_hex_section(&content[start..end], &mut spr);
     }
     if let Some(pos) = map_marker {
         let start = pos + MAP.len();
-        let end = sfx_marker.unwrap_or(content.len());
+        let end = sfx_marker.or(mus_marker).unwrap_or(content.len());
         parse_hex_section(&content[start..end], &mut map);
     }
     if let Some(pos) = sfx_marker {
         let start = pos + SFX.len();
-        parse_hex_section(&content[start..], &mut sfx);
+        let end = mus_marker.unwrap_or(content.len());
+        parse_hex_section(&content[start..end], &mut sfx);
+    }
+    if let Some(pos) = mus_marker {
+        let start = pos + MUS.len();
+        parse_hex_section(&content[start..], &mut mus);
     }
 
-    (source, spr, map, sfx)
+    (source, spr, map, sfx, mus)
 }
 
 fn parse_hex_section(hex: &str, buf: &mut [u8]) {

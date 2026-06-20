@@ -398,7 +398,7 @@ Constants are inlined at compile time.
 ### Audio
 
 - `sfx(n)`: Play sound effect
-- `music(n)`: Play music (TODO)
+- `music(n)`: Play music pattern
 
 ## Game Loop
 
