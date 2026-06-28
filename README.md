@@ -119,7 +119,6 @@ This editor has two panes which you set focus on one of them: The header and the
 - **Up/Down** change row (Pitch, Timbre, Volume, Detune)
 - **Alt+Up/Down** change current field by 1
 - **Shift+Up/Shift+Down** change current field on Pitch row by an octave
-- **0..7** set current field to that digit
 - **Delete/Backspace** clear current cell
 
 #### Header
@@ -148,7 +147,6 @@ Same two-pane structure as the Sfx editor.
 - **Up/Down** move row by 1, **Shift+Up/Down** by 8
 - **Alt+Up/Down** change current field by 1 (on Sfx, scrolls through valid SFX slots for the column)
 - **Alt+Shift+Up/Down** change Pitch by an octave
-- **0..9 A..F** set current field to that hex digit
 - **Delete/Backspace** clear current cell
 
 #### Header

@@ -344,23 +344,6 @@ impl SfxEditor {
             return SfxEditorOutput::none();
         }
 
-        for (code, val) in [
-            (KeyCode::Key0, 0),
-            (KeyCode::Key1, 1),
-            (KeyCode::Key2, 2),
-            (KeyCode::Key3, 3),
-            (KeyCode::Key4, 4),
-            (KeyCode::Key5, 5),
-            (KeyCode::Key6, 6),
-            (KeyCode::Key7, 7),
-        ] {
-            if is_key_pressed(code) {
-                self.push_undo();
-                self.set_field(val);
-                return SfxEditorOutput::modified(self.selected);
-            }
-        }
-
         SfxEditorOutput::none()
     }
 
@@ -375,21 +358,6 @@ impl SfxEditor {
             Row::Timbre => pack_cell(p as u8, (t + delta).rem_euclid(8) as u8, v as u8, d as u8),
             Row::Volume => pack_cell(p as u8, t as u8, (v + delta).rem_euclid(8) as u8, d as u8),
             Row::Detune => pack_cell(p as u8, t as u8, v as u8, (d + delta).rem_euclid(8) as u8),
-        };
-        set_cell(&mut self.data, self.selected, self.cursor_cell, new);
-    }
-
-    fn set_field(&mut self, value: u8) {
-        let c = cell_at(&self.data, self.selected, self.cursor_cell);
-        let p = cell_pitch(c);
-        let t = cell_timbre(c);
-        let v = cell_volume(c);
-        let d = cell_detune(c);
-        let new = match self.cursor_row {
-            Row::Pitch => pack_cell(value & 0x3F, t, v, d),
-            Row::Timbre => pack_cell(p, value & 0x07, v, d),
-            Row::Volume => pack_cell(p, t, value & 0x07, d),
-            Row::Detune => pack_cell(p, t, v, value & 0x07),
         };
         set_cell(&mut self.data, self.selected, self.cursor_cell, new);
     }
@@ -576,7 +544,7 @@ impl SfxEditor {
         let hint = if self.header_focus {
             "tab:cells  shift+up/dn:+-10"
         } else {
-            "play:sp tab:hdr 0-7 alt+up/dn"
+            "play:sp tab:hdr alt+up/dn"
         };
         for (i, c) in hint.chars().enumerate() {
             helpers.draw_char(c, i as f32 * TILE_WIDTH as f32, HINT_Y, COLOR_DARK_GRAY);
