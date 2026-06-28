@@ -35,6 +35,7 @@ Monokrom boots into a terminal. Press **Escape** to cycle through the following 
 - Sprite editor
 - Map editor
 - Sfx editor
+- Music editor
 
 **Shift+Escape** cycles in reverse.
 
@@ -124,6 +125,35 @@ This editor has two panes which you set focus on one of them: The header and the
 #### Header
 
 - **Left/Right** previous / next field (Sfx, Channel, Speed, LoopStart, LoopEnd)
+- **Up/Down** change value by 1
+- **Shift+Up/Down** change value by 10
+
+### Music editor
+
+Same two-pane structure as the Sfx editor.
+
+#### Global
+
+- **Tab** toggle header / grid focus
+- **Space** play selected pattern, **Shift+Space** stop playback
+- **Ctrl+S** save
+- **Ctrl+Z** undo, **Ctrl+Y** redo
+- **Ctrl+Shift+C/V** copy/paste whole pattern
+
+#### Grid
+
+- **Ctrl+C/V** copy/paste cell
+- **Left/Right** step through cell fields (Pitch, Sfx, Volume, Detune), wrapping into the adjacent channel column at the edge
+- **Shift+Left/Right** move between channels (PU1, PU2, WV, NS)
+- **Up/Down** move row by 1, **Shift+Up/Down** by 8
+- **Alt+Up/Down** change current field by 1 (on Sfx, scrolls through valid SFX slots for the column)
+- **Alt+Shift+Up/Down** change Pitch by an octave
+- **0..9 A..F** set current field to that hex digit
+- **Delete/Backspace** clear current cell
+
+#### Header
+
+- **Left/Right** previous / next field (Pattern, Speed, End, LoopStart, LoopEnd)
 - **Up/Down** change value by 1
 - **Shift+Up/Down** change value by 10
 
