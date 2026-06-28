@@ -30,7 +30,7 @@ const HINT_Y: f32 = SCREEN_HEIGHT as f32 - 6.0;
 
 const ROW_LABEL_X: f32 = 0.0;
 const CHANNEL_X: [f32; MUSIC_CHANNELS] = [16.0, 52.0, 88.0, 124.0];
-const CHANNEL_SLOT_WIDTH: f32 = 5.0 * TILE_WIDTH as f32;
+const CHANNEL_SLOT_WIDTH: f32 = 6.0 * TILE_WIDTH as f32;
 
 const DEFAULT_PITCH: u8 = 24;
 
@@ -830,10 +830,9 @@ impl MusicEditor {
         let pitch = music_cell_pitch(cell);
         let volume = music_cell_volume(cell);
         if volume == 0 {
-            for i in 0..3 {
+            for i in 0..6 {
                 helpers.draw_char('-', x + i as f32 * TILE_WIDTH as f32, y, COLOR_DARK_GRAY);
             }
-            helpers.draw_char('-', x + 4.0 * TILE_WIDTH as f32, y, COLOR_DARK_GRAY);
             return;
         }
         let (note, sharp, oct) = pitch_to_note_chars(pitch);
@@ -841,8 +840,12 @@ impl MusicEditor {
         helpers.draw_char(sharp, x + TILE_WIDTH as f32, y, color);
         helpers.draw_char(oct, x + 2.0 * TILE_WIDTH as f32, y, color);
         let sfx = music_cell_sfx(cell);
-        let sc = sfx_hex_char(sfx);
-        helpers.draw_char(sc, x + 4.0 * TILE_WIDTH as f32, y, color);
+        helpers.draw_char(sfx_hex_char(sfx), x + 3.0 * TILE_WIDTH as f32, y, color);
+        let det = music_cell_detune(cell);
+        let vc = char::from_digit(volume as u32, 10).unwrap_or('?');
+        let dc = char::from_digit(det as u32, 10).unwrap_or('?');
+        helpers.draw_char(vc, x + 4.0 * TILE_WIDTH as f32, y, color);
+        helpers.draw_char(dc, x + 5.0 * TILE_WIDTH as f32, y, color);
     }
 
     fn draw_cursor(&self, helpers: &DrawHelpers) {
@@ -864,6 +867,16 @@ impl MusicEditor {
         helpers.draw_rect(x + w - 1.0, top, 1.0, ROW_HEIGHT + 1.0, COLOR_LIGHT_GRAY);
         helpers.draw_rect(x, top, w, 1.0, COLOR_LIGHT_GRAY);
         helpers.draw_rect(x, bot, w, 1.0, COLOR_LIGHT_GRAY);
+        let (start, len) = match self.cursor_field {
+            Field::Pitch => (0, 3),
+            Field::Sfx => (3, 1),
+            Field::Volume => (4, 1),
+            Field::Detune => (5, 1),
+        };
+        let sub_x = x + start as f32 * TILE_WIDTH as f32;
+        let sub_w = len as f32 * TILE_WIDTH as f32;
+        helpers.draw_rect(sub_x, top, sub_w, 1.0, COLOR_WHITE);
+        helpers.draw_rect(sub_x, bot, sub_w, 1.0, COLOR_WHITE);
     }
 
     fn draw_info(&self, helpers: &DrawHelpers) {
