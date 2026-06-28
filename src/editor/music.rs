@@ -323,7 +323,7 @@ impl MusicEditor {
         match self.header_field {
             HeaderField::Pattern => {}
             HeaderField::Speed => {
-                sp = (sp as i32 + delta).clamp(1, MAX_SPEED as i32) as u8;
+                sp = (sp as i32 + delta).clamp(0, MAX_SPEED as i32) as u8;
             }
             HeaderField::End => {
                 end = ((end as i32 + delta).rem_euclid(3)) as u8;

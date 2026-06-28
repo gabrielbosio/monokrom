@@ -13,7 +13,7 @@ const MASTER_GAIN: f32 = 0.4;
 const MAX_LOOP_SECS: f32 = 5.0;
 const MAX_LOOP_ITERS: usize = 64;
 
-pub const MAX_SPEED: u8 = 16;
+pub const MAX_SPEED: u8 = 15;
 
 pub const CH_PULSE1: u8 = 0;
 pub const CH_PULSE2: u8 = 1;
@@ -29,7 +29,7 @@ pub fn sfx_channel(data: &[u8], idx: u8) -> u8 {
 }
 
 pub fn sfx_speed(data: &[u8], idx: u8) -> u8 {
-    data[idx as usize * SFX_SIZE + 1]
+    data[idx as usize * SFX_SIZE + 1].min(MAX_SPEED)
 }
 
 pub fn sfx_loop_start(data: &[u8], idx: u8) -> u8 {
@@ -89,7 +89,7 @@ pub fn is_empty(data: &[u8], idx: u8) -> bool {
 }
 
 pub fn music_pattern_speed(data: &[u8], idx: u8) -> u8 {
-    data[idx as usize * MUSIC_PATTERN_SIZE]
+    data[idx as usize * MUSIC_PATTERN_SIZE].min(MAX_SPEED)
 }
 
 pub fn music_pattern_end_flag(data: &[u8], idx: u8) -> u8 {
@@ -229,8 +229,8 @@ fn sample_wave(bank: u8, phase: f32) -> f32 {
 
 pub fn render_sfx(data: &[u8], idx: u8) -> Vec<u8> {
     let sfx_type = sfx_channel(data, idx);
-    let speed = sfx_speed(data, idx).clamp(1, MAX_SPEED);
-    let t = (speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+    let speed = sfx_speed(data, idx);
+    let t = speed as f32 / MAX_SPEED as f32;
     let cell_secs = SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(t);
     let cell_samples = (cell_secs * SAMPLE_RATE as f32).max(1.0) as usize;
     let total = cell_samples * SFX_CELLS;
@@ -344,8 +344,8 @@ fn make_wav(samples: &[i16]) -> Vec<u8> {
 }
 
 pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
-    let m_speed = music_pattern_speed(music_data, idx).clamp(1, MAX_SPEED);
-    let t = (m_speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+    let m_speed = music_pattern_speed(music_data, idx);
+    let t = m_speed as f32 / MAX_SPEED as f32;
     let row_secs = SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(t);
     let row_samples = (row_secs * SAMPLE_RATE as f32).max(1.0) as usize;
     let total = row_samples * MUSIC_ROWS;
@@ -381,8 +381,8 @@ pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
             }
             prev = Some((m_sfx, m_pitch));
 
-            let s_speed = sfx_speed(sfx_data, m_sfx).clamp(1, MAX_SPEED);
-            let st = (s_speed - 1) as f32 / (MAX_SPEED - 1) as f32;
+            let s_speed = sfx_speed(sfx_data, m_sfx);
+            let st = s_speed as f32 / MAX_SPEED as f32;
             let sfx_cell_secs =
                 SLOWEST_CELL_SECS * (FASTEST_CELL_SECS / SLOWEST_CELL_SECS).powf(st);
             let sfx_cell_samples = (sfx_cell_secs * SAMPLE_RATE as f32).max(1.0) as usize;

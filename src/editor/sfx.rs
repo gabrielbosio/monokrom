@@ -285,7 +285,7 @@ impl SfxEditor {
                 ch = ((ch as i32 + delta).rem_euclid(3)) as u8;
             }
             HeaderField::Speed => {
-                sp = (sp as i32 + delta).clamp(1, MAX_SPEED as i32) as u8;
+                sp = (sp as i32 + delta).clamp(0, MAX_SPEED as i32) as u8;
             }
             HeaderField::LoopStart => {
                 ls = (ls as i32 + delta).clamp(0, SFX_CELLS as i32) as u8;
