@@ -354,6 +354,9 @@ pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
 
     for ch in 0..MUSIC_CHANNELS {
         let column_type = music_column_sfx_type(ch as u8);
+        let mut phase: f32 = 0.0;
+        let mut lfsr: u16 = 0x7FFF;
+        let mut prev: Option<(u8, u8)> = None;
 
         for row in 0..MUSIC_ROWS {
             let m_cell = music_cell_at(music_data, idx, row as u8, ch as u8);
@@ -362,12 +365,21 @@ pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
             let m_vol = music_cell_volume(m_cell);
             let m_det = music_cell_detune(m_cell);
 
-            if m_vol == 0 {
+            if m_vol == 0
+                || is_empty(sfx_data, m_sfx)
+                || sfx_channel(sfx_data, m_sfx) != column_type
+            {
+                phase = 0.0;
+                lfsr = 0x7FFF;
+                prev = None;
                 continue;
             }
-            if is_empty(sfx_data, m_sfx) || sfx_channel(sfx_data, m_sfx) != column_type {
-                continue;
+
+            if prev != Some((m_sfx, m_pitch)) {
+                phase = 0.0;
+                lfsr = 0x7FFF;
             }
+            prev = Some((m_sfx, m_pitch));
 
             let s_speed = sfx_speed(sfx_data, m_sfx).clamp(1, MAX_SPEED);
             let st = (s_speed - 1) as f32 / (MAX_SPEED - 1) as f32;
@@ -379,8 +391,6 @@ pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
             let transpose = m_pitch as i32 - sfx_base_pitch;
             let music_vol = m_vol as f32 / 7.0;
 
-            let mut phase: f32 = 0.0;
-            let mut lfsr: u16 = 0x7FFF;
             let row_offset = row * row_samples;
 
             for s in 0..row_samples {
@@ -439,7 +449,7 @@ pub fn render_music(music_data: &[u8], sfx_data: &[u8], idx: u8) -> Vec<u8> {
                     _ => 0.0,
                 };
 
-                mix[row_offset + s] += raw * combined_vol * MASTER_GAIN / MUSIC_CHANNELS as f32;
+                mix[row_offset + s] += raw * combined_vol * MASTER_GAIN;
             }
         }
     }
