@@ -403,10 +403,12 @@ impl Vm {
                 self.fb_circ(x as i32, y as i32, r as i32, col as u8);
             }
             OP_SPR => {
+                let flip_y = self.pop()?;
+                let flip_x = self.pop()?;
                 let y = self.pop()?;
                 let x = self.pop()?;
                 let n = self.pop()?;
-                self.fb_spr(n as u16, x as i32, y as i32);
+                self.fb_spr(n as u16, x as i32, y as i32, flip_x != 0, flip_y != 0);
             }
             OP_PRINTS => {
                 let col = self.pop()?;
@@ -689,7 +691,7 @@ impl Vm {
         }
     }
 
-    fn fb_spr(&mut self, n: u16, x: i32, y: i32) {
+    fn fb_spr(&mut self, n: u16, x: i32, y: i32, flip_x: bool, flip_y: bool) {
         if n as usize >= SPRITE_COUNT {
             return;
         }
@@ -697,16 +699,20 @@ impl Vm {
         for row in 0..8i32 {
             let b0 = self.memory[base + row as usize * 2];
             let b1 = self.memory[base + row as usize * 2 + 1];
+            let py = if flip_y { 7 - row } else { row };
             for col in 0..4i32 {
                 let c0 = (b0 >> (6 - col * 2)) & 3;
                 if c0 != 0 {
-                    self.fb_pset(x + col, y + row, c0);
+                    let px = if flip_x { 7 - col } else { col };
+                    self.fb_pset(x + px, y + py, c0);
                 }
             }
             for col in 0..4i32 {
                 let c1 = (b1 >> (6 - col * 2)) & 3;
                 if c1 != 0 {
-                    self.fb_pset(x + 4 + col, y + row, c1);
+                    let sx = 4 + col;
+                    let px = if flip_x { 7 - sx } else { sx };
+                    self.fb_pset(x + px, y + py, c1);
                 }
             }
         }
@@ -720,7 +726,7 @@ impl Vm {
                 if mx >= 0 && mx < MAP_WIDTH as i32 && my >= 0 && my < MAP_HEIGHT as i32 {
                     let tile =
                         self.memory[MAP_REGION_START + my as usize * MAP_WIDTH + mx as usize];
-                    self.fb_spr(tile as u16, dx + tx * 8, dy + ty * 8);
+                    self.fb_spr(tile as u16, dx + tx * 8, dy + ty * 8, false, false);
                 }
             }
         }
@@ -1154,7 +1160,7 @@ mod tests {
     fn spr_renders_pixels() {
         // Manually poke sprite 0 data and call spr(0, 10, 20)
         let src =
-            "fn main()\n  poke(12288, 0xFF)\n  poke(12289, 0x00)\n  spr(0, 10, 20)\n  flip()\nend";
+            "fn main()\n  poke(12288, 0xFF)\n  poke(12289, 0x00)\n  spr(0, 10, 20, false, false)\n  flip()\nend";
         let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         let result = vm.run_until_flip().unwrap();
@@ -1171,12 +1177,42 @@ mod tests {
     #[test]
     fn spr_transparency() {
         // Color 0 should not overwrite existing pixels
-        let src = "fn main()\n  cls(0)\n  pset(10, 20, 2)\n  poke(12288, 0x00)\n  spr(0, 10, 20)\n  flip()\nend";
+        let src = "fn main()\n  cls(0)\n  pset(10, 20, 2)\n  poke(12288, 0x00)\n  spr(0, 10, 20, false, false)\n  flip()\nend";
         let bc = compile(src).unwrap();
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         // pset drew color 2, sprite has color 0, so should not overwrite
         assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 2);
+    }
+
+    #[test]
+    fn spr_flip_x() {
+        // Row 0 cols 0-3 = color 3, cols 4-7 transparent. flip_x mirrors columns.
+        let src =
+            "fn main()\n  poke(12288, 0xFF)\n  poke(12289, 0x00)\n  spr(0, 10, 20, true, false)\n  flip()\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        // Source cols 0-3 land on dest cols 7-4 (x = 17..14)
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 17], 3);
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 14], 3);
+        // Source cols 4-7 (transparent) land on dest cols 3-0 (x = 13..10)
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 13], 0);
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 0);
+    }
+
+    #[test]
+    fn spr_flip_y() {
+        // Only row 0 has pixels. flip_y mirrors rows, moving them to row 7.
+        let src =
+            "fn main()\n  poke(12288, 0xFF)\n  poke(12289, 0x00)\n  spr(0, 10, 20, false, true)\n  flip()\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        // Source row 0 lands on dest row 7 (y = 27)
+        assert_eq!(vm.framebuffer[27 * FB_WIDTH + 10], 3);
+        // Original top row stays empty
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 0);
     }
 
     #[test]

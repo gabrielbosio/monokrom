@@ -269,7 +269,7 @@ fn draw(game: ref Game)
   // Draw spots
   for _, ref spot in game.level.spots
     if spot.alive
-      spr(4, spot.x - bounds.x0 * 8, spot.y - bounds.y0 * 8 + 8)
+      spr(4, spot.x - bounds.x0 * 8, spot.y - bounds.y0 * 8 + 8, false, false)
     end
   end
   // Draw crates. Sprite depends
@@ -283,11 +283,11 @@ fn draw(game: ref Game)
     if crate.highlight
       s = 5
     end
-    spr(s, crate.x - bounds.x0 * 8, crate.y - bounds.y0 * 8 + 8)
+    spr(s, crate.x - bounds.x0 * 8, crate.y - bounds.y0 * 8 + 8, false, false)
   end
   // Draw player
   player = ref game.level.player
-  spr(1, player.x - bounds.x0 * 8, player.y - bounds.y0 * 8 + 8)
+  spr(1, player.x - bounds.x0 * 8, player.y - bounds.y0 * 8 + 8, false, false)
   
   // Draw HUD
   color = 3

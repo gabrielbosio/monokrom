@@ -261,8 +261,8 @@ fn draw(game: ref Game)
   else
     // Draw the player
     player = ref game.player
-    spr(2, player.x, player.y)
-    spr(3, player.x + 8, player.y)
+    spr(2, player.x, player.y, false, false)
+    spr(3, player.x + 8, player.y, false, false)
     
     // Draw the ball
     ball = ref game.ball
@@ -274,8 +274,8 @@ fn draw(game: ref Game)
         continue
       end
       
-      spr(0, brick.x, brick.y)
-      spr(1, brick.x + 8, brick.y)
+      spr(0, brick.x, brick.y, false, false)
+      spr(1, brick.x + 8, brick.y, false, false)
     end
   end
 end
