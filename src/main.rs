@@ -13,7 +13,10 @@ mod vm;
 use macroquad::prelude::*;
 
 use app::App;
-use config::{MAP_REGION_START, SFX_REGION_SIZE, SFX_REGION_START, SPRITE_REGION_START};
+use config::{
+    MAP_REGION_START, MUSIC_REGION_SIZE, MUSIC_REGION_START, SFX_REGION_SIZE, SFX_REGION_START,
+    SPRITE_REGION_START,
+};
 use vm::Vm;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -78,18 +81,24 @@ fn detect_embedded_game() -> Option<Vm> {
         vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE]
             .copy_from_slice(&payload[sfx_start..sfx_start + SFX_REGION_SIZE]);
     }
+    let mus_start = sfx_start + SFX_REGION_SIZE;
+    if payload.len() >= mus_start + MUSIC_REGION_SIZE {
+        vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE]
+            .copy_from_slice(&payload[mus_start..mus_start + MUSIC_REGION_SIZE]);
+    }
     Some(vm)
 }
 
 #[cfg(target_arch = "wasm32")]
 fn detect_embedded_game() -> Option<Vm> {
     let full_source = get_embedded_source()?;
-    let (source, spr, map, sfx) = split_data_sections(&full_source);
+    let (source, spr, map, sfx, mus) = split_data_sections(&full_source);
     let bc = compile(source).ok()?;
     let mut vm = Vm::new(&bc, 0.0).ok()?;
     vm.memory[SPRITE_REGION_START..SPRITE_REGION_START + 4096].copy_from_slice(&spr);
     vm.memory[MAP_REGION_START..MAP_REGION_START + 4096].copy_from_slice(&map);
     vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE].copy_from_slice(&sfx);
+    vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE].copy_from_slice(&mus);
     Some(vm)
 }
 
