@@ -518,9 +518,7 @@ impl SfxPlayer {
     }
 
     pub fn mark_all_dirty(&mut self) {
-        for d in &mut self.dirty {
-            *d = true;
-        }
+        self.dirty.fill(true);
     }
 
     pub async fn ensure_loaded(&mut self, data: &[u8], idx: u8) -> bool {
@@ -623,9 +621,7 @@ impl MusicPlayer {
     }
 
     pub fn mark_all_dirty(&mut self) {
-        for d in &mut self.dirty {
-            *d = true;
-        }
+        self.dirty.fill(true);
     }
 
     pub async fn ensure_loaded(&mut self, music_data: &[u8], sfx_data: &[u8], idx: u8) -> bool {
