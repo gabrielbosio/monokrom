@@ -246,10 +246,7 @@ impl TypeCheckCtx {
             ExprKind::FieldAccess { expr: e, field } => self.check_field_access(e, field, span),
             ExprKind::Ref(inner) => {
                 let hir_inner = self.check_expr(inner);
-                if !matches!(
-                    &inner.kind,
-                    ExprKind::Ident(_) | ExprKind::FieldAccess { .. } | ExprKind::Index { .. }
-                ) {
+                if !is_lvalue(&inner.kind) {
                     self.error_at(span, "ref requires an lvalue (variable, field, or index)");
                 }
                 let result_ty = if matches!(&hir_inner.ty, HirType::Ref(_)) {
@@ -626,7 +623,12 @@ impl TypeCheckCtx {
                 }
                 let hir_target = self.check_expr(target);
                 let hir_value = self.check_expr(value);
-                if let HirType::Ref(inner) = &hir_target.ty {
+                if !is_lvalue(&target.kind) {
+                    self.error_at(
+                        span,
+                        "assignment requires an lvalue (variable, field, or index)",
+                    );
+                } else if let HirType::Ref(inner) = &hir_target.ty {
                     // Ref target: accept Ref(T) (rebind) or T (write-through)
                     if hir_value.ty != hir_target.ty && hir_value.ty != **inner {
                         self.error_at(
@@ -1015,6 +1017,15 @@ fn collect_locals(stmts: &[HirStmt], locals: &mut Vec<(String, HirType)>) {
             _ => {}
         }
     }
+}
+
+/// Expressions that denote a memory location, so they can be assigned to or
+/// have a ref taken.
+fn is_lvalue(kind: &ExprKind) -> bool {
+    matches!(
+        kind,
+        ExprKind::Ident(_) | ExprKind::FieldAccess { .. } | ExprKind::Index { .. }
+    )
 }
 
 /// A value of type `actual` is accepted where `expected` is required when the
@@ -1450,6 +1461,36 @@ mod tests {
     fn ref_missing_at_call_site_error() {
         let errs = lower_err("fn g(x: ref int)\nend\nfn f()\n  y = 5\n  g(y)\nend");
         assert!(errs.iter().any(|e| e.message.contains("ref")));
+    }
+
+    #[test]
+    fn assign_to_literal_error() {
+        for src in [
+            "fn f()\n  5 = 3\nend",
+            "fn f()\n  true = false\nend",
+            "fn f()\n  1.5 = 2.5\nend",
+        ] {
+            let errs = lower_err(src);
+            assert!(errs.iter().any(|e| e.message.contains("lvalue")), "{src}");
+        }
+    }
+
+    #[test]
+    fn assign_to_constant_error() {
+        for src in [
+            "fn f()\n  INT_MAX = 5\nend",
+            "fn f()\n  FIXED_MAX = 1.0\nend",
+            "fn f()\n  PI = 1.0\nend",
+        ] {
+            let errs = lower_err(src);
+            assert!(errs.iter().any(|e| e.message.contains("lvalue")), "{src}");
+        }
+    }
+
+    #[test]
+    fn assign_to_call_error() {
+        let errs = lower_err("fn g(): int\n  return 1\nend\nfn f()\n  g() = 5\nend");
+        assert!(errs.iter().any(|e| e.message.contains("lvalue")));
     }
 
     #[test]
