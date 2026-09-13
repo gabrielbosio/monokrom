@@ -50,6 +50,8 @@ fn classify(token: &Token) -> CharStyle {
         | Token::Void
         | Token::Pi
         | Token::Euler
+        | Token::FixedMin
+        | Token::FixedMax
         | Token::IntMin
         | Token::IntMax => CharStyle::Keyword,
 

@@ -73,6 +73,8 @@ fn token_description(token: &lexer::Token) -> &str {
         Void => "'void'",
         Pi => "'PI'",
         Euler => "'E'",
+        FixedMin => "'FIXED_MIN'",
+        FixedMax => "'FIXED_MAX'",
         IntMin => "'INT_MIN'",
         IntMax => "'INT_MAX'",
         Eq => "'=='",
@@ -122,6 +124,8 @@ fn simplify_expected(expected: &[String]) -> String {
         "\"~\"",
         "\"PI\"",
         "\"E\"",
+        "\"FIXED_MIN\"",
+        "\"FIXED_MAX\"",
         "\"INT_MIN\"",
         "\"INT_MAX\"",
     ];

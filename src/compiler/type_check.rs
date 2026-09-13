@@ -206,6 +206,10 @@ impl TypeCheckCtx {
                     ty: HirType::Fixed,
                 }
             }
+            ExprKind::FixedRaw(n) => HirExpr {
+                kind: HirExprKind::FixedLit(*n),
+                ty: HirType::Fixed,
+            },
             ExprKind::BoolLit(b) => HirExpr {
                 kind: HirExprKind::BoolLit(*b),
                 ty: HirType::Bool,
@@ -1291,6 +1295,21 @@ mod tests {
         // Rounds down into range instead of overflowing
         assert_eq!(parse_fixed("127.998"), Some(i16::MAX));
         assert_eq!(parse_fixed("128.0"), None);
+    }
+
+    #[test]
+    fn fixed_min_max_constants() {
+        let hir = lower("a = FIXED_MIN\nb = FIXED_MAX");
+        assert_eq!(hir.globals[0].ty, HirType::Fixed);
+        assert_eq!(hir.globals[1].ty, HirType::Fixed);
+        assert!(matches!(
+            hir.globals[0].init.as_ref().map(|e| &e.kind),
+            Some(HirExprKind::FixedLit(v)) if *v == i16::MIN
+        ));
+        assert!(matches!(
+            hir.globals[1].init.as_ref().map(|e| &e.kind),
+            Some(HirExprKind::FixedLit(v)) if *v == i16::MAX
+        ));
     }
 
     #[test]

@@ -131,6 +131,9 @@ impl PartialEq for Expr {
 pub enum ExprKind {
     IntLit(i16),
     FixedLit(String),
+    /// A fixed value given by its raw representation, so it stays correct
+    /// whatever the fixed-point split is.
+    FixedRaw(i16),
     BoolLit(bool),
     StrLit(String),
     Ident(String),

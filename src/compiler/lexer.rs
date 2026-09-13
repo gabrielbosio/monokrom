@@ -50,6 +50,12 @@ pub enum Token {
     Pi,
     #[token("E", priority = 3)]
     Euler,
+    #[token("FIXED_MIN")]
+    FixedMin,
+
+    #[token("FIXED_MAX")]
+    FixedMax,
+
     #[token("INT_MIN")]
     IntMin,
     #[token("INT_MAX")]

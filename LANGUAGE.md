@@ -382,6 +382,8 @@ val = peek(addr) + peek(addr + 1) * 256
 | `E` | `2.71875` | Euler's number, approximated to `fixed` precision |
 | `INT_MIN` | `-32768` | Minimum `int` value |
 | `INT_MAX` | `32767` | Maximum `int` value |
+| `FIXED_MIN` | `-128.0` | Minimum `fixed` value |
+| `FIXED_MAX` | `127.99609375` | Maximum `fixed` value |
 
 Constants are inlined at compile time.
 
