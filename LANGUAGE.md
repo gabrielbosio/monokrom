@@ -24,10 +24,12 @@ end
 ## Types
 
 - `int`: 16-bit signed integer. Range goes from -32768 to 32767.
-- `fixed`: 9.7 fixed-point. Range goes from -256.0 to 255.9921875. Precision is 0.0078125. Compiler sugar over `int`.
+- `fixed`: 8.8 fixed-point. Range goes from -128.0 to 127.99609375. Precision is 0.00390625. Compiler sugar over `int`.
 - `bool`: `true` or `false`.
 - `str`: Immutable string.
 - `void`: For functions that return nothing.
+
+A literal that does not fit its type is a compile error. At runtime, arithmetic wraps around on overflow.
 
 Integer literals support decimal, hexadecimal, binary, and octal:
 
@@ -362,15 +364,15 @@ val = peek(addr) + peek(addr + 1) * 256
 - `abs(x): int`: Absolute value.
 - `min(a, b): int`: Minimum.
 - `max(a, b): int`: Maximum.
-- `exp(x): fixed`: Euler's number raised to the power `x`.
+- `exp(x): fixed`: Euler's number raised to the power `x`. Clamps to the `fixed` range instead of wrapping.
 - `log(x): fixed`: Natural logarithm (ln). Returns `0` for `x <= 0`.
-- `pow(x, y): fixed`: `x` raised to the power `y`.
+- `pow(x, y): fixed`: `x` raised to the power `y`. Clamps to the `fixed` range instead of wrapping.
 - `atan2(y, x): fixed`: Two-argument arctangent (radians).
 
 ### Conversion
 
-- `ftoi(x): int`: Fixed to integer (truncates fractional part)
-- `itof(x): fixed`: Integer to fixed-point
+- `ftoi(x): int`: Fixed to integer, rounding down.
+- `itof(x): fixed`: Integer to fixed-point. The integer must fit the `fixed` range or the result wraps.
 
 ### Constants
 
