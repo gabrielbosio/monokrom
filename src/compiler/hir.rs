@@ -214,3 +214,11 @@ pub fn type_size(ty: &HirType, structs: &[HirStruct]) -> u16 {
             .unwrap_or(0),
     }
 }
+
+/// Reads a `ref T` as a `T`. Non-ref types are returned unchanged.
+pub fn deref_type(ty: &HirType) -> &HirType {
+    match ty {
+        HirType::Ref(inner) => inner.as_ref(),
+        other => other,
+    }
+}

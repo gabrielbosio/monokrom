@@ -181,13 +181,6 @@ impl TypeCheckCtx {
         addr
     }
 
-    fn deref_type(ty: &HirType) -> &HirType {
-        match ty {
-            HirType::Ref(inner) => inner.as_ref(),
-            other => other,
-        }
-    }
-
     fn check_expr(&mut self, expr: &Expr) -> HirExpr {
         let span = expr.span;
         match &expr.kind {
@@ -272,8 +265,8 @@ impl TypeCheckCtx {
     fn check_binop(&mut self, op: BinOp, lhs: &Expr, rhs: &Expr, span: Span) -> HirExpr {
         let lhs_hir = self.check_expr(lhs);
         let rhs_hir = self.check_expr(rhs);
-        let lhs_ty = Self::deref_type(&lhs_hir.ty);
-        let rhs_ty = Self::deref_type(&rhs_hir.ty);
+        let lhs_ty = deref_type(&lhs_hir.ty);
+        let rhs_ty = deref_type(&rhs_hir.ty);
 
         let is_comparison = matches!(
             op,
@@ -350,7 +343,7 @@ impl TypeCheckCtx {
 
     fn check_unaryop(&mut self, op: UnaryOp, expr: &Expr, span: Span) -> HirExpr {
         let inner = self.check_expr(expr);
-        let inner_ty = Self::deref_type(&inner.ty);
+        let inner_ty = deref_type(&inner.ty);
         match op {
             UnaryOp::Neg => {
                 if *inner_ty != HirType::Int && *inner_ty != HirType::Fixed {
@@ -414,7 +407,7 @@ impl TypeCheckCtx {
                 for (i, arg) in args.iter().enumerate() {
                     let hir_arg = self.check_expr(arg);
                     if let Some(expected) = expected_params.get(i) {
-                        if hir_arg.ty != *expected {
+                        if !type_matches(&hir_arg.ty, expected) {
                             self.error_at(
                                 arg.span,
                                 format!(
@@ -465,8 +458,7 @@ impl TypeCheckCtx {
                             }
                         } else {
                             // Non-ref param: accept exact match or auto-deref
-                            let arg_deref = Self::deref_type(&hir_arg.ty);
-                            if hir_arg.ty != *expected && arg_deref != expected {
+                            if !type_matches(&hir_arg.ty, expected) {
                                 self.error_at(
                                     arg.span,
                                     format!(
@@ -516,11 +508,10 @@ impl TypeCheckCtx {
     fn check_index(&mut self, expr: &Expr, index: &Expr, span: Span) -> HirExpr {
         let base = self.check_expr(expr);
         let idx = self.check_expr(index);
-        let idx_ty = Self::deref_type(&idx.ty);
-        if *idx_ty != HirType::Int {
+        if !type_matches(&idx.ty, &HirType::Int) {
             self.error_at(span, format!("index must be int, got {}", idx.ty));
         }
-        let base_ty = Self::deref_type(&base.ty);
+        let base_ty = deref_type(&base.ty);
         let elem_ty = match base_ty {
             HirType::Array(elem, _) => *elem.clone(),
             other => {
@@ -539,7 +530,7 @@ impl TypeCheckCtx {
 
     fn check_field_access(&mut self, expr: &Expr, field: &str, span: Span) -> HirExpr {
         let base = self.check_expr(expr);
-        let base_ty = Self::deref_type(&base.ty);
+        let base_ty = deref_type(&base.ty);
         let struct_name = match base_ty {
             HirType::Struct(name) => name.clone(),
             other => {
@@ -587,7 +578,7 @@ impl TypeCheckCtx {
                 let hir_value = value.as_ref().map(|v| {
                     let hv = self.check_expr(v);
                     // Allow auto-deref: Ref(T) value for T declared type
-                    if hv.ty != hir_ty && *Self::deref_type(&hv.ty) != hir_ty {
+                    if !type_matches(&hv.ty, &hir_ty) {
                         self.error_at(span, format!("{name}: expected {}, got {}", hir_ty, hv.ty));
                     }
                     hv
@@ -608,7 +599,7 @@ impl TypeCheckCtx {
                         let ty = if matches!(&hir_value.kind, HirExprKind::AddrOf(_)) {
                             hir_value.ty.clone()
                         } else {
-                            Self::deref_type(&hir_value.ty).clone()
+                            deref_type(&hir_value.ty).clone()
                         };
                         self.define_local(name, ty.clone());
                         return HirStmt::VarDecl {
@@ -630,9 +621,7 @@ impl TypeCheckCtx {
                     }
                 } else {
                     // Non-ref target: accept exact match or auto-deref
-                    if hir_target.ty != hir_value.ty
-                        && hir_target.ty != *Self::deref_type(&hir_value.ty)
-                    {
+                    if !type_matches(&hir_value.ty, &hir_target.ty) {
                         self.error_at(
                             span,
                             format!("assign: {} vs {}", hir_target.ty, hir_value.ty),
@@ -651,7 +640,7 @@ impl TypeCheckCtx {
                 else_body,
             } => {
                 let hir_cond = self.check_expr(cond);
-                if hir_cond.ty != HirType::Bool {
+                if !type_matches(&hir_cond.ty, &HirType::Bool) {
                     self.error_at(cond.span, format!("if: expected bool, got {}", hir_cond.ty));
                 }
                 self.push_scope();
@@ -661,7 +650,7 @@ impl TypeCheckCtx {
                     .iter()
                     .map(|(c, b)| {
                         let hc = self.check_expr(c);
-                        if hc.ty != HirType::Bool {
+                        if !type_matches(&hc.ty, &HirType::Bool) {
                             self.error_at(c.span, format!("else if: expected bool, got {}", hc.ty));
                         }
                         self.push_scope();
@@ -682,7 +671,7 @@ impl TypeCheckCtx {
             }
             ast::StmtKind::While { cond, body } => {
                 let hir_cond = self.check_expr(cond);
-                if hir_cond.ty != HirType::Bool {
+                if !type_matches(&hir_cond.ty, &HirType::Bool) {
                     self.error_at(
                         cond.span,
                         format!("while: expected bool, got {}", hir_cond.ty),
@@ -704,7 +693,7 @@ impl TypeCheckCtx {
                 body,
             } => {
                 let hir_iter = self.check_expr(iter);
-                let elem_ty = match &hir_iter.ty {
+                let elem_ty = match deref_type(&hir_iter.ty) {
                     HirType::Array(elem, _) => *elem.clone(),
                     other => {
                         self.error_at(iter.span, format!("for-in: expected array, got {}", other));
@@ -742,13 +731,13 @@ impl TypeCheckCtx {
             } => {
                 let hir_start = self.check_expr(start);
                 let hir_end = self.check_expr(end);
-                if Self::deref_type(&hir_start.ty) != &HirType::Int {
+                if !type_matches(&hir_start.ty, &HirType::Int) {
                     self.error_at(
                         start.span,
                         format!("for: start must be int, got {}", hir_start.ty),
                     );
                 }
-                if Self::deref_type(&hir_end.ty) != &HirType::Int {
+                if !type_matches(&hir_end.ty, &HirType::Int) {
                     self.error_at(
                         end.span,
                         format!("for: end must be int, got {}", hir_end.ty),
@@ -1013,17 +1002,20 @@ fn collect_locals(stmts: &[HirStmt], locals: &mut Vec<(String, HirType)>) {
     }
 }
 
+/// A value of type `actual` is accepted where `expected` is required when the
+/// types match exactly or when `actual` is a ref that auto-derefs to `expected`.
+fn type_matches(actual: &HirType, expected: &HirType) -> bool {
+    actual == expected || deref_type(actual) == expected
+}
+
 fn check_returns(stmts: &[HirStmt], expected: &HirType, ctx: &mut TypeCheckCtx) {
     for stmt in stmts {
         match stmt {
             HirStmt::Return(Some(expr)) => {
                 if *expected == HirType::Void {
                     ctx.error("void function cannot return a value".to_string());
-                } else if expr.ty != *expected {
-                    let deref = TypeCheckCtx::deref_type(&expr.ty);
-                    if deref != expected {
-                        ctx.error(format!("return: expected {}, got {}", expected, expr.ty));
-                    }
+                } else if !type_matches(&expr.ty, expected) {
+                    ctx.error(format!("return: expected {}, got {}", expected, expr.ty));
                 }
             }
             HirStmt::Return(None) if *expected != HirType::Void => {
@@ -1479,6 +1471,57 @@ mod tests {
     fn ref_auto_deref_index() {
         // ref int used as index auto-derefs
         let _hir = lower("a: array[10] of int\nfn f(i: ref int)\n  cls(a[i])\nend");
+    }
+
+    #[test]
+    fn ref_auto_deref_intrinsic_arg() {
+        // ref int auto-derefs when passed to an int intrinsic param
+        let _hir = lower("fn f(x: ref int)\n  cls(x)\nend");
+    }
+
+    #[test]
+    fn ref_auto_deref_intrinsic_bool_arg() {
+        let _hir = lower("fn f(b: ref bool)\n  spr(0, 0, 0, b, false)\nend");
+    }
+
+    #[test]
+    fn ref_auto_deref_intrinsic_fixed_arg() {
+        let _hir = lower("fn f(v: ref fixed)\n  tracef(v)\nend");
+    }
+
+    #[test]
+    fn intrinsic_ref_compound_arg_error() {
+        // Auto-deref only reaches the pointee type, so a struct still mismatches
+        let errs = lower_err("struct V\n  x: int\nend\nfn f(v: ref V)\n  cls(v)\nend");
+        assert!(errs.iter().any(|e| e.message.contains("cls arg 1")));
+    }
+
+    #[test]
+    fn ref_auto_deref_if_cond() {
+        let _hir = lower("fn f(b: ref bool)\n  if b\n  end\nend");
+    }
+
+    #[test]
+    fn ref_auto_deref_else_if_cond() {
+        let _hir = lower("fn f(b: ref bool)\n  if false\n  else if b\n  end\nend");
+    }
+
+    #[test]
+    fn ref_auto_deref_while_cond() {
+        let _hir = lower("fn f(b: ref bool)\n  while b\n  end\nend");
+    }
+
+    #[test]
+    fn ref_auto_deref_for_in_iter() {
+        // ref array iterates like the array it points to
+        let _hir = lower(
+            "struct C\n  x: int\nend\nfn f(a: ref array[4] of C)\n  for _, c in a\n    cls(c.x)\n  end\nend",
+        );
+    }
+
+    #[test]
+    fn ref_auto_deref_for_in_scalar_iter() {
+        let _hir = lower("fn f(a: ref array[4] of int)\n  for _, v in a\n    cls(v)\n  end\nend");
     }
 
     #[test]

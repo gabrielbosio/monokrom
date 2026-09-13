@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::compiler::ast::BinOp;
-use crate::compiler::hir::{type_size, HirExpr, HirExprKind, HirFunc, HirModule, HirStmt, HirType};
+use crate::compiler::hir::{
+    deref_type, type_size, HirExpr, HirExprKind, HirFunc, HirModule, HirStmt, HirType,
+};
 use crate::compiler::lir::{BasicBlock, BlockId, LirFunc, LirInst, LirModule, Terminator, Value};
 
 struct LowerCtx<'a> {
@@ -950,7 +952,7 @@ impl<'a> LowerCtx<'a> {
         iter: &HirExpr,
         body: &[HirStmt],
     ) {
-        let (elem_ty, count) = match &iter.ty {
+        let (elem_ty, count) = match deref_type(&iter.ty) {
             HirType::Array(elem, count) => (elem.as_ref().clone(), *count),
             _ => return,
         };
@@ -1297,6 +1299,19 @@ mod tests {
                 .any(|(_, inst)| matches!(inst, LirInst::Load { .. }))
         });
         assert!(has_load);
+    }
+
+    #[test]
+    fn for_in_ref_array() {
+        // Iterating a ref array must emit the loop, not silently skip it
+        let m = lir("fn f(a: ref array[3] of int)\n  for _, e in a\n    cls(e)\n  end\nend");
+        let f = find_func(&m, "f");
+        let has_intrinsic = f.blocks.iter().any(|b| {
+            b.insts
+                .iter()
+                .any(|(_, inst)| matches!(inst, LirInst::Intrinsic { .. }))
+        });
+        assert!(has_intrinsic);
     }
 
     #[test]

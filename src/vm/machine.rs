@@ -1379,6 +1379,62 @@ end";
     }
 
     #[test]
+    fn ref_scalar_arg_to_intrinsic() {
+        // The intrinsic must receive the pointee, not the address
+        let src =
+            "fn show(x: ref int)\n  tracei(x)\nend\n\nfn main()\n  a = 42\n  show(ref a)\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "42");
+    }
+
+    #[test]
+    fn ref_bool_as_condition() {
+        let src = "\
+fn pick(b: ref bool): int
+  if b
+    return 1
+  end
+  return 0
+end
+
+fn main()
+  flag = true
+  tracei(pick(ref flag))
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "1");
+    }
+
+    #[test]
+    fn for_in_over_ref_array() {
+        let src = "\
+xs: array[3] of int
+
+fn total(a: ref array[3] of int): int
+  n = 0
+  for _, v in a
+    n = n + v
+  end
+  return n
+end
+
+fn main()
+  xs[0] = 1
+  xs[1] = 2
+  xs[2] = 3
+  tracei(total(ref xs))
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "6");
+    }
+
+    #[test]
     fn nested_for_in_wildcard_indices() {
         let src = "\
 n: int

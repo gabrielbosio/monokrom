@@ -269,7 +269,7 @@ p.y = p.y + dy
 
 ### Auto-deref
 
-Refs auto-dereference in expressions. `x + 1` works whether `x` is `int` or `ref int`:
+Refs auto-dereference wherever a value is expected: operands, function and intrinsic arguments, array indexes, `if` and `while` conditions, `for` range bounds, and the array iterated by a `for-in`. `x + 1` works whether `x` is `int` or `ref int`:
 
 ```
 fn double(x: ref int)
