@@ -190,7 +190,17 @@ impl TypeCheckCtx {
                 ty: HirType::Int,
             },
             ExprKind::FixedLit(s) => {
-                let val = parse_fixed(s);
+                let val = parse_fixed(s).unwrap_or_else(|| {
+                    self.error_at(
+                        span,
+                        format!(
+                            "fixed literal out of range: {s} (range {} to {})",
+                            i16::MIN as f64 / FP_ONE as f64,
+                            i16::MAX as f64 / FP_ONE as f64
+                        ),
+                    );
+                    0
+                });
                 HirExpr {
                     kind: HirExprKind::FixedLit(val),
                     ty: HirType::Fixed,
@@ -1070,9 +1080,15 @@ fn always_returns(stmts: &[HirStmt]) -> bool {
     false
 }
 
-fn parse_fixed(s: &str) -> i16 {
-    let val: f64 = s.parse().unwrap_or(0.0);
-    (val * FP_ONE as f64).round() as i16
+/// Returns None when the literal does not fit the fixed range, so the caller
+/// can report it instead of silently saturating.
+fn parse_fixed(s: &str) -> Option<i16> {
+    let val: f64 = s.parse().ok()?;
+    let scaled = (val * FP_ONE as f64).round();
+    if scaled < i16::MIN as f64 || scaled > i16::MAX as f64 {
+        return None;
+    }
+    Some(scaled as i16)
 }
 
 #[cfg(test)]
@@ -1264,9 +1280,29 @@ mod tests {
 
     #[test]
     fn fixed_point_value() {
-        assert_eq!(parse_fixed("1.5"), FP_ONE + FP_ONE / 2);
-        assert_eq!(parse_fixed("0.0"), 0);
-        assert_eq!(parse_fixed("1.0"), FP_ONE);
+        assert_eq!(parse_fixed("1.5"), Some(FP_ONE + FP_ONE / 2));
+        assert_eq!(parse_fixed("0.0"), Some(0));
+        assert_eq!(parse_fixed("1.0"), Some(FP_ONE));
+    }
+
+    #[test]
+    fn fixed_literal_at_range_edge() {
+        assert_eq!(parse_fixed("127.99609375"), Some(i16::MAX));
+        // Rounds down into range instead of overflowing
+        assert_eq!(parse_fixed("127.998"), Some(i16::MAX));
+        assert_eq!(parse_fixed("128.0"), None);
+    }
+
+    #[test]
+    fn fixed_literal_out_of_range_error() {
+        let errs = lower_err("fn f()\n  x = 300.0\nend");
+        assert!(errs.iter().any(|e| e.message.contains("out of range")));
+    }
+
+    #[test]
+    fn negated_fixed_literal_out_of_range_error() {
+        let errs = lower_err("fn f()\n  x = -300.0\nend");
+        assert!(errs.iter().any(|e| e.message.contains("out of range")));
     }
 
     #[test]
