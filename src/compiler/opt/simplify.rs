@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::compiler::ast::{BinOp, UnaryOp};
+use crate::compiler::bytecode::{FP_ONE, FP_SHIFT};
 use crate::compiler::lir::{LirFunc, LirInst, Value};
 
 use super::{apply_replacements, resolve};
@@ -149,7 +150,7 @@ fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
         BinOp::Sub => l.wrapping_sub(r),
         BinOp::Mul => {
             if is_fixed {
-                ((l as i32 * r as i32) >> 7) as i16
+                ((l as i32 * r as i32) >> FP_SHIFT) as i16
             } else {
                 l.wrapping_mul(r)
             }
@@ -159,7 +160,7 @@ fn eval_binop(op: BinOp, l: i16, r: i16, is_fixed: bool) -> Option<i16> {
                 return None;
             }
             if is_fixed {
-                (((l as i32) << 7) / r as i32) as i16
+                (((l as i32) << FP_SHIFT) / r as i32) as i16
             } else {
                 l.wrapping_div(r)
             }
@@ -206,7 +207,7 @@ fn algebraic_simplify(
     let l_bool = bools.get(&lhs).copied();
     let r_bool = bools.get(&rhs).copied();
 
-    let one = if is_fixed { 128 } else { 1 };
+    let one = if is_fixed { FP_ONE } else { 1 };
 
     match op {
         // x + 0, 0 + x -> x

@@ -1,5 +1,10 @@
 use crate::compiler::hir::Intrinsic;
 
+// Fixed-point format: 8.8, so a `fixed` is an i16 scaled by FP_ONE.
+// The compiler and the VM must agree on this, so both read it from here.
+pub const FP_SHIFT: u32 = 8;
+pub const FP_ONE: i16 = 1 << FP_SHIFT;
+
 // Opcode constants
 pub const OP_PUSH0: u8 = 0x00;
 pub const OP_PUSH1: u8 = 0x01;

@@ -18,13 +18,16 @@ struct Brick
   dead: bool
 end
 
-// For better movement precision, the
-// ball position and velocity are 
-// stored as fixeds rather than
-// integers
+// The ball position is an int, like
+// every other position on screen.
+// The velocity is a fixed and rx and
+// ry accumulate its fractional part
+// until it adds up to a whole pixel
 struct Ball
-  x: fixed
-  y: fixed
+  x: int
+  y: int
+  rx: fixed
+  ry: fixed
   dx: fixed
   dy: fixed
 end
@@ -159,9 +162,12 @@ fn update(game: ref Game)
       sfx(0)
     end
     // We snap the ball to the player
-    // position
-    ball.x = itof(player.x + 8)
-    ball.y = itof(player.y - 2)
+    // position and drop whatever
+    // fraction of a pixel was left
+    ball.x = player.x + 8
+    ball.y = player.y - 2
+    ball.rx = 0.0
+    ball.ry = 0.0
   // The playing state makes the ball
   // to move freely through the screen
   // and bounce through bricks and the
@@ -172,24 +178,24 @@ fn update(game: ref Game)
     // If the ball passes through the
     // bottom of the screen we go back
     // to the starting state
-    if ball.y > 143.0
+    if ball.y > 143
       game.state = 0
       sfx(4)
     end
     // We make the ball bounce through
     // the walls
-    if ball.x < 1.0 or ball.x > 159.0
+    if ball.x < 1 or ball.x > 159
       ball.dx = -ball.dx
       sfx(3)
     end
     // We make the ball bounce through
     // the ceiling and the player
-    in_ceiling = ball.y < 1.0
+    in_ceiling = ball.y < 1
     if (in_ceiling or
-        (ball.x >= itof(player.x) and
-        ball.x <= itof(player.x + 16) and
-        ball.y >= itof(player.y) and
-        ball.y <= itof(player.y + 2)))
+        (ball.x >= player.x and
+        ball.x <= player.x + 16 and
+        ball.y >= player.y and
+        ball.y <= player.y + 2))
       ball.dy = -ball.dy
       if in_ceiling
         sfx(3)
@@ -205,10 +211,10 @@ fn update(game: ref Game)
         continue
       end
 
-      if (ball.x >= itof(brick.x) and
-          ball.x <= itof(brick.x + 16) and
-          ball.y >= itof(brick.y) and
-          ball.y <= itof(brick.y + 8))
+      if (ball.x >= brick.x and
+          ball.x <= brick.x + 16 and
+          ball.y >= brick.y and
+          ball.y <= brick.y + 8)
         ball.dy = -ball.dy
         brick.dead = true
         game.num_bricks = game.num_bricks - 1
@@ -224,9 +230,20 @@ fn update(game: ref Game)
     // We only set the ball velocity 
     // in the lines above so we have
     // to apply velocity to the ball
-    // position
-    ball.x = ball.x + ball.dx
-    ball.y = ball.y + ball.dy
+    // position. The velocity is a
+    // fraction of a pixel, so we
+    // accumulate it and move the ball
+    // by the whole pixels it adds up
+    // to, keeping the rest for the
+    // next frame
+    ball.rx = ball.rx + ball.dx
+    ball.ry = ball.ry + ball.dy
+    mx = ftoi(ball.rx)
+    my = ftoi(ball.ry)
+    ball.x = ball.x + mx
+    ball.y = ball.y + my
+    ball.rx = ball.rx - itof(mx)
+    ball.ry = ball.ry - itof(my)
   // State 2 is the finished state
   else if game.state == 2
     // Press Z to start over
@@ -266,7 +283,7 @@ fn draw(game: ref Game)
     
     // Draw the ball
     ball = ref game.ball
-    circ(ftoi(ball.x), ftoi(ball.y), 1, 3)
+    circ(ball.x, ball.y, 1, 3)
     
     // Draw the bricks
     for _, ref brick in game.bricks

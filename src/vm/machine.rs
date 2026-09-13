@@ -12,7 +12,7 @@ const FB_WIDTH: usize = 160;
 const FB_HEIGHT: usize = 144;
 const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
 const CYCLE_LIMIT: u32 = 1_000_000;
-const FP_SCALE: f32 = 128.0;
+const FP_SCALE: f32 = FP_ONE as f32;
 
 #[derive(Debug)]
 pub enum VmError {
@@ -244,14 +244,14 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(a.wrapping_neg())?;
             }
-            OP_FMUL => binop!(|a: i16, b| ((a as i32 * b as i32) >> 7) as i16),
+            OP_FMUL => binop!(|a: i16, b| ((a as i32 * b as i32) >> FP_SHIFT) as i16),
             OP_FDIV => {
                 let b = self.pop()?;
                 if b == 0 {
                     return Err(VmError::DivisionByZero);
                 }
                 let a = self.pop()?;
-                self.push((((a as i32) << 7) / b as i32) as i16)?;
+                self.push((((a as i32) << FP_SHIFT) / b as i32) as i16)?;
             }
             OP_EQ => binop!(|a: i16, b| if a == b { 1 } else { 0 }),
             OP_NEQ => binop!(|a: i16, b| if a != b { 1 } else { 0 }),
@@ -544,11 +544,11 @@ impl Vm {
             }
             OP_FTOI => {
                 let x = self.pop()?;
-                self.push(x >> 7)?;
+                self.push(x >> FP_SHIFT)?;
             }
             OP_ITOF => {
                 let x = self.pop()?;
-                self.push(x << 7)?;
+                self.push(x << FP_SHIFT)?;
             }
             OP_TRACEF => {
                 let val = self.pop()?;
@@ -753,8 +753,8 @@ impl Vm {
 
 fn format_fixed(val: i16) -> String {
     let abs = (val as i32).abs();
-    let int_part = abs >> 7;
-    let frac_part = (abs & 0x7F) * 100 / 128;
+    let int_part = abs >> FP_SHIFT;
+    let frac_part = (abs & (FP_ONE as i32 - 1)) * 100 / FP_ONE as i32;
     if val < 0 {
         format!("-{int_part}.{frac_part:02}")
     } else {
@@ -1072,15 +1072,17 @@ mod tests {
 
     #[test]
     fn fmul_opcode() {
-        // 1.5 * 2.0 = 3.0 (192 * 256 >> 7 = 384)
+        // 1.5 * 2.0 = 3.0
+        let a = (FP_ONE + FP_ONE / 2).to_le_bytes();
+        let b = (FP_ONE * 2).to_le_bytes();
         let bc = make_bc(
             vec![
                 OP_PUSH_I16,
-                0xC0,
-                0x00,
+                a[0],
+                a[1],
                 OP_PUSH_I16,
-                0x00,
-                0x01,
+                b[0],
+                b[1],
                 OP_FMUL,
                 OP_STORE_LOCAL,
                 0,
@@ -1091,7 +1093,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 384); // 3.0 in 9.7
+        assert_eq!(vm.locals[0], FP_ONE * 3);
     }
 
     #[test]
@@ -1117,15 +1119,17 @@ mod tests {
 
     #[test]
     fn fdiv_opcode() {
-        // 3.0 / 1.5 = 2.0 (384 << 7 / 192 = 256)
+        // 3.0 / 1.5 = 2.0
+        let a = (FP_ONE * 3).to_le_bytes();
+        let b = (FP_ONE + FP_ONE / 2).to_le_bytes();
         let bc = make_bc(
             vec![
                 OP_PUSH_I16,
-                0x80,
-                0x01,
+                a[0],
+                a[1],
                 OP_PUSH_I16,
-                0xC0,
-                0x00,
+                b[0],
+                b[1],
                 OP_FDIV,
                 OP_STORE_LOCAL,
                 0,
@@ -1136,7 +1140,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 256); // 2.0 in 9.7
+        assert_eq!(vm.locals[0], FP_ONE * 2);
     }
 
     #[test]
@@ -1432,6 +1436,51 @@ end";
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "6");
+    }
+
+    #[test]
+    fn ftoi_floors_negatives() {
+        // The subpixel accumulator relies on flooring, not truncation
+        let src = "fn main()\n  tracei(ftoi(-0.5))\n  tracei(ftoi(-1.5))\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "-1");
+        assert_eq!(vm.trace_output[1], "-2");
+    }
+
+    #[test]
+    fn fixed_subpixel_accumulator() {
+        // int position plus fixed remainder, moving half a pixel per step
+        let src = "\
+x: int
+r: fixed
+fn step(v: fixed)
+  r = r + v
+  m = ftoi(r)
+  x = x + m
+  r = r - itof(m)
+end
+
+fn main()
+  for i in 0..10
+    step(0.5)
+  end
+  tracei(x)
+  tracef(r)
+  for i in 0..10
+    step(-0.5)
+  end
+  tracei(x)
+  tracef(r)
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "5");
+        assert_eq!(vm.trace_output[1], "0.00");
+        assert_eq!(vm.trace_output[2], "0");
+        assert_eq!(vm.trace_output[3], "0.00");
     }
 
     #[test]

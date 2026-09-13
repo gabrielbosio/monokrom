@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::compiler::ast::{self, BinOp, Expr, ExprKind, Span, TypeExpr, UnaryOp};
+use crate::compiler::bytecode::FP_ONE;
 use crate::compiler::error::CompileError;
 use crate::compiler::hir::*;
 use crate::config::SPRITE_REGION_START;
@@ -1071,7 +1072,7 @@ fn always_returns(stmts: &[HirStmt]) -> bool {
 
 fn parse_fixed(s: &str) -> i16 {
     let val: f64 = s.parse().unwrap_or(0.0);
-    (val * 128.0).round() as i16
+    (val * FP_ONE as f64).round() as i16
 }
 
 #[cfg(test)]
@@ -1204,7 +1205,6 @@ mod tests {
     #[test]
     fn fixed_point_conversion() {
         let hir = lower("x = 1.5");
-        // 1.5 * 128 = 192
         // The global should be of Fixed type
         assert_eq!(hir.globals[0].ty, HirType::Fixed);
     }
@@ -1264,9 +1264,9 @@ mod tests {
 
     #[test]
     fn fixed_point_value() {
-        assert_eq!(parse_fixed("1.5"), 192);
+        assert_eq!(parse_fixed("1.5"), FP_ONE + FP_ONE / 2);
         assert_eq!(parse_fixed("0.0"), 0);
-        assert_eq!(parse_fixed("1.0"), 128);
+        assert_eq!(parse_fixed("1.0"), FP_ONE);
     }
 
     #[test]
