@@ -313,8 +313,9 @@ Built-in functions that compile to single opcodes.
 - `line(x0, y0, x1, y1, col)`: Draw line.
 - `rect(x, y, w, h, col)`: Draw rectangle.
 - `circ(x, y, r, col)`: Draw circle
-- `spr(n, x, y, flip_x, flip_y)`: Draw sprite,
-- `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), w×h tiles.
+- `spr(n, x, y, flip_x, flip_y)`: Draw sprite. Colors marked transparent by `palt` are skipped.
+- `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), w×h tiles. Tiles are drawn as sprites, so `palt` applies.
+- `palt(mask)`: Set which colors `spr` and `map` skip. Bit `i` set means color `i` is transparent. Defaults to 1, so color 0 is transparent and the other three are drawn. `palt(0)` makes sprites fully opaque.
 - `prints(s, x, y, col)`: Print string.
 - `printi(val, x, y, col)`: Print integer.
 - `printf(val, x, y, col)`: Print fixed-point as decimal (e.g. "1.25").

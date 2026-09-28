@@ -41,6 +41,7 @@ pub const OP_MGET: u8 = 0x69;
 pub const OP_MSET: u8 = 0x6A;
 pub const OP_MAP: u8 = 0x6B;
 pub const OP_BXOR: u8 = 0x6C;
+pub const OP_PALT: u8 = 0x6D;
 
 pub const OP_LOAD1: u8 = 0x20;
 pub const OP_LOAD2: u8 = 0x21;
@@ -108,6 +109,7 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Rect => OP_RECT,
         Intrinsic::Circ => OP_CIRC,
         Intrinsic::Spr => OP_SPR,
+        Intrinsic::Palt => OP_PALT,
         Intrinsic::Prints => OP_PRINTS,
         Intrinsic::Printi => OP_PRINTI,
         Intrinsic::Btn => OP_BTN,
@@ -207,6 +209,7 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_RECT => Some("Rect"),
         OP_CIRC => Some("Circ"),
         OP_SPR => Some("Spr"),
+        OP_PALT => Some("Palt"),
         OP_PRINTS => Some("Prints"),
         OP_PRINTI => Some("Printi"),
         OP_BTN => Some("Btn"),
@@ -250,7 +253,7 @@ fn op_name(b: u8) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 76] = [
+const ALL_OPCODES: [u8; 77] = [
     OP_PUSH0,
     OP_PUSH1,
     OP_PUSH_I8,
@@ -327,6 +330,7 @@ const ALL_OPCODES: [u8; 76] = [
     OP_MGET,
     OP_MSET,
     OP_MAP,
+    OP_PALT,
 ];
 
 #[derive(Debug)]

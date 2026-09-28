@@ -58,6 +58,7 @@ impl TypeCheckCtx {
             ("rect", Rect, vec![Int, Int, Int, Int, Int], Void),
             ("circ", Circ, vec![Int, Int, Int, Int], Void),
             ("spr", Spr, vec![Int, Int, Int, Bool, Bool], Void),
+            ("palt", Palt, vec![Int], Void),
             ("prints", Prints, vec![Str, Int, Int, Int], Void),
             ("printi", Printi, vec![Int, Int, Int, Int], Void),
             ("btn", Btn, vec![Int], Bool),

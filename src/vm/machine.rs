@@ -68,6 +68,7 @@ pub struct Vm {
     call_stack: Vec<CallFrame>,
     pub memory: [u8; MEMORY_SIZE],
     pub framebuffer: [u8; FB_SIZE],
+    palt_mask: u8,
     pub buttons: u8,
     pub prev_buttons: u8,
     string_pool: Vec<String>,
@@ -112,6 +113,7 @@ impl Vm {
             call_stack: Vec::with_capacity(CALL_STACK_LIMIT),
             memory: [0; MEMORY_SIZE],
             framebuffer: [0; FB_SIZE],
+            palt_mask: 1,
             buttons: 0,
             prev_buttons: 0,
             string_pool: bc.string_pool.clone(),
@@ -410,6 +412,10 @@ impl Vm {
                 let n = self.pop()?;
                 self.fb_spr(n as u16, x as i32, y as i32, flip_x != 0, flip_y != 0);
             }
+            OP_PALT => {
+                let mask = self.pop()?;
+                self.palt_mask = (mask & 0x0F) as u8;
+            }
             OP_PRINTS => {
                 let col = self.pop()?;
                 let y = self.pop()?;
@@ -702,14 +708,14 @@ impl Vm {
             let py = if flip_y { 7 - row } else { row };
             for col in 0..4i32 {
                 let c0 = (b0 >> (6 - col * 2)) & 3;
-                if c0 != 0 {
+                if self.palt_mask & (1 << c0) == 0 {
                     let px = if flip_x { 7 - col } else { col };
                     self.fb_pset(x + px, y + py, c0);
                 }
             }
             for col in 0..4i32 {
                 let c1 = (b1 >> (6 - col * 2)) & 3;
-                if c1 != 0 {
+                if self.palt_mask & (1 << c1) == 0 {
                     let sx = 4 + col;
                     let px = if flip_x { 7 - sx } else { sx };
                     self.fb_pset(x + px, y + py, c1);
@@ -1187,6 +1193,39 @@ mod tests {
         vm.run_until_flip().unwrap();
         // pset drew color 2, sprite has color 0, so should not overwrite
         assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 2);
+    }
+
+    #[test]
+    fn palt_opaque_draws_color_0() {
+        // palt(0) makes nothing transparent, so color 0 overwrites
+        let src = "fn main()\n  cls(0)\n  pset(10, 20, 2)\n  poke(12288, 0x00)\n  palt(0)\n  spr(0, 10, 20, false, false)\n  flip()\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 0);
+    }
+
+    #[test]
+    fn palt_custom_index() {
+        // palt(8) makes color 3 transparent and leaves color 0 opaque
+        let src = "fn main()\n  cls(1)\n  poke(12288, 0x0F)\n  palt(8)\n  spr(0, 10, 20, false, false)\n  flip()\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        // 0x0F = cols 0,1 color 0 and cols 2,3 color 3
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 10], 0);
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 11], 0);
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 12], 1);
+        assert_eq!(vm.framebuffer[20 * FB_WIDTH + 13], 1);
+    }
+
+    #[test]
+    fn palt_applies_to_map() {
+        let src = "fn main()\n  cls(2)\n  poke(12288, 0x00)\n  mset(0, 0, 0)\n  palt(0)\n  map(0, 0, 0, 0, 1, 1)\n  flip()\nend";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.framebuffer[0], 0);
     }
 
     #[test]

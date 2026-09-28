@@ -38,6 +38,7 @@ pub enum Intrinsic {
     Rect,
     Circ,
     Spr,
+    Palt,
     Prints,
     Printi,
     Btn,
