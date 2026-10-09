@@ -133,6 +133,9 @@ pub struct App {
     run_state: Option<Vm>,
     player_mode: bool,
     run_return_mode: AppMode,
+    /// True while the Enter used to launch the program is still held, so it
+    /// isn't delivered to the game.
+    run_enter_held: bool,
 
     // Sprite editor
     sprite_editor: SpriteEditor,
@@ -231,6 +234,7 @@ impl App {
             run_state,
             player_mode,
             run_return_mode: AppMode::Terminal,
+            run_enter_held: false,
 
             sprite_editor: SpriteEditor::new(),
             map_editor: MapEditor::new(),
@@ -735,6 +739,7 @@ impl App {
                         vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE]
                             .copy_from_slice(&self.music_editor.data);
                         self.run_state = Some(vm);
+                        self.run_enter_held = true;
                         self.mode = AppMode::Running;
                     }
                     Err(e) => {
@@ -1504,7 +1509,15 @@ impl App {
         }
 
         vm.prev_buttons = vm.buttons;
-        vm.buttons = sample_buttons();
+        let mut buttons = sample_buttons();
+        if self.run_enter_held {
+            if is_key_down(KeyCode::Enter) || is_key_down(KeyCode::KpEnter) {
+                buttons &= !(1 << 6); // button 6: Enter
+            } else {
+                self.run_enter_held = false;
+            }
+        }
+        vm.buttons = buttons;
         vm.current_time = get_time();
 
         match vm.run_until_flip() {
