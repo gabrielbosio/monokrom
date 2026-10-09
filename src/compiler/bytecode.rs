@@ -42,6 +42,7 @@ pub const OP_MSET: u8 = 0x6A;
 pub const OP_MAP: u8 = 0x6B;
 pub const OP_BXOR: u8 = 0x6C;
 pub const OP_PALT: u8 = 0x6D;
+pub const OP_FRAME_ADDR: u8 = 0x6E;
 
 pub const OP_LOAD1: u8 = 0x20;
 pub const OP_LOAD2: u8 = 0x21;
@@ -94,7 +95,8 @@ pub const OP_FDIV: u8 = 0x63;
 pub fn inst_size(op: u8) -> usize {
     match op {
         OP_PUSH_I8 => 2,
-        OP_PUSH_I16 | OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF_FALSE => 3,
+        OP_PUSH_I16 | OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF_FALSE
+        | OP_FRAME_ADDR => 3,
         OP_CALL => 4,
         _ => 1,
     }
@@ -248,12 +250,13 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_MGET => Some("Mget"),
         OP_MSET => Some("Mset"),
         OP_MAP => Some("Map"),
+        OP_FRAME_ADDR => Some("FrameAddr"),
         _ => None,
     }
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 77] = [
+const ALL_OPCODES: [u8; 78] = [
     OP_PUSH0,
     OP_PUSH1,
     OP_PUSH_I8,
@@ -331,6 +334,7 @@ const ALL_OPCODES: [u8; 77] = [
     OP_MSET,
     OP_MAP,
     OP_PALT,
+    OP_FRAME_ADDR,
 ];
 
 #[derive(Debug)]
@@ -338,6 +342,7 @@ pub struct FuncInfo {
     pub code_offset: usize,
     pub n_params: u8,
     pub n_locals: u16,
+    pub frame_bytes: u16,
 }
 
 #[derive(Debug)]
@@ -346,6 +351,7 @@ pub struct Bytecode {
     pub string_pool: Vec<String>,
     pub functions: Vec<FuncInfo>,
     pub entry_point: Option<usize>,
+    pub globals_size: u16,
 }
 
 impl Bytecode {
@@ -355,6 +361,7 @@ impl Bytecode {
             string_pool: Vec::new(),
             functions: Vec::new(),
             entry_point: None,
+            globals_size: 0,
         }
     }
 
@@ -394,6 +401,8 @@ impl Bytecode {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
+        // Global size (frame stack base)
+        buf.extend(&self.globals_size.to_le_bytes());
         // Code
         buf.extend(&(self.code.len() as u32).to_le_bytes());
         buf.extend(&self.code);
@@ -410,6 +419,7 @@ impl Bytecode {
             buf.extend(&(f.code_offset as u32).to_le_bytes());
             buf.push(f.n_params);
             buf.extend(&f.n_locals.to_le_bytes());
+            buf.extend(&f.frame_bytes.to_le_bytes());
         }
         // Entry point
         match self.entry_point {
@@ -433,6 +443,12 @@ impl Bytecode {
             *pos += 4;
             Ok(v)
         };
+        // Global size (frame stack base)
+        if pos + 2 > data.len() {
+            return Err("unexpected end of data".to_string());
+        }
+        let globals_size = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap());
+        pos += 2;
         // Code
         let code_len = read_u32(&mut pos)? as usize;
         if pos + code_len > data.len() {
@@ -469,10 +485,16 @@ impl Bytecode {
             }
             let n_locals = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap());
             pos += 2;
+            if pos + 2 > data.len() {
+                return Err("unexpected end of data".to_string());
+            }
+            let frame_bytes = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap());
+            pos += 2;
             functions.push(FuncInfo {
                 code_offset,
                 n_params,
                 n_locals,
+                frame_bytes,
             });
         }
         // Entry point
@@ -491,6 +513,7 @@ impl Bytecode {
             string_pool,
             functions,
             entry_point,
+            globals_size,
         })
     }
 }
@@ -518,6 +541,7 @@ mod tests {
         assert!(bc2.string_pool.is_empty());
         assert!(bc2.functions.is_empty());
         assert_eq!(bc2.entry_point, None);
+        assert_eq!(bc2.globals_size, 0);
     }
 
     #[test]
@@ -530,14 +554,17 @@ mod tests {
                     code_offset: 0,
                     n_params: 2,
                     n_locals: 5,
+                    frame_bytes: 8,
                 },
                 FuncInfo {
                     code_offset: 10,
                     n_params: 0,
                     n_locals: 300,
+                    frame_bytes: 0,
                 },
             ],
             entry_point: Some(0),
+            globals_size: 42,
         };
         let data = bc.serialize();
         let bc2 = Bytecode::deserialize(&data).unwrap();
@@ -547,9 +574,12 @@ mod tests {
         assert_eq!(bc2.functions[0].code_offset, 0);
         assert_eq!(bc2.functions[0].n_params, 2);
         assert_eq!(bc2.functions[0].n_locals, 5);
+        assert_eq!(bc2.functions[0].frame_bytes, 8);
         assert_eq!(bc2.functions[1].code_offset, 10);
         assert_eq!(bc2.functions[1].n_locals, 300);
+        assert_eq!(bc2.functions[1].frame_bytes, 0);
         assert_eq!(bc2.entry_point, Some(0));
+        assert_eq!(bc2.globals_size, 42);
     }
 
     #[test]

@@ -30,13 +30,19 @@ struct LowerCtx<'a> {
     // Loops
     loop_stack: Vec<(BlockId, BlockId)>,
 
-    // Compound local addresses (static allocation)
+    // Byte offsets for compound and promoted locals, relative to the frame byte area
     compound_local_addrs: HashMap<String, u16>,
-    next_compound_addr: u16,
+    next_byte_offset: u16,
+
+    // Return type of the function being lowered
+    ret_ty: HirType,
+
+    // Hidden destination for compound return values
+    hidden_dest: Option<Value>,
 }
 
 impl<'a> LowerCtx<'a> {
-    fn new(module: &'a HirModule, globals_size: u16) -> Self {
+    fn new(module: &'a HirModule) -> Self {
         let entry = BlockId(0);
         let mut ctx = Self {
             module,
@@ -54,7 +60,9 @@ impl<'a> LowerCtx<'a> {
             replacements: HashMap::new(),
             loop_stack: Vec::new(),
             compound_local_addrs: HashMap::new(),
-            next_compound_addr: globals_size,
+            next_byte_offset: 0,
+            ret_ty: HirType::Void,
+            hidden_dest: None,
         };
         ctx.current_def.insert(entry, HashMap::new());
         ctx.sealed.insert(entry);
@@ -262,6 +270,37 @@ impl<'a> LowerCtx<'a> {
         )
     }
 
+    fn is_compound(&self, ty: &HirType) -> bool {
+        matches!(ty, HirType::Array(..) | HirType::Struct(_))
+    }
+
+    fn function_ret_ty(&self, name: &str) -> Option<HirType> {
+        self.module
+            .functions
+            .iter()
+            .find(|f| f.name == name)
+            .map(|f| f.ret_type.clone())
+    }
+
+    fn returns_compound(&self, name: &str) -> bool {
+        self.function_ret_ty(name)
+            .map(|ty| self.is_compound(&ty))
+            .unwrap_or(false)
+    }
+
+    /// Reserve a byte range in the current function's frame and return its offset.
+    fn alloc_byte(&mut self, size: u16) -> u16 {
+        let offset = self.next_byte_offset;
+        self.next_byte_offset += size;
+        offset
+    }
+
+    /// Reserve frame space for a temporary and return the value holding its address.
+    fn alloc_temp(&mut self, size: u16) -> Value {
+        let offset = self.alloc_byte(size);
+        self.emit(LirInst::FrameAddr(offset))
+    }
+
     // Globals are validated by the type-checker, so a missing name here is a compiler bug.
     fn find_global_addr(&self, name: &str) -> u16 {
         self.module
@@ -293,7 +332,7 @@ impl<'a> LowerCtx<'a> {
                     }
                 } else if self.compound_local_addrs.contains_key(name) {
                     let addr = self.compound_local_addrs[name];
-                    let ga = self.emit(LirInst::GlobalAddr(addr));
+                    let ga = self.emit(LirInst::FrameAddr(addr));
                     if self.is_scalar(&expr.ty) {
                         // Promoted scalar: load from memory
                         let size = self.type_size(&expr.ty) as u8;
@@ -340,31 +379,14 @@ impl<'a> LowerCtx<'a> {
             }
 
             HirExprKind::Call { name, args } => {
-                let func_params = self
-                    .module
-                    .functions
-                    .iter()
-                    .find(|f| f.name == *name)
-                    .map(|f| &f.params[..]);
-                let arg_vals: Vec<Value> = args
-                    .iter()
-                    .enumerate()
-                    .map(|(i, a)| {
-                        let is_ref_param = func_params
-                            .and_then(|ps| ps.get(i))
-                            .map(|p| matches!(&p.ty, HirType::Ref(_)))
-                            .unwrap_or(false);
-                        if is_ref_param {
-                            self.lower_as_ref(a)
-                        } else {
-                            self.lower_expr(a)
-                        }
-                    })
-                    .collect();
-                self.emit(LirInst::Call {
-                    name: name.clone(),
-                    args: arg_vals,
-                })
+                if self.returns_compound(name) {
+                    let size = self.type_size(&expr.ty);
+                    let tmp = self.alloc_temp(size);
+                    self.emit_call(name, args, Some(tmp));
+                    tmp
+                } else {
+                    self.emit_call(name, args, None)
+                }
             }
 
             HirExprKind::Intrinsic { op, args } => {
@@ -418,6 +440,69 @@ impl<'a> LowerCtx<'a> {
             }
             _ => self.lower_expr(expr),
         }
+    }
+
+    /// Lower a call, passing a hidden destination for compound return values.
+    /// Returns the call result for scalar returns, or the destination for compounds.
+    fn emit_call(&mut self, name: &str, args: &[HirExpr], dest: Option<Value>) -> Value {
+        let param_tys: Vec<HirType> = self
+            .module
+            .functions
+            .iter()
+            .find(|f| f.name == name)
+            .map(|f| f.params.iter().map(|p| p.ty.clone()).collect())
+            .unwrap_or_default();
+
+        let mut arg_vals = Vec::new();
+        for (i, arg) in args.iter().enumerate() {
+            let is_ref_param = param_tys
+                .get(i)
+                .map(|ty| matches!(ty, HirType::Ref(_)))
+                .unwrap_or(false);
+            if is_ref_param {
+                arg_vals.push(self.lower_as_ref(arg));
+            } else if self.is_compound(&arg.ty) {
+                // By-value compound argument. A compound call result needs a temp
+                // so its value survives until the callee copies it in.
+                if let HirExprKind::Call {
+                    name: inner_name,
+                    args: inner_args,
+                } = &arg.kind
+                {
+                    let size = self.type_size(&arg.ty);
+                    let tmp = self.alloc_temp(size);
+                    self.emit_call(inner_name, inner_args, Some(tmp));
+                    arg_vals.push(tmp);
+                } else {
+                    arg_vals.push(self.lower_expr(arg));
+                }
+            } else {
+                arg_vals.push(self.lower_expr(arg));
+            }
+        }
+
+        if let Some(d) = dest {
+            arg_vals.push(d);
+        }
+
+        let call_val = self.emit(LirInst::Call {
+            name: name.to_string(),
+            args: arg_vals,
+        });
+        dest.unwrap_or(call_val)
+    }
+
+    /// Lower a compound expression into an existing destination address.
+    /// Direct calls forward the destination so the callee writes in place.
+    fn lower_compound_value_into(&mut self, expr: &HirExpr, dst: Value, size: u16) {
+        if let HirExprKind::Call { name, args } = &expr.kind {
+            if self.returns_compound(name) {
+                self.emit_call(name, args, Some(dst));
+                return;
+            }
+        }
+        let src = self.lower_expr(expr);
+        self.emit_compound_copy(dst, src, size);
     }
 
     /// Copy a compound value word-by-word from src address to dst address.
@@ -478,7 +563,7 @@ impl<'a> LowerCtx<'a> {
             HirExprKind::Var(name) => {
                 if self.compound_local_addrs.contains_key(name) {
                     let addr = self.compound_local_addrs[name];
-                    self.emit(LirInst::GlobalAddr(addr))
+                    self.emit(LirInst::FrameAddr(addr))
                 } else {
                     self.read_variable(name, self.current_block)
                 }
@@ -551,7 +636,7 @@ impl<'a> LowerCtx<'a> {
                         }
                     };
                     let addr = self.compound_local_addrs[name.as_str()];
-                    let ga = self.emit(LirInst::GlobalAddr(addr));
+                    let ga = self.emit(LirInst::FrameAddr(addr));
                     let size = self.type_size(ty) as u8;
                     self.emit(LirInst::Store {
                         addr: ga,
@@ -570,13 +655,12 @@ impl<'a> LowerCtx<'a> {
                     let block = self.current_block;
                     self.write_variable(name, block, val);
                 } else {
-                    // Compound types: copy into the local's pre-allocated memory
+                    // Compound types: copy into the local's frame space
                     if let Some(v) = value {
-                        let src = self.lower_expr(v);
                         let dst_addr = self.compound_local_addrs[name.as_str()];
-                        let dst = self.emit(LirInst::GlobalAddr(dst_addr));
+                        let dst = self.emit(LirInst::FrameAddr(dst_addr));
                         let size = self.type_size(ty);
-                        self.emit_compound_copy(dst, src, size);
+                        self.lower_compound_value_into(v, dst, size);
                     }
                 }
             }
@@ -602,9 +686,8 @@ impl<'a> LowerCtx<'a> {
                                 let size = self.type_size(inner) as u8;
                                 self.emit(LirInst::Store { addr, val, size });
                             } else {
-                                let src = self.lower_expr(value);
                                 let size = self.type_size(inner);
-                                self.emit_compound_copy(addr, src, size);
+                                self.lower_compound_value_into(value, addr, size);
                             }
                         }
                     }
@@ -615,7 +698,7 @@ impl<'a> LowerCtx<'a> {
                     {
                         let val = self.lower_expr(value);
                         let addr = self.compound_local_addrs[name.as_str()];
-                        let ga = self.emit(LirInst::GlobalAddr(addr));
+                        let ga = self.emit(LirInst::FrameAddr(addr));
                         let size = self.type_size(&target.ty) as u8;
                         self.emit(LirInst::Store {
                             addr: ga,
@@ -629,27 +712,26 @@ impl<'a> LowerCtx<'a> {
                         let block = self.current_block;
                         self.write_variable(name, block, val);
                     }
-                    // Compound local: copy into the local's pre-allocated memory
+                    // Compound local: copy into the local's frame space
                     HirExprKind::Var(name) if !self.is_scalar(&target.ty) => {
-                        let src = self.lower_expr(value);
                         let dst_addr = self.compound_local_addrs[name.as_str()];
-                        let dst = self.emit(LirInst::GlobalAddr(dst_addr));
+                        let dst = self.emit(LirInst::FrameAddr(dst_addr));
                         let size = self.type_size(&target.ty);
-                        self.emit_compound_copy(dst, src, size);
+                        self.lower_compound_value_into(value, dst, size);
                     }
                     // Global or compound field
                     _ => {
                         let dst = self.lower_addr_of(target);
-                        let val = self.lower_expr(value);
                         let size = self.type_size(&target.ty);
                         if self.is_scalar(&target.ty) {
+                            let val = self.lower_expr(value);
                             self.emit(LirInst::Store {
                                 addr: dst,
                                 val,
                                 size: size as u8,
                             });
                         } else {
-                            self.emit_compound_copy(dst, val, size);
+                            self.lower_compound_value_into(value, dst, size);
                         }
                     }
                 }
@@ -689,8 +771,21 @@ impl<'a> LowerCtx<'a> {
             }
 
             HirStmt::Return(expr) => {
-                let val = expr.as_ref().map(|e| self.lower_expr(e));
-                self.finish_block(Terminator::Return(val));
+                let ret_ty = self.ret_ty.clone();
+                if self.is_compound(&ret_ty) {
+                    // Compound returns copy into the caller-provided destination
+                    let dst = self
+                        .hidden_dest
+                        .expect("compound function without hidden destination");
+                    if let Some(e) = expr {
+                        let size = self.type_size(&ret_ty);
+                        self.lower_compound_value_into(e, dst, size);
+                    }
+                    self.finish_block(Terminator::Return(None));
+                } else {
+                    let val = expr.as_ref().map(|e| self.lower_expr(e));
+                    self.finish_block(Terminator::Return(val));
+                }
                 // Dead block for any code after return
                 let dead = self.fresh_block();
                 self.sealed.insert(dead);
@@ -967,8 +1062,8 @@ impl<'a> LowerCtx<'a> {
         // Reserve storage for the per-iter copy of a compound value element.
         let needs_compound_copy = elem_var != "_" && !elem_is_ref && !self.is_scalar(&elem_ty);
         if needs_compound_copy && !self.compound_local_addrs.contains_key(elem_var) {
-            let addr = self.next_compound_addr;
-            self.next_compound_addr += self.type_size(&elem_ty);
+            let size = self.type_size(&elem_ty);
+            let addr = self.alloc_byte(size);
             self.compound_local_addrs.insert(elem_var.to_string(), addr);
         }
 
@@ -1039,7 +1134,7 @@ impl<'a> LowerCtx<'a> {
                 self.write_variable(elem_var, block, elem_val);
             } else {
                 let dst_addr = self.compound_local_addrs[elem_var];
-                let dst = self.emit(LirInst::GlobalAddr(dst_addr));
+                let dst = self.emit(LirInst::FrameAddr(dst_addr));
                 self.emit_compound_copy(dst, elem_addr, elem_size);
             }
         }
@@ -1090,17 +1185,18 @@ impl<'a> LowerCtx<'a> {
 fn alloc_compound_locals(ctx: &mut LowerCtx, func: &HirFunc) {
     for (name, ty) in &func.locals {
         if !ctx.is_scalar(ty) || func.promoted_locals.contains(name) {
-            let addr = ctx.next_compound_addr;
-            ctx.next_compound_addr += ctx.type_size(ty);
+            let size = ctx.type_size(ty);
+            let addr = ctx.alloc_byte(size);
             ctx.compound_local_addrs.insert(name.clone(), addr);
         }
     }
 }
 
-fn lower_function(module: &HirModule, func: &HirFunc, globals_size: u16) -> (LirFunc, u16) {
-    let mut ctx = LowerCtx::new(module, globals_size);
+fn lower_function(module: &HirModule, func: &HirFunc) -> LirFunc {
+    let mut ctx = LowerCtx::new(module);
+    ctx.ret_ty = func.ret_type.clone();
 
-    // Allocate compound locals
+    // Allocate compound locals and promoted scalars in the frame byte area
     alloc_compound_locals(&mut ctx, func);
 
     // Params get the first N values
@@ -1112,15 +1208,22 @@ fn lower_function(module: &HirModule, func: &HirFunc, globals_size: u16) -> (Lir
         params.push(v);
     }
 
+    // Compound-returning functions receive a hidden destination right after
+    // the source params so that OP_CALL copies it to the next value slot.
+    if ctx.is_compound(&func.ret_type) {
+        let v = ctx.fresh_val();
+        ctx.hidden_dest = Some(v);
+        params.push(v);
+    }
+
     // Copy compound params to local memory (by-value semantics)
     for p in &func.params {
         if !ctx.is_scalar(&p.ty) {
             let size = ctx.type_size(&p.ty);
-            let local_addr = ctx.next_compound_addr;
-            ctx.next_compound_addr += size;
+            let local_addr = ctx.alloc_byte(size);
             ctx.compound_local_addrs.insert(p.name.clone(), local_addr);
             let src = ctx.read_variable(&p.name, ctx.current_block);
-            let dst = ctx.emit(LirInst::GlobalAddr(local_addr));
+            let dst = ctx.emit(LirInst::FrameAddr(local_addr));
             ctx.emit_compound_copy(dst, src, size);
         }
     }
@@ -1150,16 +1253,16 @@ fn lower_function(module: &HirModule, func: &HirFunc, globals_size: u16) -> (Lir
 
     ctx.apply_replacements();
 
-    let compound_end = ctx.next_compound_addr;
+    let returns_value = ctx.is_scalar(&func.ret_type);
+    let frame_bytes = ctx.next_byte_offset;
 
-    (
-        LirFunc {
-            name: func.name.clone(),
-            params,
-            blocks: ctx.blocks,
-        },
-        compound_end,
-    )
+    LirFunc {
+        name: func.name.clone(),
+        params,
+        blocks: ctx.blocks,
+        returns_value,
+        frame_bytes,
+    }
 }
 
 pub fn lower_to_lir(module: &HirModule) -> LirModule {
@@ -1170,19 +1273,16 @@ pub fn lower_to_lir(module: &HirModule) -> LirModule {
         .max()
         .unwrap_or(0);
 
-    let mut functions = Vec::new();
-    let mut next_base = globals_size;
-
-    for func in &module.functions {
-        let (lir_func, compound_end) = lower_function(module, func, next_base);
-        next_base = compound_end;
-        functions.push(lir_func);
-    }
+    let functions = module
+        .functions
+        .iter()
+        .map(|func| lower_function(module, func))
+        .collect();
 
     LirModule {
         functions,
         string_pool: module.string_pool.clone(),
-        globals_size: next_base,
+        globals_size,
     }
 }
 
@@ -1285,6 +1385,25 @@ mod tests {
                 .any(|(_, inst)| matches!(inst, LirInst::Phi(_)))
         });
         assert!(has_phi);
+    }
+
+    #[test]
+    fn compound_local_uses_frame_offset() {
+        let m = lir(
+            "struct P\n  x: int\n  y: int\nend\nfn f()\n  p: P\n  p.x = 1\nend\nfn g()\n  q: array[4] of int\n  q[0] = 1\nend\nfn main()\n  f()\nend",
+        );
+        let f = find_func(&m, "f");
+        let g = find_func(&m, "g");
+        // Each function gets its own frame bytes, no cumulative static layout
+        assert_eq!(f.frame_bytes, 4);
+        assert_eq!(g.frame_bytes, 8);
+        // Compound locals are addressed relative to the frame
+        let has_frame_addr = f.blocks.iter().any(|b| {
+            b.insts
+                .iter()
+                .any(|(_, inst)| matches!(inst, LirInst::FrameAddr(_)))
+        });
+        assert!(has_frame_addr);
     }
 
     #[test]

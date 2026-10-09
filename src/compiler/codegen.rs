@@ -10,6 +10,7 @@ const BYTECODE_LIMIT: usize = 32 * 1024;
 pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
     let mut bc = Bytecode::new();
     bc.string_pool = module.string_pool.clone();
+    bc.globals_size = module.globals_size;
 
     let func_indices: HashMap<&str, u16> = module
         .functions
@@ -18,18 +19,10 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
         .map(|(i, f)| (f.name.as_str(), i as u16))
         .collect();
 
-    let void_funcs: HashSet<&str> = module
+    let value_funcs: HashSet<&str> = module
         .functions
         .iter()
-        .filter(|f| {
-            f.blocks
-                .iter()
-                .flat_map(|b| match &b.terminator {
-                    Terminator::Return(v) => Some(v),
-                    _ => None,
-                })
-                .all(|v| v.is_none())
-        })
+        .filter(|f| f.returns_value)
         .map(|f| f.name.as_str())
         .collect();
 
@@ -38,12 +31,13 @@ pub fn generate(module: &LirModule) -> Result<Bytecode, CompileError> {
         let n_params = func.params.len() as u8;
         let n_locals = count_locals(func);
 
-        emit_function(&mut bc, func, &func_indices, &void_funcs)?;
+        emit_function(&mut bc, func, &func_indices, &value_funcs)?;
 
         bc.functions.push(FuncInfo {
             code_offset,
             n_params,
             n_locals,
+            frame_bytes: func.frame_bytes,
         });
 
         if func.name == "main" {
@@ -150,7 +144,7 @@ fn emit_function(
     bc: &mut Bytecode,
     func: &LirFunc,
     func_indices: &HashMap<&str, u16>,
-    void_funcs: &HashSet<&str>,
+    value_funcs: &HashSet<&str>,
 ) -> Result<(), CompileError> {
     let uses = count_uses(func);
     let block_by_id: HashMap<BlockId, &BasicBlock> =
@@ -167,7 +161,7 @@ fn emit_function(
             if matches!(inst, LirInst::Phi(_)) {
                 continue;
             }
-            emit_instruction(bc, *val, inst, &uses, func_indices, void_funcs)?;
+            emit_instruction(bc, *val, inst, &uses, func_indices, value_funcs)?;
         }
 
         emit_terminator(bc, block.id, &block.terminator, &block_by_id, &mut patches);
@@ -189,7 +183,7 @@ fn emit_instruction(
     inst: &LirInst,
     uses: &HashMap<Value, u32>,
     func_indices: &HashMap<&str, u16>,
-    void_funcs: &HashSet<&str>,
+    value_funcs: &HashSet<&str>,
 ) -> Result<(), CompileError> {
     let used = uses.get(&val).copied().unwrap_or(0) > 0;
 
@@ -208,6 +202,11 @@ fn emit_instruction(
         }
         LirInst::GlobalAddr(addr) => {
             emit_const(bc, *addr as i16);
+            emit_store_or_pop(bc, val, used);
+        }
+        LirInst::FrameAddr(offset) => {
+            bc.emit_op(OP_FRAME_ADDR);
+            bc.emit_u16(*offset);
             emit_store_or_pop(bc, val, used);
         }
         LirInst::BinOp {
@@ -248,11 +247,15 @@ fn emit_instruction(
             bc.emit_op(OP_CALL);
             bc.emit_u16(*func_idx);
             bc.emit_u8(args.len() as u8);
-            if used {
-                bc.emit_op(OP_STORE_LOCAL);
-                bc.emit_u16(val.0 as u16);
-            } else if !void_funcs.contains(name.as_str()) {
-                bc.emit_op(OP_POP);
+            if value_funcs.contains(name.as_str()) {
+                // Scalar return: a value is on the stack. Compound and void
+                // calls leave nothing, their result is the caller's destination.
+                if used {
+                    bc.emit_op(OP_STORE_LOCAL);
+                    bc.emit_u16(val.0 as u16);
+                } else {
+                    bc.emit_op(OP_POP);
+                }
             }
         }
         LirInst::Intrinsic { op, args } => {

@@ -30,6 +30,7 @@ pub enum LirInst {
         args: Vec<Value>,
     },
     GlobalAddr(u16),
+    FrameAddr(u16),
     Load {
         addr: Value,
         size: u8,
@@ -45,7 +46,10 @@ pub enum LirInst {
 impl LirInst {
     pub fn operands(&self) -> Vec<Value> {
         match self {
-            LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => vec![],
+            LirInst::Const(_)
+            | LirInst::ConstBool(_)
+            | LirInst::GlobalAddr(_)
+            | LirInst::FrameAddr(_) => vec![],
             LirInst::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
             LirInst::UnaryOp { val, .. } => vec![*val],
             LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => args.clone(),
@@ -57,7 +61,10 @@ impl LirInst {
 
     pub fn replace_values(&mut self, mut f: impl FnMut(Value) -> Value) {
         match self {
-            LirInst::Const(_) | LirInst::ConstBool(_) | LirInst::GlobalAddr(_) => {}
+            LirInst::Const(_)
+            | LirInst::ConstBool(_)
+            | LirInst::GlobalAddr(_)
+            | LirInst::FrameAddr(_) => {}
             LirInst::BinOp { lhs, rhs, .. } => {
                 *lhs = f(*lhs);
                 *rhs = f(*rhs);
@@ -125,6 +132,10 @@ pub struct LirFunc {
     pub name: String,
     pub params: Vec<Value>,
     pub blocks: Vec<BasicBlock>,
+    /// True when the function leaves a value on the operand stack on return.
+    pub returns_value: bool,
+    /// Size in bytes of the frame area used for addressable locals and temporaries.
+    pub frame_bytes: u16,
 }
 
 #[derive(Debug, PartialEq)]

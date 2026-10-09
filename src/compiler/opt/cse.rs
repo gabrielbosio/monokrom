@@ -20,6 +20,7 @@ enum CseKey {
         val: Value,
     },
     GlobalAddr(u16),
+    FrameAddr(u16),
     Load {
         addr: Value,
         size: u8,
@@ -58,6 +59,7 @@ pub fn eliminate(func: &mut LirFunc) {
                 },
                 LirInst::UnaryOp { op, val } => CseKey::UnaryOp { op: *op, val: *val },
                 LirInst::GlobalAddr(addr) => CseKey::GlobalAddr(*addr),
+                LirInst::FrameAddr(offset) => CseKey::FrameAddr(*offset),
                 LirInst::Load { addr, size } => CseKey::Load {
                     addr: *addr,
                     size: *size,

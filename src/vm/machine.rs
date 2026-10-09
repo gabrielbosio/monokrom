@@ -23,6 +23,7 @@ pub enum VmError {
     NoEntryPoint,
     CallStackOverflow,
     CallStackUnderflow,
+    FrameOverflow,
     UnknownOpcode(u8),
     CycleLimit,
 }
@@ -37,6 +38,7 @@ impl std::fmt::Display for VmError {
             Self::NoEntryPoint => write!(f, "no main() function"),
             Self::CallStackOverflow => write!(f, "call stack overflow"),
             Self::CallStackUnderflow => write!(f, "call stack underflow"),
+            Self::FrameOverflow => write!(f, "call frame stack overflow"),
             Self::UnknownOpcode(op) => write!(f, "unknown opcode 0x{op:02X}"),
             Self::CycleLimit => write!(f, "cycle limit exceeded"),
         }
@@ -52,19 +54,20 @@ pub enum VmResult {
 
 struct CallFrame {
     return_pc: usize,
-    locals_base: usize,
+    frame_base: usize,
+    func_idx: usize,
 }
 
 struct FuncEntry {
     code_offset: usize,
     n_locals: u16,
+    frame_bytes: u16,
 }
 
 pub struct Vm {
     code: Vec<u8>,
     pc: usize,
     stack: Vec<i16>,
-    locals: Vec<i16>,
     call_stack: Vec<CallFrame>,
     pub memory: [u8; MEMORY_SIZE],
     pub framebuffer: [u8; FB_SIZE],
@@ -73,6 +76,8 @@ pub struct Vm {
     pub prev_buttons: u8,
     string_pool: Vec<String>,
     functions: Vec<FuncEntry>,
+    frame_base: usize,
+    func_idx: usize,
     pub halted: bool,
     pub trace_output: Vec<String>,
     pub sfx_queue: Vec<u8>,
@@ -92,24 +97,28 @@ impl Vm {
             .map(|f| FuncEntry {
                 code_offset: f.code_offset,
                 n_locals: f.n_locals,
+                frame_bytes: f.frame_bytes,
             })
             .collect();
 
-        // Find main's function entry to get n_locals
-        let main_func = bc
+        // Find main's function entry to set up its frame
+        let main_idx = bc
             .functions
             .iter()
-            .find(|f| f.code_offset == entry)
+            .position(|f| f.code_offset == entry)
             .ok_or(VmError::NoEntryPoint)?;
 
-        let n_locals = main_func.n_locals as usize;
-        let locals = vec![0i16; n_locals];
+        let frame_base = bc.globals_size as usize;
+        let frame_size =
+            functions[main_idx].n_locals as usize * 2 + functions[main_idx].frame_bytes as usize;
+        if frame_base + frame_size > SPRITE_REGION_START {
+            return Err(VmError::FrameOverflow);
+        }
 
         let mut vm = Self {
             code: bc.code.clone(),
             pc: entry,
             stack: Vec::with_capacity(STACK_LIMIT),
-            locals,
             call_stack: Vec::with_capacity(CALL_STACK_LIMIT),
             memory: [0; MEMORY_SIZE],
             framebuffer: [0; FB_SIZE],
@@ -118,6 +127,8 @@ impl Vm {
             prev_buttons: 0,
             string_pool: bc.string_pool.clone(),
             functions,
+            frame_base,
+            func_idx: main_idx,
             halted: false,
             trace_output: Vec::new(),
             sfx_queue: Vec::new(),
@@ -130,8 +141,11 @@ impl Vm {
         // Push initial call frame for main (return_pc = usize::MAX means halt on return)
         vm.call_stack.push(CallFrame {
             return_pc: usize::MAX,
-            locals_base: 0,
+            frame_base,
+            func_idx: main_idx,
         });
+        let end = frame_base + frame_size;
+        vm.memory[frame_base..end].fill(0);
 
         Ok(vm)
     }
@@ -172,17 +186,30 @@ impl Vm {
         u16::from_le_bytes([lo, hi])
     }
 
-    fn locals_base(&self) -> usize {
-        self.call_stack.last().map(|f| f.locals_base).unwrap_or(0)
+    /// Number of bytes reserved for value slots in the current frame.
+    fn value_area(&self) -> usize {
+        self.functions[self.func_idx].n_locals as usize * 2
+    }
+
+    /// Total size of the current frame in bytes.
+    fn frame_size(&self) -> usize {
+        self.value_area() + self.functions[self.func_idx].frame_bytes as usize
+    }
+
+    fn slot_addr(&self, slot: u16) -> usize {
+        self.frame_base + slot as usize * 2
     }
 
     fn load_local(&self, slot: u16) -> i16 {
-        self.locals[self.locals_base() + slot as usize]
+        let addr = self.slot_addr(slot);
+        i16::from_le_bytes([self.memory[addr], self.memory[addr + 1]])
     }
 
     fn store_local(&mut self, slot: u16, val: i16) {
-        let base = self.locals_base();
-        self.locals[base + slot as usize] = val;
+        let addr = self.slot_addr(slot);
+        let bytes = val.to_le_bytes();
+        self.memory[addr] = bytes[0];
+        self.memory[addr + 1] = bytes[1];
     }
 
     pub fn step(&mut self) -> Result<VmResult, VmError> {
@@ -222,6 +249,11 @@ impl Vm {
                 let slot = self.read_u16();
                 let v = self.pop()?;
                 self.store_local(slot, v);
+            }
+            OP_FRAME_ADDR => {
+                let offset = self.read_u16() as usize;
+                let addr = self.frame_base + self.value_area() + offset;
+                self.push(addr as i16)?;
             }
             OP_ADD => binop!(i16::wrapping_add),
             OP_SUB => binop!(i16::wrapping_sub),
@@ -330,24 +362,35 @@ impl Vm {
                     return Err(VmError::CallStackOverflow);
                 }
 
-                let n_locals = self.functions[func_idx].n_locals;
+                let value_area = self.functions[func_idx].n_locals as usize * 2;
+                let callee_size = value_area + self.functions[func_idx].frame_bytes as usize;
                 let code_offset = self.functions[func_idx].code_offset;
-                let new_base = self.locals.len();
+                let new_base = self.frame_base + self.frame_size();
 
-                // Allocate locals for the callee
-                self.locals.resize(new_base + n_locals as usize, 0);
+                if new_base + callee_size > SPRITE_REGION_START {
+                    return Err(VmError::FrameOverflow);
+                }
 
-                // Pop args from stack and copy to first N local slots
+                // Zero and allocate the callee frame
+                self.memory[new_base..new_base + callee_size].fill(0);
+
+                // Pop args from stack and copy to first N value slots
                 for i in (0..argc as usize).rev() {
                     let v = self.pop()?;
-                    self.locals[new_base + i] = v;
+                    let addr = new_base + i * 2;
+                    let bytes = v.to_le_bytes();
+                    self.memory[addr] = bytes[0];
+                    self.memory[addr + 1] = bytes[1];
                 }
 
                 self.call_stack.push(CallFrame {
                     return_pc: self.pc,
-                    locals_base: new_base,
+                    frame_base: self.frame_base,
+                    func_idx: self.func_idx,
                 });
 
+                self.frame_base = new_base;
+                self.func_idx = func_idx;
                 self.pc = code_offset;
             }
             OP_RET => {
@@ -356,8 +399,8 @@ impl Vm {
                     self.halted = true;
                     return Ok(VmResult::Halted);
                 }
-                // Truncate locals back to caller's frame
-                self.locals.truncate(frame.locals_base);
+                self.frame_base = frame.frame_base;
+                self.func_idx = frame.func_idx;
                 self.pc = frame.return_pc;
             }
             OP_HALT => {
@@ -781,10 +824,18 @@ mod tests {
                 code_offset: 0,
                 n_params: 0,
                 n_locals,
+                frame_bytes: 0,
             }],
             string_pool: Vec::new(),
             code,
+            globals_size: 0,
         }
+    }
+
+    /// Read a value slot from the main frame.
+    fn local(vm: &Vm, slot: u16) -> i16 {
+        let addr = vm.frame_base + slot as usize * 2;
+        i16::from_le_bytes([vm.memory[addr], vm.memory[addr + 1]])
     }
 
     #[test]
@@ -801,7 +852,7 @@ mod tests {
         let bc = make_bc(vec![OP_PUSH_I8, 42, OP_STORE_LOCAL, 0, 0, OP_HALT], 1);
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 42);
+        assert_eq!(local(&vm, 0), 42);
     }
 
     #[test]
@@ -835,7 +886,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[2], 13);
+        assert_eq!(local(&vm, 2), 13);
     }
 
     #[test]
@@ -889,7 +940,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 3);
+        assert_eq!(local(&vm, 0), 3);
         assert_eq!(vm.framebuffer[3 * FB_WIDTH + 5], 3);
     }
 
@@ -915,7 +966,7 @@ mod tests {
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         // Slot 0 should still be 0 (the push_i8 99 was skipped)
-        assert_eq!(vm.locals[0], 0);
+        assert_eq!(local(&vm, 0), 0);
     }
 
     #[test]
@@ -935,7 +986,7 @@ mod tests {
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.buttons = 0b0001_0000; // bit 4 set
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 1);
+        assert_eq!(local(&vm, 0), 1);
     }
 
     #[test]
@@ -960,7 +1011,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 42);
+        assert_eq!(local(&vm, 0), 42);
         assert_eq!(vm.memory[100], 42);
     }
 
@@ -991,7 +1042,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 500);
+        assert_eq!(local(&vm, 0), 500);
     }
 
     #[test]
@@ -1026,21 +1077,24 @@ mod tests {
                     code_offset: 0,
                     n_params: 2,
                     n_locals: 2,
+                    frame_bytes: 0,
                 },
                 FuncInfo {
                     code_offset: main_offset,
                     n_params: 0,
                     n_locals: 1,
+                    frame_bytes: 0,
                 },
             ],
             string_pool: Vec::new(),
             code,
+            globals_size: 0,
         };
 
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         // main's locals start at index 0, slot 0 should have 30
-        assert_eq!(vm.locals[0], 30);
+        assert_eq!(local(&vm, 0), 30);
     }
 
     #[test]
@@ -1099,7 +1153,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], FP_ONE * 3);
+        assert_eq!(local(&vm, 0), FP_ONE * 3);
     }
 
     #[test]
@@ -1120,7 +1174,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], 0b0110);
+        assert_eq!(local(&vm, 0), 0b0110);
     }
 
     #[test]
@@ -1146,7 +1200,7 @@ mod tests {
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.locals[0], FP_ONE * 2);
+        assert_eq!(local(&vm, 0), FP_ONE * 2);
     }
 
     #[test]
@@ -1540,5 +1594,209 @@ end";
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
         assert_eq!(vm.trace_output[0], "9");
+    }
+
+    #[test]
+    fn recursive_compound_local() {
+        // Every invocation must get its own copy of the compound local
+        let src = "\
+struct Box
+  value: int
+end
+
+fn countdown(n: int): int
+  b: Box
+  b.value = n
+  if n == 0
+    return 0
+  end
+  countdown(n - 1)
+  return b.value
+end
+
+fn main()
+  tracei(countdown(3))
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "3");
+    }
+
+    #[test]
+    fn mutual_recursion_compound_locals() {
+        let src = "\
+struct Box
+  value: int
+end
+
+fn even(n: int): int
+  b: Box
+  b.value = n
+  if n == 0
+    return 1
+  end
+  return odd(n - 1)
+end
+
+fn odd(n: int): int
+  b: Box
+  b.value = n
+  if n == 0
+    return 0
+  end
+  return even(n - 1)
+end
+
+fn main()
+  tracei(even(4))
+  tracei(odd(5))
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "1");
+        assert_eq!(vm.trace_output[1], "1");
+    }
+
+    #[test]
+    fn nested_compound_returns() {
+        // Both make() results must be live at the same time
+        let src = "\
+struct Vec2
+  x: int
+  y: int
+end
+
+fn make(x: int, y: int): Vec2
+  v: Vec2
+  v.x = x
+  v.y = y
+  return v
+end
+
+fn add(a: Vec2, b: Vec2): Vec2
+  r: Vec2
+  r.x = a.x + b.x
+  r.y = a.y + b.y
+  return r
+end
+
+fn main()
+  p = add(make(1, 2), make(3, 4))
+  tracei(p.x)
+  tracei(p.y)
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "4");
+        assert_eq!(vm.trace_output[1], "6");
+    }
+
+    #[test]
+    fn compound_return_forwarding() {
+        let src = "\
+struct Vec2
+  x: int
+  y: int
+end
+
+fn make(x: int, y: int): Vec2
+  v: Vec2
+  v.x = x
+  v.y = y
+  return v
+end
+
+fn forward(x: int, y: int): Vec2
+  return make(x, y)
+end
+
+fn main()
+  v = forward(7, 8)
+  tracei(v.x)
+  tracei(v.y)
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "7");
+        assert_eq!(vm.trace_output[1], "8");
+    }
+
+    #[test]
+    fn compound_locals_zeroed_per_call() {
+        // A second call must not observe the previous call's compound local
+        let src = "\
+struct Box
+  value: int
+end
+
+fn read_after_write(write: bool): int
+  b: Box
+  if write
+    b.value = 99
+  end
+  return b.value
+end
+
+fn main()
+  tracei(read_after_write(true))
+  tracei(read_after_write(false))
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "99");
+        assert_eq!(vm.trace_output[1], "0");
+    }
+
+    #[test]
+    fn compound_return_through_ref_binding() {
+        let src = "\
+struct Vec2
+  x: int
+  y: int
+end
+
+fn make(): Vec2
+  v: Vec2
+  v.x = 3
+  v.y = 4
+  return v
+end
+
+fn main()
+  v: Vec2
+  p = ref v
+  p = make()
+  tracei(v.x)
+  tracei(v.y)
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.run_until_flip().unwrap();
+        assert_eq!(vm.trace_output[0], "3");
+        assert_eq!(vm.trace_output[1], "4");
+    }
+
+    #[test]
+    fn frame_overflow_is_runtime_error() {
+        // Deep recursion with a frame bigger than the 12KB program area
+        let src = "\
+fn deep(n: int): int
+  big: array[512] of int
+  big[0] = n
+  return deep(n + 1)
+end
+
+fn main()
+  tracei(deep(0))
+end";
+        let bc = compile(src).unwrap();
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        let err = vm.run_until_flip().unwrap_err();
+        assert!(matches!(err, VmError::FrameOverflow));
     }
 }
