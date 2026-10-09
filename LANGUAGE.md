@@ -66,8 +66,6 @@ x: int
 
 Top-level variables are globals. Variables inside functions are locals. Variables declared inside `if`, `while`, or `for` blocks are scoped to that block.
 
-Locals are allocated per function call and start at zero. A variable declared inside a function or block does not retain values from a previous call.
-
 ## Operators
 
 Precedence from highest to lowest:
@@ -174,9 +172,7 @@ fn greet(name: str)
 end
 ```
 
-All functions are global. No methods, no closures. Function overloading is not supported. Functions can call themselves, recursion is supported.
-
-Returning a struct or array copies it into the caller, the same way assignment copies compound values.
+All functions are global. No methods, no closures. Function overloading is not supported.
 
 ## Structs
 
@@ -354,8 +350,6 @@ Memory layout:
 | `0x0000` | 12KB | Program data (globals, locals, call stack) |
 | `0x3000` | 4KB | Sprite data (256 × 16 bytes) |
 | `0x4000` | 4KB | Map data (128 × 32 tiles) |
-
-Locals live in per-call frames allocated after globals. Running out of frame space stops the program with a runtime error.
 
 Peek and poke operate on single bytes. Since `int` is 16-bit (2 bytes, little-endian), reading a full int requires two peeks:
 
