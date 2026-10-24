@@ -141,6 +141,9 @@ impl TypeCheckCtx {
             TypeExpr::Void => HirType::Void,
             TypeExpr::Array(elem, size) => {
                 let elem_ty = self.resolve_type(elem);
+                if matches!(&elem_ty, HirType::Ref(_)) {
+                    self.error("array element type cannot be ref".to_string());
+                }
                 HirType::Array(Box::new(elem_ty), *size)
             }
             TypeExpr::Ref(inner) => {
@@ -1504,6 +1507,23 @@ mod tests {
     fn ref_in_struct_field_error() {
         let errs = lower_err("struct S\n  x: ref int\nend");
         assert!(errs.iter().any(|e| e.message.contains("cannot be ref")));
+    }
+
+    #[test]
+    fn ref_in_array_element_error() {
+        for src in [
+            "a: array[4] of ref int",
+            "struct S\n  a: array[4] of ref int\nend",
+            "fn f(a: array[4] of ref int)\nend",
+            "fn f()\n  a: array[4] of ref int\nend",
+        ] {
+            let errs = lower_err(src);
+            assert!(
+                errs.iter()
+                    .any(|e| e.message.contains("array element type cannot be ref")),
+                "{src}"
+            );
+        }
     }
 
     #[test]
