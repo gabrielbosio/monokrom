@@ -1482,6 +1482,13 @@ impl App {
         }
     }
 
+    fn stop_running(&mut self, mode: AppMode) {
+        self.sfx_player.stop_all();
+        self.music_player.stop();
+        self.run_state = None;
+        self.mode = mode;
+    }
+
     fn update_running(&mut self) {
         // Drain char queue so keypresses during gameplay don't leak into terminal
         while get_char_pressed().is_some() {}
@@ -1491,11 +1498,8 @@ impl App {
                 // TODO: prompt for confirmation before quitting an exported game.
                 std::process::exit(0);
             }
-            self.sfx_player.stop_all();
-            self.music_player.stop();
             self.terminal.push_output("stopped");
-            self.run_state = None;
-            self.mode = self.run_return_mode;
+            self.stop_running(self.run_return_mode);
             return;
         }
 
@@ -1503,10 +1507,6 @@ impl App {
             Some(vm) => vm,
             None => return,
         };
-
-        if vm.halted {
-            return;
-        }
 
         vm.prev_buttons = vm.buttons;
         let mut buttons = sample_buttons();
@@ -1521,18 +1521,26 @@ impl App {
         vm.current_time = get_time();
 
         match vm.run_until_flip() {
-            Ok(VmResult::Flip | VmResult::Halted) => {
+            Ok(VmResult::Flip) => {
                 for line in vm.trace_output.drain(..) {
                     self.terminal.push_output(&line);
                 }
                 self.pending_sfx_plays.append(&mut vm.sfx_queue);
                 self.pending_music_plays.append(&mut vm.music_queue);
             }
+            Ok(VmResult::Halted) => {
+                for line in vm.trace_output.drain(..) {
+                    self.terminal.push_output(&line);
+                }
+                if self.player_mode {
+                    std::process::exit(0);
+                }
+                self.stop_running(AppMode::Terminal);
+            }
             Ok(VmResult::Continue) => {}
             Err(e) => {
                 self.terminal.push_output(&format!("runtime error: {e}"));
-                self.run_state = None;
-                self.mode = AppMode::Terminal;
+                self.stop_running(AppMode::Terminal);
             }
         }
     }
