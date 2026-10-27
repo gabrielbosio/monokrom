@@ -10,6 +10,9 @@ pub mod opt;
 pub mod peephole;
 pub mod type_check;
 
+/// Maximum size of the serialized bytecode, including strings and function metadata.
+pub const BYTECODE_LIMIT: usize = 32 * 1024;
+
 lalrpop_util::lalrpop_mod!(
     #[allow(clippy::all)]
     pub grammar,
@@ -223,6 +226,12 @@ pub fn compile(source: &str) -> Result<bytecode::Bytecode, Vec<String>> {
     opt::optimize(&mut lir);
     let mut bc = codegen::generate(&lir).map_err(|e| vec![format!("{e}")])?;
     peephole::optimize(&mut bc);
+    let size = bc.serialize().len();
+    if size > BYTECODE_LIMIT {
+        return Err(vec![format!(
+            "serialized bytecode exceeds 32KB limit ({size} / {BYTECODE_LIMIT} bytes)"
+        )]);
+    }
     Ok(bc)
 }
 
@@ -713,6 +722,60 @@ mod tests {
     fn compile_type_error_has_line_number() {
         let errs = super::compile("fn f()\n  x: int = true\nend").unwrap_err();
         assert!(errs.iter().any(|e| e.starts_with("line ")));
+    }
+
+    #[test]
+    fn string_pool_counts_toward_bytecode_limit() {
+        let src = format!(
+            "fn main()\n  prints(\"{}\", 0, 0, 0)\nend",
+            "x".repeat(40_000)
+        );
+        let errs = super::compile(&src).unwrap_err();
+        assert!(errs[0].contains("serialized bytecode exceeds 32KB limit"));
+        assert!(errs[0].contains("40050"));
+    }
+
+    #[test]
+    fn bytecode_limit_boundary_counts_string_pool() {
+        let base = super::compile("fn main()\n  prints(\"\", 0, 0, 0)\nend").unwrap();
+        let base_size = base.serialize().len();
+        let n = BYTECODE_LIMIT - base_size;
+
+        let at_limit = format!("fn main()\n  prints(\"{}\", 0, 0, 0)\nend", "x".repeat(n));
+        let bc = super::compile(&at_limit).unwrap();
+        assert_eq!(bc.serialize().len(), BYTECODE_LIMIT);
+
+        let over = format!(
+            "fn main()\n  prints(\"{}\", 0, 0, 0)\nend",
+            "x".repeat(n + 1)
+        );
+        let errs = super::compile(&over).unwrap_err();
+        assert!(errs[0].contains(&(BYTECODE_LIMIT + 1).to_string()));
+    }
+
+    #[test]
+    fn function_metadata_counts_toward_bytecode_limit() {
+        let mut src = String::new();
+        for i in 0..4_000 {
+            src.push_str(&format!("fn f{i}()\nend\n"));
+        }
+        src.push_str("fn main()\nend\n");
+
+        let errs = super::compile(&src).unwrap_err();
+        assert!(errs[0].contains("serialized bytecode exceeds 32KB limit"));
+    }
+
+    #[test]
+    fn bytecode_limit_is_checked_after_peephole() {
+        let mut src = String::from("fn main()\n");
+        for i in 0..3_300 {
+            src.push_str(&format!("  sfx({i})\n"));
+        }
+        src.push_str("end\n");
+
+        let bc = super::compile(&src).unwrap();
+        assert!(bc.code.len() < BYTECODE_LIMIT / 2);
+        assert!(bc.serialize().len() <= BYTECODE_LIMIT);
     }
 
     #[test]

@@ -1664,10 +1664,12 @@ impl App {
                 } else {
                     match compiler::compile(&source) {
                         Ok(bc) => {
-                            let size = bc.code.len();
-                            let pct = size * 100 / 32768;
-                            self.terminal
-                                .push_output(&format!("{size} / 32768 bytes ({pct}%)"));
+                            let size = bc.serialize().len();
+                            let pct = size * 100 / compiler::BYTECODE_LIMIT;
+                            self.terminal.push_output(&format!(
+                                "{size} / {} bytes ({pct}%)",
+                                compiler::BYTECODE_LIMIT
+                            ));
                         }
                         Err(errors) => {
                             for e in &errors {
