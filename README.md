@@ -39,7 +39,7 @@ Monokrom boots into a terminal. Press **Escape** to cycle through the following 
 
 **Shift+Escape** cycles in reverse.
 
-**Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and returns to whichever mode launched it. Any error triggered during program execution will switch to the terminal and show the corresponding error message, regardless of the editor set before starting the program.
+**Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and switches to the terminal, as does returning from `main()`. Any error triggered during program execution is shown there too.
 
 This section shows how to navigate through each screen. Depending on the screen, navigation may consist of running commands by writing them and/or triggering them using specific hotkeys.
 

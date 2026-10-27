@@ -132,7 +132,6 @@ pub struct App {
     // VM
     run_state: Option<Vm>,
     player_mode: bool,
-    run_return_mode: AppMode,
     /// True while the Enter used to launch the program is still held, so it
     /// isn't delivered to the game.
     run_enter_held: bool,
@@ -233,7 +232,6 @@ impl App {
 
             run_state,
             player_mode,
-            run_return_mode: AppMode::Terminal,
             run_enter_held: false,
 
             sprite_editor: SpriteEditor::new(),
@@ -721,7 +719,6 @@ impl App {
     }
 
     fn run_program(&mut self) {
-        self.run_return_mode = self.mode;
         let source = self.editor.buffer.to_string();
         if source.is_empty() {
             self.terminal.push_output("(empty buffer)");
@@ -1482,11 +1479,11 @@ impl App {
         }
     }
 
-    fn stop_running(&mut self, mode: AppMode) {
+    fn stop_running(&mut self) {
         self.sfx_player.stop_all();
         self.music_player.stop();
         self.run_state = None;
-        self.mode = mode;
+        self.mode = AppMode::Terminal;
     }
 
     fn update_running(&mut self) {
@@ -1499,7 +1496,7 @@ impl App {
                 std::process::exit(0);
             }
             self.terminal.push_output("stopped");
-            self.stop_running(self.run_return_mode);
+            self.stop_running();
             return;
         }
 
@@ -1535,12 +1532,12 @@ impl App {
                 if self.player_mode {
                     std::process::exit(0);
                 }
-                self.stop_running(AppMode::Terminal);
+                self.stop_running();
             }
             Ok(VmResult::Continue) => {}
             Err(e) => {
                 self.terminal.push_output(&format!("runtime error: {e}"));
-                self.stop_running(AppMode::Terminal);
+                self.stop_running();
             }
         }
     }
