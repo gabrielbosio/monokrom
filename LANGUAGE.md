@@ -347,9 +347,13 @@ Memory layout:
 
 | Address | Size | Contents |
 |---------|------|----------|
-| `0x0000` | 12KB | Program data (globals, locals, call stack) |
+| `0x0000` | 12KB | Program data (globals, locals, storage for call frames) |
 | `0x3000` | 4KB | Sprite data (256 × 16 bytes) |
 | `0x4000` | 4KB | Map data (128 × 32 tiles) |
+| `0x5000` | 1088 bytes | SFX data (16 × 68 bytes) |
+| `0x5440` | 3008 bytes | Unallocated |
+| `0x6000` | 4160 bytes | Music data (16 × 260 bytes) |
+| `0x7040` | 4032 bytes | Unallocated |
 
 Peek and poke operate on single bytes. Since `int` is 16-bit (2 bytes, little-endian), reading a full int requires two peeks:
 

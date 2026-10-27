@@ -7,7 +7,7 @@ Monokrom is a fantasy console where its imposed technical limitations make it re
 - **Screen:** 160x144 pixels (40x24 chars with 4x6 font). Actual size will depend on the window size but the ratio is always preserved.
 - **Palette:** 4-color monochrome (black, dark gray, light gray, white)
 - **Bytecode limit:** 32KB
-- **Runtime memory:** 20KB flat
+- **Runtime memory:** 32KB flat
 - **Sprites:** 256 sprites, 8x8 pixels, 2bpp (4 colors)
 - **Map:** 128 cols x 32 rows, 1 byte per cell
 
