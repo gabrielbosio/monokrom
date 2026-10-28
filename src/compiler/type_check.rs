@@ -620,6 +620,12 @@ impl TypeCheckCtx {
         match &stmt.kind {
             ast::StmtKind::VarDecl { name, ty, value } => {
                 let hir_ty = self.resolve_type(ty);
+                if matches!(&hir_ty, HirType::Ref(_)) && value.is_none() {
+                    self.error_at(
+                        span,
+                        format!("{name}: ref declaration requires an initializer"),
+                    );
+                }
                 let hir_value = value.as_ref().map(|v| {
                     let hv = self.check_expr(v);
                     // Allow auto-deref: Ref(T) value for T declared type
@@ -1674,6 +1680,32 @@ mod tests {
     fn ref_global_error() {
         let errs = lower_err("x: ref int");
         assert!(errs.iter().any(|e| e.message.contains("global")));
+    }
+
+    #[test]
+    fn ref_declaration_requires_initializer() {
+        for src in [
+            "fn f()\n  p: ref int\nend",
+            "struct V\n  x: int\nend\nfn f()\n  p: ref V\nend",
+            "fn f()\n  p: ref array[2] of int\nend",
+        ] {
+            let errs = lower_err(src);
+            assert!(
+                errs.iter().any(|e| e
+                    .message
+                    .contains("ref declaration requires an initializer")),
+                "{src}"
+            );
+        }
+    }
+
+    #[test]
+    fn ref_declaration_with_initializer() {
+        let _hir = lower("fn f(x: int)\n  p: ref int = ref x\n  p = 1\nend");
+        let _hir = lower("fn g(q: ref int)\n  p: ref int = q\n  p = 1\nend");
+        let _hir = lower(
+            "struct V\n  x: int\nend\nv: V\na: array[2] of int\nfn f()\n  p: ref int = ref v.x\n  q: ref int = ref a[0]\nend",
+        );
     }
 
     #[test]

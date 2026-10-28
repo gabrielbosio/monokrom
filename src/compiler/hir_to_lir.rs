@@ -693,12 +693,10 @@ impl<'a> LowerCtx<'a> {
                 value,
             } => {
                 if let HirType::Ref(_) = ty {
-                    // Ref declaration: store the address as an SSA value
-                    let val = if let Some(v) = value {
-                        self.lower_as_ref(v)
-                    } else {
-                        self.emit(LirInst::Const(0))
-                    };
+                    // Ref declarations always have an initializer, so no ref
+                    // can be zero or otherwise unbound.
+                    let value = value.as_ref().expect("ref declaration without initializer");
+                    let val = self.lower_as_ref(value);
                     self.write_local(*id, ty, val);
                 } else if self.is_scalar(ty) {
                     let val = if let Some(v) = value {
