@@ -18,12 +18,14 @@ pub struct FuncDef {
     pub params: Vec<Param>,
     pub ret_type: Option<TypeExpr>,
     pub body: Vec<Stmt>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
     pub ty: TypeExpr,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]

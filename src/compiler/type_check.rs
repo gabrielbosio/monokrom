@@ -932,7 +932,7 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
     for item in &module.items {
         if let ast::TopLevel::Function(f) = item {
             if ctx.functions.contains_key(&f.name) {
-                ctx.error(format!("function '{}' is already defined", f.name));
+                ctx.error_at(f.span, format!("function '{}' is already defined", f.name));
                 continue;
             }
             let param_types: Vec<HirType> =
@@ -1014,7 +1014,7 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
             let mut params = Vec::new();
             for (i, p) in f.params.iter().enumerate() {
                 let ty = param_types[i].clone();
-                let id = ctx.declare_local(&p.name, ty.clone(), None);
+                let id = ctx.declare_local(&p.name, ty.clone(), Some(p.span));
                 params.push(HirParam {
                     id,
                     name: p.name.clone(),
@@ -1537,12 +1537,11 @@ mod tests {
     #[test]
     fn duplicate_function_name_error() {
         let errs = lower_err("fn f()\nend\nfn f(x: int)\nend");
-        assert_eq!(
-            errs.iter()
-                .filter(|e| e.message.contains("function 'f' is already defined"))
-                .count(),
-            1
-        );
+        let err = errs
+            .iter()
+            .find(|e| e.message.contains("function 'f' is already defined"))
+            .expect("duplicate function error");
+        assert!(err.span.is_some());
     }
 
     // --- Ref semantics tests ---
@@ -1868,9 +1867,11 @@ mod tests {
     #[test]
     fn duplicate_parameter_error() {
         let errs = lower_err("fn f(x: int, x: int)\nend");
-        assert!(errs
+        let err = errs
             .iter()
-            .any(|e| e.message.contains("redeclaration of 'x'")));
+            .find(|e| e.message.contains("redeclaration of 'x'"))
+            .expect("duplicate parameter error");
+        assert!(err.span.is_some());
     }
 
     #[test]

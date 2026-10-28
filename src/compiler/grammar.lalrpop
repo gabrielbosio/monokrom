@@ -105,13 +105,13 @@ TopLevel: TopLevel = {
 // --- Definitions ---
 
 FuncDef: FuncDef = {
-    "fn" <name:IDENT> "(" <params:Comma<Param>> ")" <ret:(":" <Type>)?> NL1 <body:Body> "end" => {
-        FuncDef { name, params, ret_type: ret, body }
+    <l:@L> "fn" <name:IDENT> "(" <params:Comma<Param>> ")" <ret:(":" <Type>)?> NL1 <body:Body> "end" <r:@R> => {
+        FuncDef { name, params, ret_type: ret, body, span: (l, r) }
     }
 };
 
 Param: Param = {
-    <name:IDENT> ":" <ty:Type> => Param { name, ty }
+    <l:@L> <name:IDENT> ":" <ty:Type> <r:@R> => Param { name, ty, span: (l, r) }
 };
 
 StructDef: StructDef = {

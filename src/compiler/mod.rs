@@ -284,6 +284,7 @@ mod tests {
                 params: vec![],
                 ret_type: None,
                 body: vec![],
+                span: (0, 12),
             })]
         );
     }
@@ -722,6 +723,28 @@ mod tests {
     fn compile_type_error_has_line_number() {
         let errs = super::compile("fn f()\n  x: int = true\nend").unwrap_err();
         assert!(errs.iter().any(|e| e.starts_with("line ")));
+    }
+
+    #[test]
+    fn compile_duplicate_parameter_error_has_line_number() {
+        let errs = super::compile("fn f(x: int, x: int)\nend").unwrap_err();
+        assert!(
+            errs.iter().any(|e| {
+                e.starts_with("line 1: ") && e.contains("redeclaration of 'x' in the same scope")
+            }),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn compile_duplicate_function_error_has_line_number() {
+        let errs = super::compile("fn f()\nend\nfn f(x: int)\nend").unwrap_err();
+        assert!(
+            errs.iter().any(|e| {
+                e.starts_with("line 3: ") && e.contains("function 'f' is already defined")
+            }),
+            "{errs:?}"
+        );
     }
 
     #[test]
