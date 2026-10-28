@@ -6,7 +6,7 @@ use crate::config::{
     COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, SPRITE_SIZE, TILE_WIDTH,
 };
 use crate::input::{
-    is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
+    is_arrow_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
 };
 use crate::render::DrawHelpers;
 
@@ -94,7 +94,7 @@ impl SpriteEditor {
             });
         }
 
-        let modifier = is_modifier_pressed();
+        let modifier = is_shortcut_modifier_pressed();
         let shift = is_shift_pressed();
 
         if modifier && !shift && is_key_pressed(KeyCode::S) {
@@ -120,18 +120,14 @@ impl SpriteEditor {
             }
             return SpriteEditorOutput::none();
         }
-        if is_shortcut_modifier_pressed()
+        if modifier
             && !shift
             && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
         {
             return SpriteEditorOutput::action(SpriteEditorAction::Run);
         }
-        if modifier {
-            return SpriteEditorOutput::none();
-        }
 
-        let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
-        if alt {
+        if is_arrow_modifier_pressed() {
             if is_key_pressed(KeyCode::Left) {
                 self.select(self.selected.wrapping_sub(1));
             }
@@ -144,6 +140,9 @@ impl SpriteEditor {
             if is_key_pressed(KeyCode::Down) {
                 self.select(self.selected.wrapping_add(16));
             }
+            return SpriteEditorOutput::none();
+        }
+        if modifier {
             return SpriteEditorOutput::none();
         }
 

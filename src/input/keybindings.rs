@@ -155,6 +155,18 @@ pub fn is_alt_pressed() -> bool {
     is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt)
 }
 
+/// Modifier for Ctrl+Arrow shortcuts.
+/// Linux/Windows: Ctrl. macOS: Option. WASM: Alt.
+#[cfg(any(target_arch = "wasm32", target_os = "macos"))]
+pub fn is_arrow_modifier_pressed() -> bool {
+    is_alt_pressed()
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
+pub fn is_arrow_modifier_pressed() -> bool {
+    is_ctrl_pressed()
+}
+
 /// Shortcut modifier for letter-key combos: Alt on WASM, Ctrl on native.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn is_shortcut_modifier_pressed() -> bool {

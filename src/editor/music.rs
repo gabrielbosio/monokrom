@@ -14,7 +14,7 @@ use crate::config::{
     SCREEN_HEIGHT, SFX_COUNT, TILE_WIDTH,
 };
 use crate::input::{
-    is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
+    is_arrow_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
 };
 use crate::render::DrawHelpers;
 
@@ -200,7 +200,7 @@ impl MusicEditor {
             });
         }
 
-        let modifier = is_modifier_pressed();
+        let modifier = is_shortcut_modifier_pressed();
         let shift = is_shift_pressed();
 
         if modifier && !shift && is_key_pressed(KeyCode::S) {
@@ -249,14 +249,19 @@ impl MusicEditor {
             }
             return MusicEditorOutput::none();
         }
-        if is_shortcut_modifier_pressed()
+        if modifier
             && !shift
             && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
         {
             return MusicEditorOutput::action(MusicEditorAction::Run);
         }
         if modifier {
-            return MusicEditorOutput::none();
+            let grid_arrow = !self.header_focus
+                && is_arrow_modifier_pressed()
+                && (is_key_down(KeyCode::Up) || is_key_down(KeyCode::Down));
+            if !grid_arrow {
+                return MusicEditorOutput::none();
+            }
         }
 
         if is_key_pressed(KeyCode::Tab) {
@@ -339,9 +344,9 @@ impl MusicEditor {
     }
 
     fn update_grid(&mut self, shift: bool, sfx_data: &[u8]) -> MusicEditorOutput {
-        let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
+        let arrow_mod = is_arrow_modifier_pressed();
 
-        if should_key_fire(KeyCode::Left, false) && !alt {
+        if should_key_fire(KeyCode::Left, false) && !arrow_mod {
             if shift {
                 self.cursor_channel =
                     (self.cursor_channel + MUSIC_CHANNELS as u8 - 1) % MUSIC_CHANNELS as u8;
@@ -353,7 +358,7 @@ impl MusicEditor {
                 }
             }
         }
-        if should_key_fire(KeyCode::Right, false) && !alt {
+        if should_key_fire(KeyCode::Right, false) && !arrow_mod {
             if shift {
                 self.cursor_channel = (self.cursor_channel + 1) % MUSIC_CHANNELS as u8;
             } else {
@@ -364,21 +369,21 @@ impl MusicEditor {
             }
         }
 
-        if should_key_fire(KeyCode::Up, false) && !alt {
+        if should_key_fire(KeyCode::Up, false) && !arrow_mod {
             let step = if shift { 8 } else { 1 };
             self.cursor_row = (self.cursor_row + MUSIC_ROWS as u8 - step) % MUSIC_ROWS as u8;
             self.ensure_cursor_visible();
         }
-        if should_key_fire(KeyCode::Down, false) && !alt {
+        if should_key_fire(KeyCode::Down, false) && !arrow_mod {
             let step = if shift { 8 } else { 1 };
             self.cursor_row = (self.cursor_row + step) % MUSIC_ROWS as u8;
             self.ensure_cursor_visible();
         }
 
-        if should_key_fire(KeyCode::Up, false) && alt {
+        if should_key_fire(KeyCode::Up, false) && arrow_mod {
             return self.bump_or_scroll(sfx_data, shift, 1);
         }
-        if should_key_fire(KeyCode::Down, false) && alt {
+        if should_key_fire(KeyCode::Down, false) && arrow_mod {
             return self.bump_or_scroll(sfx_data, shift, -1);
         }
 
@@ -774,7 +779,7 @@ impl MusicEditor {
         let hint = if self.header_focus {
             "tab:grid shift+up/dn:+-10"
         } else {
-            "play:sp tab:hdr alt"
+            "play:sp tab:hdr ctrl"
         };
         for (i, c) in hint.chars().enumerate() {
             helpers.draw_char(c, i as f32 * TILE_WIDTH as f32, HINT_Y, COLOR_DARK_GRAY);

@@ -12,7 +12,7 @@ use crate::config::{
     SFX_COUNT, SFX_REGION_SIZE, SFX_SIZE, TILE_WIDTH,
 };
 use crate::input::{
-    is_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
+    is_arrow_modifier_pressed, is_shift_pressed, is_shortcut_modifier_pressed, should_key_fire,
 };
 use crate::render::DrawHelpers;
 
@@ -171,7 +171,7 @@ impl SfxEditor {
             });
         }
 
-        let modifier = is_modifier_pressed();
+        let modifier = is_shortcut_modifier_pressed();
         let shift = is_shift_pressed();
 
         if modifier && !shift && is_key_pressed(KeyCode::S) {
@@ -209,14 +209,19 @@ impl SfxEditor {
             }
             return SfxEditorOutput::none();
         }
-        if is_shortcut_modifier_pressed()
+        if modifier
             && !shift
             && (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter))
         {
             return SfxEditorOutput::action(SfxEditorAction::Run);
         }
         if modifier {
-            return SfxEditorOutput::none();
+            let grid_arrow = !self.header_focus
+                && is_arrow_modifier_pressed()
+                && (is_key_down(KeyCode::Up) || is_key_down(KeyCode::Down));
+            if !grid_arrow {
+                return SfxEditorOutput::none();
+            }
         }
 
         if is_key_pressed(KeyCode::Tab) {
@@ -298,27 +303,27 @@ impl SfxEditor {
     }
 
     fn update_grid(&mut self, shift: bool) -> SfxEditorOutput {
-        let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
-        if should_key_fire(KeyCode::Left, false) && !alt {
+        let arrow_mod = is_arrow_modifier_pressed();
+        if should_key_fire(KeyCode::Left, false) && !arrow_mod {
             self.cursor_cell = (self.cursor_cell + SFX_CELLS as u8 - 1) % SFX_CELLS as u8;
         }
-        if should_key_fire(KeyCode::Right, false) && !alt {
+        if should_key_fire(KeyCode::Right, false) && !arrow_mod {
             self.cursor_cell = (self.cursor_cell + 1) % SFX_CELLS as u8;
         }
-        if is_key_pressed(KeyCode::Up) && !shift && !alt {
+        if is_key_pressed(KeyCode::Up) && !shift && !arrow_mod {
             self.cursor_row = self.cursor_row.prev();
         }
-        if is_key_pressed(KeyCode::Down) && !shift && !alt {
+        if is_key_pressed(KeyCode::Down) && !shift && !arrow_mod {
             self.cursor_row = self.cursor_row.next();
         }
 
-        let bump: i32 = if should_key_fire(KeyCode::Up, false) && (shift || alt) {
+        let bump: i32 = if should_key_fire(KeyCode::Up, false) && (shift || arrow_mod) {
             if shift && matches!(self.cursor_row, Row::Pitch) {
                 12
             } else {
                 1
             }
-        } else if should_key_fire(KeyCode::Down, false) && (shift || alt) {
+        } else if should_key_fire(KeyCode::Down, false) && (shift || arrow_mod) {
             if shift && matches!(self.cursor_row, Row::Pitch) {
                 -12
             } else {
@@ -544,7 +549,7 @@ impl SfxEditor {
         let hint = if self.header_focus {
             "tab:cells  shift+up/dn:+-10"
         } else {
-            "play:sp tab:hdr alt+up/dn"
+            "play:sp tab:hdr ctrl+up/dn"
         };
         for (i, c) in hint.chars().enumerate() {
             helpers.draw_char(c, i as f32 * TILE_WIDTH as f32, HINT_Y, COLOR_DARK_GRAY);

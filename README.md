@@ -45,7 +45,7 @@ This section shows how to navigate through each screen. Depending on the screen,
 
 > *NOTE:* The docs show that some hotkeys involve pressing the Ctrl key. Due to context-specific restrictions, some hotkeys are mapped differently depending where Monokrom is running:
 >
-> - On macOS, word operations (i.e. Ctrl+Arrow) use Option instead of Ctrl.
+> - On macOS, Ctrl+Arrow, Ctrl+Backspace, and Ctrl+Delete shortcuts use Option instead of Ctrl.
 > - On WASM, all Ctrl hotkeys use Alt instead.
 
 ### Terminal
@@ -80,7 +80,7 @@ This section shows how to navigate through each screen. Depending on the screen,
 - **Space** paint pixel (hold while moving to draw continuously)
 - **1/2/3/4** select color (1=black, 2=dark, 3=light, 4=white)
 - **C** eyedropper (pick color under cursor)
-- **Alt+Arrow** navigate the sprite sheet
+- **Ctrl+Arrow** navigate the sprite sheet
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+C/V** copy/paste sprite
 - **Ctrl+S** save
@@ -95,7 +95,7 @@ This section shows how to navigate through each screen. Depending on the screen,
 - **Space** paint tile (hold while moving to paint continuously)
 - **Delete/Backspace** clear tile (place tile 0)
 - **C** eyedropper (pick tile under cursor)
-- **Alt+Arrow** navigate the tile picker (picker scrolls one column at a time)
+- **Ctrl+Arrow** navigate the tile picker (picker scrolls one column at a time)
 - **Tab** (hold) peek a 20×18 tile region as it will appear at runtime
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+S** save
@@ -117,7 +117,7 @@ This editor has two panes which you set focus on one of them: The header and the
 - **Ctrl+C/V** copy/paste cell
 - **Left/Right** move cell cursor
 - **Up/Down** change row (Pitch, Timbre, Volume, Detune)
-- **Alt+Up/Down** change current field by 1
+- **Ctrl+Up/Down** change current field by 1
 - **Shift+Up/Shift+Down** change current field on Pitch row by an octave
 - **Delete/Backspace** clear current cell
 
@@ -145,8 +145,8 @@ Same two-pane structure as the Sfx editor.
 - **Left/Right** step through cell fields (Pitch, Sfx, Volume, Detune), wrapping into the adjacent channel column at the edge
 - **Shift+Left/Right** move between channels (PU1, PU2, WV, NS)
 - **Up/Down** move row by 1, **Shift+Up/Down** by 8
-- **Alt+Up/Down** change current field by 1 (on Sfx, scrolls through valid SFX slots for the column)
-- **Alt+Shift+Up/Down** change Pitch by an octave
+- **Ctrl+Up/Down** change current field by 1 (on Sfx, scrolls through valid SFX slots for the column)
+- **Ctrl+Shift+Up/Down** change Pitch by an octave
 - **Delete/Backspace** clear current cell
 
 #### Header
