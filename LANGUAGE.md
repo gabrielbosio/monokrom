@@ -64,6 +64,8 @@ Declaration without initialization must specify type:
 x: int
 ```
 
+Declaring a variable without initializing means declaring a variable and initializing it to its zero value. See [Zero initialization](#zero-initialization) for the zero value of each type.
+
 Top-level variables are globals. Variables inside functions are locals. Variables declared inside `if`, `while`, or `for` blocks are scoped to that block.
 
 Variables are mutable:
@@ -337,6 +339,16 @@ end
 - Cannot store refs in struct fields or arrays
 - Cannot return refs from functions
 - No nested `ref ref T`
+
+## Zero initialization
+
+- `int`: `0`
+- `fixed`: `0.0`
+- `bool`: `false`
+- `str`: `""`
+- `struct`: each field gets zero-initialized
+- `array`: each element gets zero-initialized
+- `ref`: cannot be zero-initialized
 
 ## Intrinsics
 
