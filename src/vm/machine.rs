@@ -2000,6 +2000,82 @@ end"#,
     }
 
     #[test]
+    fn global_compound_initializers_copy_whole_value() {
+        let cases: Vec<(&str, &str, Vec<&str>)> = vec![
+            (
+                "struct from call",
+                r#"struct V
+  x: int
+  y: int
+end
+
+fn make(x: int, y: int): V
+  v: V
+  v.x = x
+  v.y = y
+  return v
+end
+
+a: V = make(7, 9)
+
+fn main()
+  tracei(a.x)
+  tracei(a.y)
+end"#,
+                vec!["7", "9"],
+            ),
+            (
+                "struct from global",
+                r#"struct V
+  x: int
+  y: int
+end
+
+fn make(x: int, y: int): V
+  v: V
+  v.x = x
+  v.y = y
+  return v
+end
+
+b: V = make(7, 9)
+a: V = b
+
+fn main()
+  tracei(a.x)
+  tracei(a.y)
+end"#,
+                vec!["7", "9"],
+            ),
+            (
+                "array from call",
+                r#"fn make(): array[3] of int
+  a: array[3] of int
+  a[0] = 1
+  a[1] = 2
+  a[2] = 3
+  return a
+end
+
+a: array[3] of int = make()
+
+fn main()
+  tracei(a[0] + a[1] + a[2])
+end"#,
+                vec!["6"],
+            ),
+        ];
+
+        for (label, src, expected) in cases {
+            let bc = compile(src).unwrap_or_else(|errs| panic!("{label}: {errs:?}"));
+            let mut vm = Vm::new(&bc, 0.0).unwrap();
+            vm.run_until_flip().unwrap();
+            let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+            assert_eq!(vm.trace_output, expected, "{label}");
+        }
+    }
+
+    #[test]
     fn block_scoping_shadowing() {
         let cases: Vec<(&str, &str, Vec<&str>)> = vec![
             (

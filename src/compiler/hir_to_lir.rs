@@ -1254,10 +1254,16 @@ fn lower_function(module: &HirModule, func: &HirFunc) -> LirFunc {
         // Global inits with explicit init values
         for g in &module.globals {
             if let Some(init) = &g.init {
-                let val = ctx.lower_expr(init);
-                let addr = ctx.emit(LirInst::GlobalAddr(g.address));
-                let size = ctx.type_size(&g.ty) as u8;
-                ctx.emit(LirInst::Store { addr, val, size });
+                if ctx.is_compound(&g.ty) {
+                    let addr = ctx.emit(LirInst::GlobalAddr(g.address));
+                    let size = ctx.type_size(&g.ty);
+                    ctx.lower_compound_value_into(init, addr, size);
+                } else {
+                    let val = ctx.lower_expr(init);
+                    let addr = ctx.emit(LirInst::GlobalAddr(g.address));
+                    let size = ctx.type_size(&g.ty) as u8;
+                    ctx.emit(LirInst::Store { addr, val, size });
+                }
             }
         }
         // global_init statements
