@@ -114,11 +114,11 @@ Precedence from highest to lowest:
 
 ```
 if condition
-    // ...
+  // ...
 else if other_condition
-    // ...
+  // ...
 else
-    // ...
+  // ...
 end
 ```
 
@@ -126,7 +126,7 @@ end
 
 ```
 while condition
-    // ...
+  // ...
 end
 ```
 
@@ -138,7 +138,7 @@ end
 
 ```
 for i in 0..10
-    // i goes 0, 1, 2, ..., 9
+  // i goes 0, 1, 2, ..., 9
 end
 ```
 
@@ -146,7 +146,7 @@ end
 
 ```
 for i in 0..=10
-    // i goes 0, 1, 2, ..., 10
+  // i goes 0, 1, 2, ..., 10
 end
 ```
 
@@ -169,11 +169,11 @@ Both index and element variables are required. Variables with name `_` are disca
 
 ```
 for i, e in enemies
-    // i is the index, e is the element
+  // i is the index, e is the element
 end
 
 for _, e in enemies
-    // discard index
+  // discard index
 end
 ```
 
@@ -181,7 +181,7 @@ By default, iterating an array will copy each element so modifying the element d
 
 ```
 for _, e in enemies
-    e.x = e.x + 1  // modifies the copy, enemies[i] is unchanged
+  e.x = e.x + 1  // modifies the copy, enemies[i] is unchanged
 end
 ```
 
@@ -189,7 +189,7 @@ Prefixing the element with `ref` binds it as `ref T` and allows modifying the ar
 
 ```
 for _, ref e in enemies
-    e.x = e.x + 1  // modifies enemies[i].x
+  e.x = e.x + 1  // modifies enemies[i].x
 end
 ```
 
@@ -197,7 +197,7 @@ end
 
 ```
 fn add(a: int, b: int): int
-    return a + b
+  return a + b
 end
 ```
 
@@ -205,7 +205,7 @@ Omit the return type for void functions:
 
 ```
 fn greet(name: str)
-    prints(name, 0, 0, 3)
+  prints(name, 0, 0, 3)
 end
 ```
 
@@ -217,10 +217,10 @@ Compiler sugar over raw memory. Fields have fixed offsets, no runtime type metad
 
 ```
 struct Enemy
-    x: int
-    y: int
-    hp: int
-    alive: bool
+  x: int
+  y: int
+  hp: int
+  alive: bool
 end
 ```
 
@@ -452,11 +452,11 @@ Programs run through a `main()` function. `flip()` presents the screen and yield
 
 ```
 fn main()
-    while true
-        cls(0)
-        // update and draw
-        flip()
-    end
+  while true
+    cls(0)
+    // update and draw
+    flip()
+  end
 end
 ```
 
