@@ -1799,4 +1799,484 @@ end";
         let err = vm.run_until_flip().unwrap_err();
         assert!(matches!(err, VmError::FrameOverflow));
     }
+
+    #[test]
+    fn block_scoping_shadowing() {
+        let cases: Vec<(&str, &str, Vec<&str>)> = vec![
+            (
+                "if shadow scalar",
+                r#"fn main()
+  x = 1
+  if true
+    x: int = 2
+  end
+  tracei(x)
+end"#,
+                vec!["1"],
+            ),
+            (
+                "param shadow",
+                r#"fn f(x: int): int
+  if true
+    x: int = 2
+  end
+  return x
+end
+
+fn main()
+  tracei(f(1))
+end"#,
+                vec!["1"],
+            ),
+            (
+                "while read before decl",
+                r#"fn main()
+  x = 1
+  n = 0
+  while n < 2
+    tracei(x)
+    x: int = 2
+    n = n + 1
+  end
+  tracei(x)
+end"#,
+                vec!["1", "1", "1"],
+            ),
+            (
+                "while condition shadow",
+                r#"fn main()
+  x = 2
+  n = 0
+  while x > 0
+    n = n + 1
+    x: int = 0
+    if n > 3
+      break
+    end
+  end
+  tracei(n)
+end"#,
+                vec!["4"],
+            ),
+            (
+                "struct shadow",
+                r#"struct Box
+  v: int
+end
+
+fn main()
+  b: Box
+  b.v = 1
+  if true
+    b: Box
+    b.v = 2
+  end
+  tracei(b.v)
+end"#,
+                vec!["1"],
+            ),
+            (
+                "cross type outer scalar inner compound",
+                r#"struct Box
+  v: int
+end
+
+fn main()
+  x = 7
+  if true
+    x: Box
+    x.v = 3
+  end
+  tracei(x)
+end"#,
+                vec!["7"],
+            ),
+            (
+                "cross type outer compound inner scalar",
+                r#"struct Box
+  v: int
+end
+
+fn main()
+  b: Box
+  b.v = 1
+  if true
+    b: int = 2
+  end
+  tracei(b.v)
+end"#,
+                vec!["1"],
+            ),
+            (
+                "initializer sees outer",
+                r#"fn main()
+  x = 1
+  if true
+    x: int = x + 1
+    tracei(x)
+  end
+  tracei(x)
+end"#,
+                vec!["2", "1"],
+            ),
+            (
+                "local shadow global",
+                r#"g = 1
+
+fn main()
+  if true
+    g: int = 2
+    tracei(g)
+  end
+  tracei(g)
+end"#,
+                vec!["2", "1"],
+            ),
+            (
+                "sibling block reuse",
+                r#"fn main()
+  if true
+    x: int = 1
+    tracei(x)
+  end
+  if true
+    x: int = 2
+    tracei(x)
+  end
+end"#,
+                vec!["1", "2"],
+            ),
+            (
+                "outer assignment in block",
+                r#"fn main()
+  x = 1
+  if true
+    x = 2
+  end
+  tracei(x)
+end"#,
+                vec!["2"],
+            ),
+            (
+                "for range var leaks",
+                r#"fn main()
+  i = 99
+  for i in 0..3
+  end
+  tracei(i)
+end"#,
+                vec!["99"],
+            ),
+            (
+                "for range bounds use outer binding",
+                r#"fn main()
+  i = 5
+  n = 0
+  for i in 0..i
+    n = n + 1
+  end
+  tracei(n)
+  tracei(i)
+end"#,
+                vec!["5", "5"],
+            ),
+            (
+                "for-in vars leak",
+                r#"fn main()
+  a: array[2] of int
+  a[0] = 5
+  a[1] = 6
+  i = 99
+  e = 42
+  for i, e in a
+  end
+  tracei(i)
+  tracei(e)
+end"#,
+                vec!["99", "42"],
+            ),
+            (
+                "for range body redecl",
+                r#"fn main()
+  out = 0
+  for i in 0..3
+    i: int = 5
+    out = out + 1
+  end
+  tracei(out)
+end"#,
+                vec!["3"],
+            ),
+            (
+                "for-in index shadow body",
+                r#"fn main()
+  a: array[3] of int
+  a[0] = 5
+  a[1] = 6
+  a[2] = 7
+  n = 0
+  for i, e in a
+    i: int = 100
+    n = n + 1
+  end
+  tracei(n)
+end"#,
+                vec!["3"],
+            ),
+            (
+                "nested for range same var",
+                r#"fn main()
+  n = 0
+  for i in 0..2
+    for i in 0..2
+      n = n + 1
+    end
+  end
+  tracei(n)
+end"#,
+                vec!["4"],
+            ),
+            (
+                "nested for-in same elem",
+                r#"struct Box
+  v: int
+end
+
+fn main()
+  outer: array[2] of Box
+  outer[0].v = 7
+  outer[1].v = 8
+  inner: array[1] of Box
+  inner[0].v = 99
+  for _, e in outer
+    for _, e in inner
+    end
+    tracei(e.v)
+  end
+end"#,
+                vec!["7", "8"],
+            ),
+            (
+                "for-in iter name collision",
+                r#"g: int = 0
+
+fn main()
+  arr: array[2] of int
+  arr[0] = 5
+  arr[1] = 6
+  p = ref arr
+  for p, e in p
+    tracei(e)
+  end
+end"#,
+                vec!["5", "6"],
+            ),
+        ];
+
+        for (label, src, expected) in cases {
+            let bc = compile(src).unwrap_or_else(|errs| panic!("{label}: {errs:?}"));
+            let mut vm = Vm::new(&bc, 0.0).unwrap();
+            vm.run_until_flip().unwrap();
+            let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+            assert_eq!(vm.trace_output, expected, "{label}");
+        }
+    }
+
+    #[test]
+    fn address_taken_locals() {
+        let cases: Vec<(&str, &str, Vec<&str>)> = vec![
+            (
+                "ref param",
+                r#"a: int = 1
+b: int = 222
+
+fn set(p: ref int)
+  p = 77
+end
+
+fn f(x: int)
+  set(ref x)
+  tracei(x)
+end
+
+fn main()
+  f(2)
+  tracei(b)
+end"#,
+                vec!["77", "222"],
+            ),
+            (
+                "ref for range var",
+                r#"a: int = 1
+b: int = 222
+
+fn set(p: ref int)
+  p = 77
+end
+
+fn main()
+  for i in 2..3
+    set(ref i)
+  end
+  tracei(b)
+end"#,
+                vec!["222"],
+            ),
+            (
+                "ref for range var affects counter",
+                r#"fn set(p: ref int)
+  p = 77
+end
+
+fn main()
+  n = 0
+  for i in 2..5
+    n = n + 1
+    set(ref i)
+  end
+  tracei(n)
+end"#,
+                vec!["1"],
+            ),
+            (
+                "ref for-in elem",
+                r#"arr: array[1] of int
+b: int = 222
+
+fn set(p: ref int)
+  p = 77
+end
+
+fn main()
+  arr[0] = 2
+  for _, e in arr
+    set(ref e)
+    tracei(e)
+  end
+  tracei(b)
+end"#,
+                vec!["77", "222"],
+            ),
+            (
+                "ref for-in index",
+                r#"arr: array[2] of int
+b: int = 222
+
+fn set(p: ref int)
+  p = 1
+end
+
+fn main()
+  arr[0] = 5
+  arr[1] = 6
+  n = 0
+  for i, e in arr
+    n = n + 1
+    if n == 1
+      set(ref i)
+    end
+  end
+  tracei(n)
+  tracei(b)
+end"#,
+                vec!["1", "222"],
+            ),
+            (
+                "toplevel block compound",
+                r#"g: int = 111
+
+if true
+  y: array[2] of int
+  y[0] = 3
+end
+
+fn main()
+  tracei(g)
+end"#,
+                vec!["111"],
+            ),
+            (
+                "toplevel block compound with init",
+                r#"fn make(): array[2] of int
+  a: array[2] of int
+  a[0] = 3
+  return a
+end
+
+g: int = 111
+
+if true
+  y: array[2] of int = make()
+  y[1] = 4
+  tracei(y[0])
+end
+
+fn main()
+  tracei(g)
+end"#,
+                vec!["3", "111"],
+            ),
+            (
+                "toplevel block address-taken scalar",
+                r#"g: int = 111
+
+fn set(p: ref int)
+  p = 77
+end
+
+if true
+  x = 0
+  set(ref x)
+  tracei(x)
+end
+
+fn main()
+  tracei(g)
+end"#,
+                vec!["77", "111"],
+            ),
+            (
+                "inner shadow address taken only",
+                r#"fn set(p: ref int)
+  p = 77
+end
+
+fn main()
+  x = 1
+  if true
+    x: int = 2
+    set(ref x)
+    tracei(x)
+  end
+  tracei(x)
+end"#,
+                vec!["77", "1"],
+            ),
+            (
+                "outer address taken only",
+                r#"fn set(p: ref int)
+  p = 77
+end
+
+fn main()
+  x = 1
+  set(ref x)
+  if true
+    x: int = 2
+    tracei(x)
+  end
+  tracei(x)
+end"#,
+                vec!["2", "77"],
+            ),
+        ];
+
+        for (label, src, expected) in cases {
+            let bc = compile(src).unwrap_or_else(|errs| panic!("{label}: {errs:?}"));
+            let mut vm = Vm::new(&bc, 0.0).unwrap();
+            vm.run_until_flip().unwrap();
+            let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+            assert_eq!(vm.trace_output, expected, "{label}");
+        }
+    }
 }

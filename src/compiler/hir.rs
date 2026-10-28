@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::compiler::ast::{BinOp, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +69,11 @@ pub enum Intrinsic {
     Map,
 }
 
+/// Identity of a local binding. Every declaration, parameter, and loop binding
+/// gets its own id, so nested declarations that share a name remain distinct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LocalId(pub u32);
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirExpr {
     pub kind: HirExprKind,
@@ -83,7 +86,7 @@ pub enum HirExprKind {
     FixedLit(i16),
     BoolLit(bool),
     StrLit(u16),
-    Var(String),
+    Var(LocalId),
     Global(String),
     BinOp {
         op: BinOp,
@@ -117,6 +120,7 @@ pub enum HirExprKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum HirStmt {
     VarDecl {
+        id: LocalId,
         name: String,
         ty: HirType,
         value: Option<HirExpr>,
@@ -136,14 +140,18 @@ pub enum HirStmt {
         body: Vec<HirStmt>,
     },
     ForIn {
-        index: String,
-        elem: String,
+        index: Option<LocalId>,
+        index_name: String,
+        elem: Option<LocalId>,
+        elem_name: String,
+        elem_ty: HirType,
         elem_is_ref: bool,
         iter: HirExpr,
         body: Vec<HirStmt>,
     },
     ForRange {
-        var: String,
+        var: LocalId,
+        var_name: String,
         start: HirExpr,
         end: HirExpr,
         inclusive: bool,
@@ -182,15 +190,28 @@ pub struct HirFunc {
     pub name: String,
     pub params: Vec<HirParam>,
     pub ret_type: HirType,
-    pub locals: Vec<(String, HirType)>,
+    /// Every local binding in the function, including parameters and loop
+    /// bindings. For main, this also includes locals from global_init because
+    /// that code is lowered into main's prologue.
+    pub locals: Vec<HirLocal>,
     pub body: Vec<HirStmt>,
-    pub promoted_locals: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirParam {
+    pub id: LocalId,
     pub name: String,
     pub ty: HirType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirLocal {
+    pub id: LocalId,
+    pub name: String,
+    pub ty: HirType,
+    /// True when the source took this local's address with `ref`. Scalars with
+    /// this flag need a frame slot. Compound locals already have one.
+    pub address_taken: bool,
 }
 
 #[derive(Debug)]

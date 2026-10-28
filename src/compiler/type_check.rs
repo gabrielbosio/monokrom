@@ -18,16 +18,29 @@ struct GlobalInfo {
     init: Option<HirExpr>,
 }
 
+#[derive(Clone)]
+struct LocalBinding {
+    id: LocalId,
+    ty: HirType,
+}
+
+#[derive(Clone)]
+enum VarLookup {
+    Local(LocalBinding),
+    Global(HirType),
+}
+
 struct TypeCheckCtx {
     structs: Vec<HirStruct>,
     globals: HashMap<String, GlobalInfo>,
     functions: HashMap<String, (Vec<HirType>, HirType)>,
     intrinsics: HashMap<String, IntrinsicSig>,
-    scopes: Vec<HashMap<String, HirType>>,
+    scopes: Vec<HashMap<String, LocalBinding>>,
     string_pool: Vec<String>,
     next_global_addr: u16,
+    next_local_id: u32,
     errors: Vec<CompileError>,
-    promoted_locals: HashSet<String>,
+    address_taken_ids: HashSet<LocalId>,
 }
 
 impl TypeCheckCtx {
@@ -40,8 +53,9 @@ impl TypeCheckCtx {
             scopes: Vec::new(),
             string_pool: Vec::new(),
             next_global_addr: 0,
+            next_local_id: 0,
             errors: Vec::new(),
-            promoted_locals: HashSet::new(),
+            address_taken_ids: HashSet::new(),
         };
         ctx.register_intrinsics();
         ctx
@@ -112,22 +126,37 @@ impl TypeCheckCtx {
         self.scopes.pop();
     }
 
-    fn define_local(&mut self, name: &str, ty: HirType) {
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), ty);
+    fn declare_local(&mut self, name: &str, ty: HirType, span: Option<Span>) -> LocalId {
+        if self
+            .scopes
+            .last()
+            .map(|scope| scope.contains_key(name))
+            .unwrap_or(false)
+        {
+            let message = format!("redeclaration of '{name}' in the same scope");
+            match span {
+                Some(span) => self.error_at(span, message),
+                None => self.error(message),
+            }
         }
+        let id = LocalId(self.next_local_id);
+        self.next_local_id += 1;
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name.to_string(), LocalBinding { id, ty });
+        }
+        id
     }
 
-    fn lookup_var(&self, name: &str) -> Option<(HirType, bool)> {
+    fn lookup_var(&self, name: &str) -> Option<VarLookup> {
         // Search local scopes (innermost first)
         for scope in self.scopes.iter().rev() {
-            if let Some(ty) = scope.get(name) {
-                return Some((ty.clone(), false));
+            if let Some(binding) = scope.get(name) {
+                return Some(VarLookup::Local(binding.clone()));
             }
         }
         // Search globals
         if let Some(info) = self.globals.get(name) {
-            return Some((info.ty.clone(), true));
+            return Some(VarLookup::Global(info.ty.clone()));
         }
         None
     }
@@ -226,19 +255,23 @@ impl TypeCheckCtx {
                 }
             }
             ExprKind::Ident(name) => {
-                if let Some((ty, is_global)) = self.lookup_var(name) {
-                    HirExpr {
-                        kind: if is_global {
-                            HirExprKind::Global(name.clone())
-                        } else {
-                            HirExprKind::Var(name.clone())
+                if let Some(resolved) = self.lookup_var(name) {
+                    match resolved {
+                        VarLookup::Local(binding) => HirExpr {
+                            kind: HirExprKind::Var(binding.id),
+                            ty: binding.ty,
                         },
-                        ty,
+                        VarLookup::Global(ty) => HirExpr {
+                            kind: HirExprKind::Global(name.clone()),
+                            ty,
+                        },
                     }
                 } else {
                     self.error_at(span, format!("undeclared variable: {name}"));
                     HirExpr {
-                        kind: HirExprKind::Var(name.clone()),
+                        // Errors prevent lowering, so this placeholder never
+                        // reaches code generation.
+                        kind: HirExprKind::Var(LocalId(u32::MAX)),
                         ty: HirType::Void,
                     }
                 }
@@ -257,16 +290,9 @@ impl TypeCheckCtx {
                     // Forwarding: ref of ref var keeps the same ref type (no nesting)
                     hir_inner.ty.clone()
                 } else {
-                    // Mark scalar local for promotion to memory
-                    if let ExprKind::Ident(name) = &inner.kind {
-                        if let Some((ref ty, false)) = self.lookup_var(name) {
-                            if matches!(
-                                ty,
-                                HirType::Int | HirType::Fixed | HirType::Bool | HirType::Str
-                            ) {
-                                self.promoted_locals.insert(name.clone());
-                            }
-                        }
+                    // The source took this local's address, so materialize it in the frame
+                    if let HirExprKind::Var(id) = &hir_inner.kind {
+                        self.address_taken_ids.insert(*id);
                     }
                     HirType::Ref(Box::new(hir_inner.ty.clone()))
                 };
@@ -599,8 +625,9 @@ impl TypeCheckCtx {
                     }
                     hv
                 });
-                self.define_local(name, hir_ty.clone());
+                let id = self.declare_local(name, hir_ty.clone(), Some(span));
                 HirStmt::VarDecl {
+                    id,
                     name: name.clone(),
                     ty: hir_ty,
                     value: hir_value,
@@ -617,8 +644,9 @@ impl TypeCheckCtx {
                         } else {
                             deref_type(&hir_value.ty).clone()
                         };
-                        self.define_local(name, ty.clone());
+                        let id = self.declare_local(name, ty.clone(), Some(span));
                         return HirStmt::VarDecl {
+                            id,
                             name: name.clone(),
                             ty,
                             value: Some(hir_value),
@@ -722,22 +750,31 @@ impl TypeCheckCtx {
                     }
                 };
                 self.push_scope();
-                if index != "_" {
-                    self.define_local(index, HirType::Int);
-                }
-                if elem != "_" {
+                let index_id = if index != "_" {
+                    Some(self.declare_local(index, HirType::Int, Some(span)))
+                } else {
+                    None
+                };
+                let elem_id = if elem != "_" {
                     let bind_ty = if *elem_is_ref {
-                        HirType::Ref(Box::new(elem_ty))
+                        HirType::Ref(Box::new(elem_ty.clone()))
                     } else {
-                        elem_ty
+                        elem_ty.clone()
                     };
-                    self.define_local(elem, bind_ty);
-                }
+                    Some(self.declare_local(elem, bind_ty, Some(span)))
+                } else {
+                    None
+                };
+                self.push_scope();
                 let hir_body = self.check_stmts(body);
                 self.pop_scope();
+                self.pop_scope();
                 HirStmt::ForIn {
-                    index: index.clone(),
-                    elem: elem.clone(),
+                    index: index_id,
+                    index_name: index.clone(),
+                    elem: elem_id,
+                    elem_name: elem.clone(),
+                    elem_ty,
                     elem_is_ref: *elem_is_ref,
                     iter: hir_iter,
                     body: hir_body,
@@ -765,11 +802,14 @@ impl TypeCheckCtx {
                     );
                 }
                 self.push_scope();
-                self.define_local(var, HirType::Int);
+                let var_id = self.declare_local(var, HirType::Int, Some(span));
+                self.push_scope();
                 let hir_body = self.check_stmts(body);
                 self.pop_scope();
+                self.pop_scope();
                 HirStmt::ForRange {
-                    var: var.clone(),
+                    var: var_id,
+                    var_name: var.clone(),
                     start: hir_start,
                     end: hir_end,
                     inclusive: *inclusive,
@@ -808,6 +848,10 @@ impl TypeCheckCtx {
                     }
                     hv
                 });
+                if self.globals.contains_key(name) {
+                    self.error_at(span, format!("global '{name}' is already declared"));
+                    return None;
+                }
                 let addr = self.alloc_global(&hir_ty);
                 self.globals.insert(
                     name.clone(),
@@ -934,6 +978,16 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
         }
     }
 
+    // Locals declared by top-level control flow are lowered into main's
+    // prologue, so they need to be part of main's local inventory.
+    let mut global_init_locals = Vec::new();
+    collect_local_bindings(
+        &[],
+        &global_init,
+        &ctx.address_taken_ids,
+        &mut global_init_locals,
+    );
+
     // Pass 4: Check function bodies
     let mut hir_functions = Vec::new();
     let mut seen_funcs: HashSet<String> = HashSet::new();
@@ -946,22 +1000,26 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
             if matches!(&ret_type, HirType::Ref(_)) {
                 ctx.error(format!("{}: cannot return ref", f.name));
             }
-            ctx.promoted_locals.clear();
+            ctx.address_taken_ids.clear();
             ctx.push_scope();
             let mut params = Vec::new();
             for (i, p) in f.params.iter().enumerate() {
                 let ty = param_types[i].clone();
-                ctx.define_local(&p.name, ty.clone());
+                let id = ctx.declare_local(&p.name, ty.clone(), None);
                 params.push(HirParam {
+                    id,
                     name: p.name.clone(),
                     ty,
                 });
             }
             let body = ctx.check_stmts(&f.body);
 
-            // Collect locals (all VarDecls in body)
-            let mut locals = Vec::new();
-            collect_locals(&body, &mut locals);
+            let mut locals = if f.name == "main" {
+                global_init_locals.clone()
+            } else {
+                Vec::new()
+            };
+            collect_local_bindings(&params, &body, &ctx.address_taken_ids, &mut locals);
 
             // Check return type
             check_returns(&body, &ret_type, &mut ctx);
@@ -970,14 +1028,12 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
             }
 
             ctx.pop_scope();
-            let promoted = ctx.promoted_locals.clone();
             hir_functions.push(HirFunc {
                 name: f.name.clone(),
                 params,
                 ret_type,
                 locals,
                 body,
-                promoted_locals: promoted,
             });
         }
     }
@@ -995,11 +1051,37 @@ pub fn lower_to_hir(module: &ast::Module) -> Result<HirModule, Vec<CompileError>
     }
 }
 
-fn collect_locals(stmts: &[HirStmt], locals: &mut Vec<(String, HirType)>) {
+fn collect_local_bindings(
+    params: &[HirParam],
+    stmts: &[HirStmt],
+    address_taken: &HashSet<LocalId>,
+    locals: &mut Vec<HirLocal>,
+) {
+    for param in params {
+        locals.push(HirLocal {
+            id: param.id,
+            name: param.name.clone(),
+            ty: param.ty.clone(),
+            address_taken: address_taken.contains(&param.id),
+        });
+    }
+    collect_stmt_bindings(stmts, address_taken, locals);
+}
+
+fn collect_stmt_bindings(
+    stmts: &[HirStmt],
+    address_taken: &HashSet<LocalId>,
+    locals: &mut Vec<HirLocal>,
+) {
     for stmt in stmts {
         match stmt {
-            HirStmt::VarDecl { name, ty, .. } => {
-                locals.push((name.clone(), ty.clone()));
+            HirStmt::VarDecl { id, name, ty, .. } => {
+                locals.push(HirLocal {
+                    id: *id,
+                    name: name.clone(),
+                    ty: ty.clone(),
+                    address_taken: address_taken.contains(id),
+                });
             }
             HirStmt::If {
                 body,
@@ -1007,16 +1089,61 @@ fn collect_locals(stmts: &[HirStmt], locals: &mut Vec<(String, HirType)>) {
                 else_body,
                 ..
             } => {
-                collect_locals(body, locals);
+                collect_stmt_bindings(body, address_taken, locals);
                 for (_, b) in else_ifs {
-                    collect_locals(b, locals);
+                    collect_stmt_bindings(b, address_taken, locals);
                 }
-                collect_locals(else_body, locals);
+                collect_stmt_bindings(else_body, address_taken, locals);
             }
-            HirStmt::While { body, .. }
-            | HirStmt::ForIn { body, .. }
-            | HirStmt::ForRange { body, .. } => {
-                collect_locals(body, locals);
+            HirStmt::While { body, .. } => {
+                collect_stmt_bindings(body, address_taken, locals);
+            }
+            HirStmt::ForRange {
+                var,
+                var_name,
+                body,
+                ..
+            } => {
+                locals.push(HirLocal {
+                    id: *var,
+                    name: var_name.clone(),
+                    ty: HirType::Int,
+                    address_taken: address_taken.contains(var),
+                });
+                collect_stmt_bindings(body, address_taken, locals);
+            }
+            HirStmt::ForIn {
+                index,
+                index_name,
+                elem,
+                elem_name,
+                elem_ty,
+                elem_is_ref,
+                body,
+                ..
+            } => {
+                if let Some(id) = index {
+                    locals.push(HirLocal {
+                        id: *id,
+                        name: index_name.clone(),
+                        ty: HirType::Int,
+                        address_taken: address_taken.contains(id),
+                    });
+                }
+                if let Some(id) = elem {
+                    let ty = if *elem_is_ref {
+                        HirType::Ref(Box::new(elem_ty.clone()))
+                    } else {
+                        elem_ty.clone()
+                    };
+                    locals.push(HirLocal {
+                        id: *id,
+                        name: elem_name.clone(),
+                        ty,
+                        address_taken: address_taken.contains(id),
+                    });
+                }
+                collect_stmt_bindings(body, address_taken, locals);
             }
             _ => {}
         }
@@ -1344,8 +1471,8 @@ mod tests {
         let hir = lower("fn f(): int\n  y = 10\n  return y\nend");
         let f = &hir.functions[0];
         assert_eq!(f.locals.len(), 1);
-        assert_eq!(f.locals[0].0, "y");
-        assert_eq!(f.locals[0].1, HirType::Int);
+        assert_eq!(f.locals[0].name, "y");
+        assert_eq!(f.locals[0].ty, HirType::Int);
     }
 
     #[test]
@@ -1355,7 +1482,10 @@ mod tests {
             "fn update(x: int): int\n  y = 10\n  if x > 0\n    y = y + x\n  else\n    y = y - x\n  end\n  return y\nend",
         );
         let f = &hir.functions[0];
-        assert!(f.locals.iter().any(|(n, t)| n == "y" && *t == HirType::Int));
+        assert!(f
+            .locals
+            .iter()
+            .any(|local| local.name == "y" && local.ty == HirType::Int));
     }
 
     #[test]
@@ -1578,10 +1708,15 @@ mod tests {
     }
 
     #[test]
-    fn ref_promoted_scalar() {
-        // Taking ref of a local scalar promotes it to memory
+    fn ref_scalar_is_address_taken() {
+        // Taking ref of a local scalar marks it address-taken
         let hir = lower("fn f()\n  x = 5\n  g(ref x)\nend\nfn g(p: ref int)\nend");
-        assert!(hir.functions[0].promoted_locals.contains("x"));
+        let x = hir.functions[0]
+            .locals
+            .iter()
+            .find(|local| local.name == "x")
+            .unwrap();
+        assert!(x.address_taken);
     }
 
     #[test]
@@ -1678,5 +1813,119 @@ mod tests {
         // `ref v` makes the scalar element a ref int; writes go back to the array.
         let _hir =
             lower("xs: array[4] of int\nfn f()\n  for _, ref v in xs\n    v = v + 1\n  end\nend");
+    }
+
+    #[test]
+    fn same_scope_local_redeclaration_error() {
+        let errs = lower_err("fn f()\n  x: int = 1\n  x: int = 2\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("redeclaration of 'x' in the same scope")));
+    }
+
+    #[test]
+    fn same_scope_inferred_then_annotated_error() {
+        let errs = lower_err("fn f()\n  x = 1\n  x: int = 2\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("redeclaration of 'x' in the same scope")));
+    }
+
+    #[test]
+    fn duplicate_parameter_error() {
+        let errs = lower_err("fn f(x: int, x: int)\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("redeclaration of 'x'")));
+    }
+
+    #[test]
+    fn duplicate_for_in_binding_error() {
+        let errs = lower_err("a: array[2] of int\nfn f()\n  for i, i in a\n  end\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("redeclaration of 'i'")));
+    }
+
+    #[test]
+    fn duplicate_global_error() {
+        for src in [
+            "x: int = 1\nx: int = 2",
+            "x: int\nx: int",
+            "x = 1\nx: int = 2",
+        ] {
+            let errs = lower_err(src);
+            assert!(
+                errs.iter()
+                    .any(|e| e.message.contains("global 'x' is already declared")),
+                "{src}"
+            );
+        }
+    }
+
+    #[test]
+    fn nested_shadowing_is_allowed() {
+        for src in [
+            "fn f()\n  x = 1\n  if true\n    x: int = 2\n    cls(x)\n  end\nend",
+            "fn f(x: int)\n  if true\n    x: int = 2\n    cls(x)\n  end\nend",
+            "fn f()\n  for i in 0..3\n    i: int = 5\n    cls(i)\n  end\nend",
+            "a: array[2] of int\nfn f()\n  for i, e in a\n    i: int = 5\n    e: int = 6\n    cls(i + e)\n  end\nend",
+            "if true\n  x: int = 1\nend\nif true\n  x: int = 2\nend\nfn main()\nend",
+            "fn f()\n  x = 1\n  if true\n    x = 2\n  end\nend",
+            "g = 1\nfn f()\n  g: int = 2\nend",
+        ] {
+            let _ = lower(src);
+        }
+    }
+
+    #[test]
+    fn parameter_redeclaration_at_function_scope_error() {
+        let errs = lower_err("fn f(x: int)\n  x: int = 2\nend");
+        assert!(errs
+            .iter()
+            .any(|e| e.message.contains("redeclaration of 'x'")));
+    }
+
+    #[test]
+    fn shadowing_declarations_have_distinct_ids() {
+        let hir = lower("fn f()\n  x = 1\n  if true\n    x: int = 2\n    cls(x)\n  end\nend");
+        let f = &hir.functions[0];
+        let xs: Vec<_> = f.locals.iter().filter(|local| local.name == "x").collect();
+        assert_eq!(xs.len(), 2);
+        assert_ne!(xs[0].id, xs[1].id);
+    }
+
+    #[test]
+    fn address_taken_is_per_binding() {
+        let hir = lower(
+            "fn set(p: ref int)\nend\nfn f()\n  x = 1\n  if true\n    x: int = 2\n    set(ref x)\n  end\nend",
+        );
+        let f = hir.functions.iter().find(|f| f.name == "f").unwrap();
+        let xs: Vec<_> = f.locals.iter().filter(|local| local.name == "x").collect();
+        assert_eq!(xs.len(), 2);
+        assert!(!xs[0].address_taken);
+        assert!(xs[1].address_taken);
+    }
+
+    #[test]
+    fn address_taken_param_and_loop_var() {
+        let hir = lower(
+            "fn set(p: ref int)\nend\nfn f(x: int)\n  set(ref x)\n  for i in 0..2\n    set(ref i)\n  end\nend",
+        );
+        let f = hir.functions.iter().find(|f| f.name == "f").unwrap();
+        let x = f.locals.iter().find(|local| local.name == "x").unwrap();
+        let i = f.locals.iter().find(|local| local.name == "i").unwrap();
+        assert!(x.address_taken);
+        assert!(i.address_taken);
+    }
+
+    #[test]
+    fn main_includes_global_init_locals() {
+        let hir = lower("if true\n  y: array[2] of int\nend\nfn main()\nend");
+        let main = hir.functions.iter().find(|f| f.name == "main").unwrap();
+        assert!(main
+            .locals
+            .iter()
+            .any(|local| local.name == "y" && matches!(local.ty, HirType::Array(..))));
     }
 }

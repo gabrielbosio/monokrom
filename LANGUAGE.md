@@ -66,6 +66,32 @@ x: int
 
 Top-level variables are globals. Variables inside functions are locals. Variables declared inside `if`, `while`, or `for` blocks are scoped to that block.
 
+Variables are mutable:
+
+```
+x: int = 5
+x = 3
+```
+
+Re-declaration of a variable in the same scope is not allowed:
+
+```
+x: int = 5
+x: int = 3 // Compile error
+```
+
+Re-declaring a variable in an inner scope shadows the name of the outer variable:
+
+```
+x: int = 5
+
+fn main()
+  y = x // y is 5
+  x: int = 3
+  z = x // z is 3
+end
+```
+
 ## Operators
 
 Precedence from highest to lowest:
@@ -125,6 +151,17 @@ end
 ```
 
 `break` exits the loop. `continue` skips to the next iteration.
+
+The loop variable can be shadowed by a declaration in the loop body. It does not affect the loop execution:
+
+```
+for i in 0..10
+  x = i // x takes the value of the loop variable
+  i: int = 5
+  y = i // y is 5
+  // The loop still runs 10 times
+end
+```
 
 #### Array iteration
 
