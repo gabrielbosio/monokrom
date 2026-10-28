@@ -1082,6 +1082,11 @@ impl<'a> LowerCtx<'a> {
             _ => return,
         };
 
+        // Evaluate the iterable once, before the loop starts. Re-evaluating it
+        // in the body would repeat side effects and could change the array
+        // being iterated mid-loop.
+        let base_addr = self.lower_addr_of(iter);
+
         let index_key = match index {
             Some(id) => LocalKey::Local(id),
             None => self.fresh_temp_key(),
@@ -1125,7 +1130,6 @@ impl<'a> LowerCtx<'a> {
         // Load element if not wildcard
         if let Some(elem_id) = elem {
             let cur_idx = self.read_binding(index_key, &int_ty);
-            let base_addr = self.lower_addr_of(iter);
             let elem_size = self.type_size(elem_ty);
             let size_val = self.emit(LirInst::Const(elem_size as i16));
             let offset = self.emit(LirInst::BinOp {
@@ -1436,6 +1440,26 @@ mod tests {
                 .any(|(_, inst)| matches!(inst, LirInst::Intrinsic { .. }))
         });
         assert!(has_intrinsic);
+    }
+
+    #[test]
+    fn for_in_iterable_lowered_before_loop() {
+        // The iterable call must be in the entry block, not in the loop body
+        let m = lir(
+            "fn make(): array[3] of int\n  a: array[3] of int\n  return a\nend\nfn f()\n  for _, e in make()\n    cls(e)\n  end\nend",
+        );
+        let f = find_func(&m, "f");
+        let call_blocks: Vec<BlockId> = f
+            .blocks
+            .iter()
+            .filter(|b| {
+                b.insts
+                    .iter()
+                    .any(|(_, inst)| matches!(inst, LirInst::Call { .. }))
+            })
+            .map(|b| b.id)
+            .collect();
+        assert_eq!(call_blocks, vec![BlockId(0)]);
     }
 
     #[test]

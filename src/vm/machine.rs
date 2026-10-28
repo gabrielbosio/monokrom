@@ -1801,6 +1801,99 @@ end";
     }
 
     #[test]
+    fn for_in_iterable_evaluated_once() {
+        let cases: Vec<(&str, &str, Vec<&str>)> = vec![
+            (
+                "function call evaluated once",
+                r#"calls: int
+
+fn make(): array[3] of int
+  xs: array[3] of int
+  calls = calls + 1
+  xs[0] = 1
+  xs[1] = 2
+  xs[2] = 3
+  return xs
+end
+
+fn main()
+  n = 0
+  for _, v in make()
+    n = n + v
+  end
+  tracei(n)
+  tracei(calls)
+end"#,
+                vec!["6", "1"],
+            ),
+            (
+                "indexed iterable fixed at entry",
+                r#"grid: array[2] of array[3] of int
+
+fn main()
+  grid[0][0] = 10
+  grid[0][1] = 11
+  grid[0][2] = 12
+  grid[1][0] = 20
+  grid[1][1] = 21
+  grid[1][2] = 22
+  row = 0
+  for _, v in grid[row]
+    tracei(v)
+    row = 1
+  end
+end"#,
+                vec!["10", "11", "12"],
+            ),
+            (
+                "ref rebinding does not switch arrays",
+                r#"a: array[2] of int
+b: array[2] of int
+
+fn main()
+  a[0] = 1
+  a[1] = 2
+  b[0] = 10
+  b[1] = 20
+  p = ref a
+  n = 0
+  for _, v in p
+    n = n + v
+    p = ref b
+  end
+  tracei(n)
+end"#,
+                vec!["3"],
+            ),
+            (
+                "wildcard elements still evaluate iterable",
+                r#"calls: int
+
+fn make(): array[2] of int
+  xs: array[2] of int
+  calls = calls + 1
+  return xs
+end
+
+fn main()
+  for _, _ in make()
+  end
+  tracei(calls)
+end"#,
+                vec!["1"],
+            ),
+        ];
+
+        for (label, src, expected) in cases {
+            let bc = compile(src).unwrap_or_else(|errs| panic!("{label}: {errs:?}"));
+            let mut vm = Vm::new(&bc, 0.0).unwrap();
+            vm.run_until_flip().unwrap();
+            let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+            assert_eq!(vm.trace_output, expected, "{label}");
+        }
+    }
+
+    #[test]
     fn block_scoping_shadowing() {
         let cases: Vec<(&str, &str, Vec<&str>)> = vec![
             (
