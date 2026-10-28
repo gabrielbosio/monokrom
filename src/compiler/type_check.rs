@@ -58,6 +58,9 @@ impl TypeCheckCtx {
             address_taken_ids: HashSet::new(),
         };
         ctx.register_intrinsics();
+        // Index 0 is the zero value of str, so it must always be the empty
+        // string. Zeroed strings are represented as a string index of 0.
+        ctx.intern_string("");
         ctx
     }
 
@@ -1360,8 +1363,7 @@ mod tests {
     #[test]
     fn string_pool_dedup() {
         let hir = lower("x = \"hello\"\ny = \"hello\"");
-        assert_eq!(hir.string_pool.len(), 1);
-        assert_eq!(hir.string_pool[0], "hello");
+        assert_eq!(hir.string_pool, vec!["".to_string(), "hello".to_string()]);
     }
 
     #[test]

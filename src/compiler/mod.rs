@@ -732,14 +732,16 @@ mod tests {
         );
         let errs = super::compile(&src).unwrap_err();
         assert!(errs[0].contains("serialized bytecode exceeds 32KB limit"));
-        assert!(errs[0].contains("40050"));
+        assert!(errs[0].contains("40058"));
     }
 
     #[test]
     fn bytecode_limit_boundary_counts_string_pool() {
-        let base = super::compile("fn main()\n  prints(\"\", 0, 0, 0)\nend").unwrap();
+        // Use a one-character string so the baseline and the boundary program
+        // have the same string-pool entry count.
+        let base = super::compile("fn main()\n  prints(\"x\", 0, 0, 0)\nend").unwrap();
         let base_size = base.serialize().len();
-        let n = BYTECODE_LIMIT - base_size;
+        let n = BYTECODE_LIMIT - base_size + 1;
 
         let at_limit = format!("fn main()\n  prints(\"{}\", 0, 0, 0)\nend", "x".repeat(n));
         let bc = super::compile(&at_limit).unwrap();

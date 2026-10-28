@@ -2076,6 +2076,72 @@ end"#,
     }
 
     #[test]
+    fn zero_initialized_strings_are_empty() {
+        let cases: Vec<(&str, &str, Vec<&str>)> = vec![
+            (
+                "local string after literal",
+                r#"fn main()
+  traces("hello")
+  s: str
+  traces(s)
+end"#,
+                vec!["hello", ""],
+            ),
+            (
+                "struct and array fields",
+                r#"struct S
+  name: str
+  tag: str
+end
+
+fn main()
+  s: S
+  a: array[2] of str
+  traces(s.name)
+  traces(s.tag)
+  traces(a[0])
+  traces(a[1])
+end"#,
+                vec!["", "", "", ""],
+            ),
+            (
+                "global string",
+                r#"g: str
+
+fn main()
+  traces(g)
+end"#,
+                vec![""],
+            ),
+            (
+                "nested compound",
+                r#"struct Inner
+  name: str
+end
+
+struct Outer
+  items: array[2] of Inner
+end
+
+fn main()
+  o: Outer
+  traces(o.items[0].name)
+  traces(o.items[1].name)
+end"#,
+                vec!["", ""],
+            ),
+        ];
+
+        for (label, src, expected) in cases {
+            let bc = compile(src).unwrap_or_else(|errs| panic!("{label}: {errs:?}"));
+            let mut vm = Vm::new(&bc, 0.0).unwrap();
+            vm.run_until_flip().unwrap();
+            let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+            assert_eq!(vm.trace_output, expected, "{label}");
+        }
+    }
+
+    #[test]
     fn block_scoping_shadowing() {
         let cases: Vec<(&str, &str, Vec<&str>)> = vec![
             (
