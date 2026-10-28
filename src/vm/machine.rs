@@ -341,6 +341,15 @@ impl Vm {
                 self.memory[addr] = bytes[0];
                 self.memory[addr + 1] = bytes[1];
             }
+            OP_ZERO => {
+                let size = self.read_u16() as usize;
+                let addr = self.pop()? as u16 as usize;
+                let end = addr + size;
+                if end > MEMORY_SIZE {
+                    return Err(VmError::OutOfBounds(format!("memory write at {addr}")));
+                }
+                self.memory[addr..end].fill(0);
+            }
             OP_JUMP => {
                 let offset = self.read_i16();
                 self.pc = (self.pc as isize + offset as isize) as usize;
@@ -1891,6 +1900,103 @@ end"#,
             let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
             assert_eq!(vm.trace_output, expected, "{label}");
         }
+    }
+
+    #[test]
+    fn compound_local_declaration_zeroed_each_iteration() {
+        let cases: Vec<(&str, &str, Vec<&str>)> = vec![
+            (
+                "struct in for loop",
+                r#"struct P
+  x: int
+end
+
+fn main()
+  for i in 0..3
+    p: P
+    tracei(p.x)
+    p.x = 7
+  end
+end"#,
+                vec!["0", "0", "0"],
+            ),
+            (
+                "array in for loop",
+                r#"fn main()
+  for i in 0..2
+    a: array[2] of int
+    tracei(a[0] + a[1])
+    a[0] = 1
+  end
+end"#,
+                vec!["0", "0"],
+            ),
+            (
+                "struct in while loop",
+                r#"struct P
+  x: int
+end
+
+fn main()
+  n = 0
+  while n < 2
+    p: P
+    tracei(p.x)
+    p.x = n + 1
+    n = n + 1
+  end
+end"#,
+                vec!["0", "0"],
+            ),
+            (
+                "shadowed declaration zeroed independently",
+                r#"struct P
+  x: int
+end
+
+fn main()
+  p: P
+  p.x = 9
+  for i in 0..2
+    p: P
+    tracei(p.x)
+    p.x = 1
+  end
+  tracei(p.x)
+end"#,
+                vec!["0", "0", "9"],
+            ),
+        ];
+
+        for (label, src, expected) in cases {
+            let bc = compile(src).unwrap_or_else(|errs| panic!("{label}: {errs:?}"));
+            let mut vm = Vm::new(&bc, 0.0).unwrap();
+            vm.run_until_flip().unwrap();
+            let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+            assert_eq!(vm.trace_output, expected, "{label}");
+        }
+    }
+
+    #[test]
+    fn zero_opcode_clears_range() {
+        let bc = Bytecode {
+            entry_point: Some(0),
+            functions: vec![FuncInfo {
+                code_offset: 0,
+                n_params: 0,
+                n_locals: 0,
+                frame_bytes: 8,
+            }],
+            string_pool: Vec::new(),
+            code: vec![OP_FRAME_ADDR, 0, 0, OP_ZERO, 8, 0, OP_HALT],
+            globals_size: 0,
+        };
+        let mut vm = Vm::new(&bc, 0.0).unwrap();
+        vm.memory[0..8].fill(0xAA);
+        vm.memory[8] = 0xBB;
+        vm.run_until_flip().unwrap();
+        assert!(vm.memory[0..8].iter().all(|&b| b == 0));
+        assert_eq!(vm.memory[8], 0xBB);
     }
 
     #[test]

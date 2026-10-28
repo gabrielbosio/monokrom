@@ -40,6 +40,10 @@ pub enum LirInst {
         val: Value,
         size: u8,
     },
+    Zero {
+        addr: Value,
+        size: u16,
+    },
     Phi(Vec<(BlockId, Value)>),
 }
 
@@ -55,6 +59,7 @@ impl LirInst {
             LirInst::Call { args, .. } | LirInst::Intrinsic { args, .. } => args.clone(),
             LirInst::Load { addr, .. } => vec![*addr],
             LirInst::Store { addr, val, .. } => vec![*addr, *val],
+            LirInst::Zero { addr, .. } => vec![*addr],
             LirInst::Phi(entries) => entries.iter().map(|(_, v)| *v).collect(),
         }
     }
@@ -80,6 +85,7 @@ impl LirInst {
                 *addr = f(*addr);
                 *val = f(*val);
             }
+            LirInst::Zero { addr, .. } => *addr = f(*addr),
             LirInst::Phi(operands) => {
                 for (_, v) in operands {
                     *v = f(*v);

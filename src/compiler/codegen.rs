@@ -285,6 +285,12 @@ fn emit_instruction(
                 _ => bc.emit_op(OP_STORE2),
             }
         }
+        LirInst::Zero { addr, size } => {
+            bc.emit_op(OP_LOAD_LOCAL);
+            bc.emit_u16(addr.0 as u16);
+            bc.emit_op(OP_ZERO);
+            bc.emit_u16(*size);
+        }
         LirInst::Phi(_) => {}
     }
 

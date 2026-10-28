@@ -36,8 +36,8 @@ pub fn eliminate(func: &mut LirFunc) {
         for (val, inst) in &block.insts {
             // Skip side-effectful and phi
             if super::has_side_effects(inst) || matches!(inst, LirInst::Phi(_)) {
-                // Stores invalidate load entries
-                if matches!(inst, LirInst::Store { .. }) {
+                // Stores and zeroing invalidate load entries
+                if matches!(inst, LirInst::Store { .. } | LirInst::Zero { .. }) {
                     seen.retain(|k, _| !matches!(k, CseKey::Load { .. }));
                 }
                 continue;

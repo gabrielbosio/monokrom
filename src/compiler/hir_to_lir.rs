@@ -362,6 +362,14 @@ impl<'a> LowerCtx<'a> {
         self.lower_compound_value_into(expr, dst, size);
     }
 
+    /// Zero a frame-backed local's entire storage.
+    fn zero_local(&mut self, id: LocalId, ty: &HirType) {
+        let offset = self.frame_local_addrs[&id];
+        let addr = self.emit(LirInst::FrameAddr(offset));
+        let size = self.type_size(ty);
+        self.emit(LirInst::Zero { addr, size });
+    }
+
     fn addr_of_local(&mut self, id: LocalId, ty: &HirType) -> Value {
         if let Some(&offset) = self.frame_local_addrs.get(&id) {
             self.emit(LirInst::FrameAddr(offset))
@@ -705,6 +713,10 @@ impl<'a> LowerCtx<'a> {
                 } else if let Some(v) = value {
                     // Compound types: copy into the local's frame space
                     self.write_compound_local(*id, ty, v);
+                } else {
+                    // Compound types without an initializer: zero on every
+                    // execution of the declaration, including inside loops.
+                    self.zero_local(*id, ty);
                 }
             }
 
@@ -1413,6 +1425,23 @@ mod tests {
                 .any(|(_, inst)| matches!(inst, LirInst::FrameAddr(_)))
         });
         assert!(has_frame_addr);
+    }
+
+    #[test]
+    fn compound_local_without_initializer_emits_zero() {
+        let m = lir(
+            "struct P\n  x: int\n  y: int\nend\nfn f()\n  p: P\nend\nfn g(q: P)\n  p: P = q\nend",
+        );
+        assert!(find_func(&m, "f").blocks.iter().any(|b| {
+            b.insts
+                .iter()
+                .any(|(_, inst)| matches!(inst, LirInst::Zero { .. }))
+        }));
+        assert!(!find_func(&m, "g").blocks.iter().any(|b| {
+            b.insts
+                .iter()
+                .any(|(_, inst)| matches!(inst, LirInst::Zero { .. }))
+        }));
     }
 
     #[test]

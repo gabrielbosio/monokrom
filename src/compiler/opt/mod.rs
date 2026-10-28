@@ -17,7 +17,10 @@ pub fn optimize(module: &mut LirModule) {
 fn has_side_effects(inst: &LirInst) -> bool {
     matches!(
         inst,
-        LirInst::Store { .. } | LirInst::Call { .. } | LirInst::Intrinsic { .. }
+        LirInst::Store { .. }
+            | LirInst::Zero { .. }
+            | LirInst::Call { .. }
+            | LirInst::Intrinsic { .. }
     )
 }
 

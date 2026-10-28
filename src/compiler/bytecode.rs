@@ -48,6 +48,7 @@ pub const OP_LOAD1: u8 = 0x20;
 pub const OP_LOAD2: u8 = 0x21;
 pub const OP_STORE1: u8 = 0x22;
 pub const OP_STORE2: u8 = 0x23;
+pub const OP_ZERO: u8 = 0x24;
 
 pub const OP_JUMP: u8 = 0x30;
 pub const OP_JUMP_IF_FALSE: u8 = 0x31;
@@ -96,7 +97,7 @@ pub fn inst_size(op: u8) -> usize {
     match op {
         OP_PUSH_I8 => 2,
         OP_PUSH_I16 | OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF_FALSE
-        | OP_FRAME_ADDR => 3,
+        | OP_FRAME_ADDR | OP_ZERO => 3,
         OP_CALL => 4,
         _ => 1,
     }
@@ -199,6 +200,7 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_LOAD2 => Some("Load2"),
         OP_STORE1 => Some("Store1"),
         OP_STORE2 => Some("Store2"),
+        OP_ZERO => Some("Zero"),
         OP_JUMP => Some("Jump"),
         OP_JUMP_IF_FALSE => Some("JumpIfFalse"),
         OP_CALL => Some("Call"),
@@ -256,7 +258,7 @@ fn op_name(b: u8) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 78] = [
+const ALL_OPCODES: [u8; 79] = [
     OP_PUSH0,
     OP_PUSH1,
     OP_PUSH_I8,
@@ -283,6 +285,7 @@ const ALL_OPCODES: [u8; 78] = [
     OP_LOAD2,
     OP_STORE1,
     OP_STORE2,
+    OP_ZERO,
     OP_JUMP,
     OP_JUMP_IF_FALSE,
     OP_CALL,
