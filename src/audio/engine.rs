@@ -757,6 +757,14 @@ impl SoundEngine {
     }
 
     fn advance_row(&mut self) {
+        for channel in &mut self.channels {
+            if channel.effect == EFFECT_NOTE_DELAY {
+                channel.effect = EFFECT_NONE;
+                channel.effect_value = 0;
+                channel.effect_tick = 0;
+                channel.pending_note = None;
+            }
+        }
         self.row = self.row.wrapping_add(1);
         if self.row < MUSIC_ROWS as u8 {
             return;
@@ -1148,6 +1156,25 @@ mod tests {
         }
         assert!(engine.song.is_some());
         assert_eq!(engine.order, 0);
+    }
+
+    #[test]
+    fn note_delay_is_cancelled_at_row_end() {
+        let mut data = test_data();
+        data.header.ticks_per_row = 6;
+        data.patterns[0][1][0] = MusicCell {
+            note: 34,
+            instrument: 1,
+            effect: EFFECT_NOTE_DELAY,
+            value: 6,
+        };
+        let mut engine = SoundEngine::new(48000, data);
+        assert!(engine.play_song(0));
+        for _ in 0..12 {
+            engine.tick();
+        }
+        assert_eq!(engine.channel(0).owner, ChannelOwner::None);
+        assert!(!engine.channel(0).gate);
     }
 
     #[test]
