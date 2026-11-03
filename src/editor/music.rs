@@ -225,6 +225,18 @@ impl MusicEditor {
         {
             return self.do_redo(data);
         }
+        if modifier && !shift && is_key_pressed(KeyCode::X) {
+            let cell = self.current_cell(data);
+            self.cell_clipboard = Some(cell);
+            self.value_high = None;
+            self.note_octave_pending = false;
+            if cell != MusicCell::default() {
+                self.push_undo(data);
+                self.set_current_cell(data, MusicCell::default());
+                return MusicEditorOutput::modified();
+            }
+            return MusicEditorOutput::none();
+        }
         if modifier && !shift && is_key_pressed(KeyCode::C) {
             self.cell_clipboard = Some(self.current_cell(data));
             return MusicEditorOutput::none();
