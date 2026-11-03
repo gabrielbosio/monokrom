@@ -81,7 +81,7 @@ enum HeaderField {
 }
 
 impl HeaderField {
-    fn next(self) -> Self {
+    fn next(self, loop_enabled: bool) -> Self {
         match self {
             Self::Song => Self::Order,
             Self::Order => Self::Pulse1,
@@ -90,13 +90,19 @@ impl HeaderField {
             Self::Wave => Self::Noise,
             Self::Noise => Self::Ticks,
             Self::Ticks => Self::Loop,
-            Self::Loop => Self::LoopStart,
+            Self::Loop => {
+                if loop_enabled {
+                    Self::LoopStart
+                } else {
+                    Self::OrderCount
+                }
+            }
             Self::LoopStart => Self::LoopEnd,
             Self::LoopEnd => Self::OrderCount,
             Self::OrderCount => Self::Song,
         }
     }
-    fn prev(self) -> Self {
+    fn prev(self, loop_enabled: bool) -> Self {
         match self {
             Self::Song => Self::OrderCount,
             Self::Order => Self::Song,
@@ -108,7 +114,13 @@ impl HeaderField {
             Self::Loop => Self::Ticks,
             Self::LoopStart => Self::Loop,
             Self::LoopEnd => Self::LoopStart,
-            Self::OrderCount => Self::LoopEnd,
+            Self::OrderCount => {
+                if loop_enabled {
+                    Self::LoopEnd
+                } else {
+                    Self::Loop
+                }
+            }
         }
     }
 }
@@ -275,11 +287,20 @@ impl MusicEditor {
     fn update_header(&mut self, data: &mut SoundData) -> MusicEditorOutput {
         self.value_high = None;
         self.note_octave_pending = false;
+        let loop_enabled = data.songs[self.song as usize].loop_enabled;
+        if !loop_enabled
+            && matches!(
+                self.header_field,
+                HeaderField::LoopStart | HeaderField::LoopEnd
+            )
+        {
+            self.header_field = HeaderField::Loop;
+        }
         if should_key_fire(KeyCode::Left, false) {
-            self.header_field = self.header_field.prev();
+            self.header_field = self.header_field.prev(loop_enabled);
         }
         if should_key_fire(KeyCode::Right, false) {
-            self.header_field = self.header_field.next();
+            self.header_field = self.header_field.next(loop_enabled);
         }
         let bump = if should_key_fire(KeyCode::Up, false) {
             if is_shift_pressed() {
@@ -337,8 +358,12 @@ impl MusicEditor {
             HeaderField::Loop => {
                 let song = &mut data.songs[self.song as usize];
                 song.loop_enabled = !song.loop_enabled;
-                if song.loop_enabled && song.loop_end <= song.loop_start {
-                    song.loop_end = (song.loop_start + 1).min(SONG_ORDER_COUNT as u8);
+                if song.loop_enabled {
+                    if song.loop_end <= song.loop_start {
+                        song.loop_end = (song.loop_start + 1).min(SONG_ORDER_COUNT as u8);
+                    }
+                } else {
+                    self.header_field = HeaderField::Loop;
                 }
             }
             HeaderField::LoopStart => {
@@ -356,6 +381,7 @@ impl MusicEditor {
                 if song.loop_end == 0 {
                     song.loop_enabled = false;
                     song.loop_start = 0;
+                    self.header_field = HeaderField::Loop;
                 } else if song.loop_enabled && song.loop_end <= song.loop_start {
                     song.loop_start = song.loop_end.saturating_sub(1);
                 }
@@ -638,16 +664,18 @@ impl MusicEditor {
             self.song, self.order, patterns[0], patterns[1], patterns[2], patterns[3]
         );
         draw_text(helpers, 0.0, HEADER_Y, &line1, COLOR_WHITE);
-        let loop_text = if song.loop_enabled { "ON " } else { "OFF" };
-        let line2 = format!(
-            "SPD:{:03} L:{} {:02}-{:02} ORDS:{:02}",
-            data.header.ticks_per_row,
-            loop_text,
-            song.loop_start,
-            song.loop_end,
-            data.header.order_count
-        );
-        draw_text(helpers, 0.0, HEADER2_Y, &line2, COLOR_LIGHT_GRAY);
+        let line2 = if song.loop_enabled {
+            format!(
+                "SPD:{:03} L:ON {:02}-{:02} ORDS:{:02}",
+                data.header.ticks_per_row, song.loop_start, song.loop_end, data.header.order_count
+            )
+        } else {
+            format!(
+                "SPD:{:03} L:OFF ORDS:{:02}",
+                data.header.ticks_per_row, data.header.order_count
+            )
+        };
+        draw_text(helpers, 0.0, HEADER2_Y, &line2, COLOR_WHITE);
 
         if self.header_focus {
             let (x, width, y) = match self.header_field {
@@ -658,10 +686,10 @@ impl MusicEditor {
                 HeaderField::Wave => (30, 2, HEADER_Y),
                 HeaderField::Noise => (36, 2, HEADER_Y),
                 HeaderField::Ticks => (4, 3, HEADER2_Y),
-                HeaderField::Loop => (10, 3, HEADER2_Y),
-                HeaderField::LoopStart => (14, 2, HEADER2_Y),
-                HeaderField::LoopEnd => (17, 2, HEADER2_Y),
-                HeaderField::OrderCount => (25, 2, HEADER2_Y),
+                HeaderField::Loop => (10, if song.loop_enabled { 2 } else { 3 }, HEADER2_Y),
+                HeaderField::LoopStart => (13, 2, HEADER2_Y),
+                HeaderField::LoopEnd => (16, 2, HEADER2_Y),
+                HeaderField::OrderCount => (if song.loop_enabled { 24 } else { 19 }, 2, HEADER2_Y),
             };
             helpers.draw_rect(
                 x as f32 * TILE_WIDTH as f32,
@@ -951,6 +979,14 @@ mod tests {
         };
         assert_eq!(cell_text(cell).chars().count(), 9);
         assert_eq!(cell_text(MusicCell::default()), "---......");
+    }
+
+    #[test]
+    fn loop_fields_skip_when_loop_is_off() {
+        assert_eq!(HeaderField::Loop.next(false), HeaderField::OrderCount);
+        assert_eq!(HeaderField::OrderCount.prev(false), HeaderField::Loop);
+        assert_eq!(HeaderField::Loop.next(true), HeaderField::LoopStart);
+        assert_eq!(HeaderField::OrderCount.prev(true), HeaderField::LoopEnd);
     }
 
     #[test]
