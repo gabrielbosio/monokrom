@@ -162,6 +162,8 @@ pub struct MusicEditor {
     redo: VecDeque<SoundData>,
     cell_clipboard: Option<MusicCell>,
     value_high: Option<u8>,
+    note_octave: u8,
+    note_octave_pending: bool,
 }
 
 impl Default for MusicEditor {
@@ -185,6 +187,8 @@ impl MusicEditor {
             redo: VecDeque::new(),
             cell_clipboard: None,
             value_high: None,
+            note_octave: 4,
+            note_octave_pending: false,
         }
     }
 
@@ -228,6 +232,7 @@ impl MusicEditor {
         if modifier && !shift && is_key_pressed(KeyCode::V) {
             if let Some(cell) = self.cell_clipboard {
                 self.value_high = None;
+                self.note_octave_pending = false;
                 self.push_undo(data);
                 self.set_current_cell(data, cell);
                 return MusicEditorOutput::modified();
@@ -237,6 +242,7 @@ impl MusicEditor {
 
         if is_key_pressed(KeyCode::Tab) {
             self.value_high = None;
+            self.note_octave_pending = false;
             self.header_focus = !self.header_focus;
             return MusicEditorOutput::none();
         }
@@ -256,6 +262,7 @@ impl MusicEditor {
 
     fn update_header(&mut self, data: &mut SoundData) -> MusicEditorOutput {
         self.value_high = None;
+        self.note_octave_pending = false;
         if should_key_fire(KeyCode::Left, false) {
             self.header_field = self.header_field.prev();
         }
@@ -354,6 +361,7 @@ impl MusicEditor {
         let arrow_mod = is_arrow_modifier_pressed();
         if should_key_fire(KeyCode::Left, false) && !arrow_mod {
             self.value_high = None;
+            self.note_octave_pending = false;
             if shift {
                 self.channel = (self.channel + MUSIC_CHANNELS as u8 - 1) % MUSIC_CHANNELS as u8;
             } else {
@@ -362,9 +370,11 @@ impl MusicEditor {
                     self.channel = (self.channel + MUSIC_CHANNELS as u8 - 1) % MUSIC_CHANNELS as u8;
                 }
             }
+            self.sync_note_octave(data);
         }
         if should_key_fire(KeyCode::Right, false) && !arrow_mod {
             self.value_high = None;
+            self.note_octave_pending = false;
             if shift {
                 self.channel = (self.channel + 1) % MUSIC_CHANNELS as u8;
             } else {
@@ -373,6 +383,7 @@ impl MusicEditor {
                     self.channel = (self.channel + 1) % MUSIC_CHANNELS as u8;
                 }
             }
+            self.sync_note_octave(data);
         }
         let up = should_key_fire(KeyCode::Up, false);
         let down = should_key_fire(KeyCode::Down, false);
@@ -380,13 +391,17 @@ impl MusicEditor {
             let step = if shift { 8 } else { 1 };
             if up {
                 self.value_high = None;
+                self.note_octave_pending = false;
                 self.row = (self.row + MUSIC_ROWS as u8 - step) % MUSIC_ROWS as u8;
                 self.ensure_cursor_visible();
+                self.sync_note_octave(data);
             }
             if down {
                 self.value_high = None;
+                self.note_octave_pending = false;
                 self.row = (self.row + step) % MUSIC_ROWS as u8;
                 self.ensure_cursor_visible();
+                self.sync_note_octave(data);
             }
         } else {
             let bump = if up {
@@ -414,12 +429,44 @@ impl MusicEditor {
             };
             if bump != 0 {
                 self.value_high = None;
+                self.note_octave_pending = false;
                 if self.field == Field::Value && self.current_cell(data).effect == EFFECT_NONE {
                     return MusicEditorOutput::none();
                 }
                 self.push_undo(data);
                 self.bump_field(data, bump);
                 return MusicEditorOutput::modified();
+            }
+        }
+
+        if self.field == Field::Note && !is_shortcut_modifier_pressed() && !arrow_mod {
+            if let Some(semitone) = pressed_note_letter(shift) {
+                let mut cell = self.current_cell(data);
+                cell.note = note_number(self.note_octave, semitone);
+                self.push_undo(data);
+                self.set_current_cell(data, cell);
+                self.note_octave_pending = true;
+                return MusicEditorOutput::modified();
+            }
+            if let Some(octave) = pressed_octave_digit() {
+                self.note_octave = octave;
+                let mut cell = self.current_cell(data);
+                if (NOTE_MIN..=NOTE_MAX).contains(&cell.note) {
+                    let semitone = (cell.note - NOTE_MIN) % 12;
+                    let note = note_number(octave, semitone);
+                    if note != cell.note {
+                        if !self.note_octave_pending {
+                            self.push_undo(data);
+                        }
+                        cell.note = note;
+                        self.set_current_cell(data, cell);
+                        self.note_octave_pending = true;
+                        return MusicEditorOutput::modified();
+                    }
+                    return MusicEditorOutput::none();
+                }
+                self.note_octave_pending = false;
+                return MusicEditorOutput::none();
             }
         }
 
@@ -445,6 +492,7 @@ impl MusicEditor {
 
         if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
             self.value_high = None;
+            self.note_octave_pending = false;
             self.push_undo(data);
             self.set_current_cell(data, MusicCell::default());
             return MusicEditorOutput::modified();
@@ -528,6 +576,12 @@ impl MusicEditor {
         }
     }
 
+    fn sync_note_octave(&mut self, data: &SoundData) {
+        if let Some((_, octave)) = note_parts(self.current_cell(data).note) {
+            self.note_octave = octave;
+        }
+    }
+
     fn push_undo(&mut self, data: &SoundData) {
         self.undo.push_back(data.clone());
         if self.undo.len() > UNDO_LIMIT {
@@ -538,6 +592,7 @@ impl MusicEditor {
 
     fn do_undo(&mut self, data: &mut SoundData) -> MusicEditorOutput {
         self.value_high = None;
+        self.note_octave_pending = false;
         if let Some(snapshot) = self.undo.pop_back() {
             self.redo.push_back(data.clone());
             *data = snapshot;
@@ -548,6 +603,7 @@ impl MusicEditor {
 
     fn do_redo(&mut self, data: &mut SoundData) -> MusicEditorOutput {
         self.value_high = None;
+        self.note_octave_pending = false;
         if let Some(snapshot) = self.redo.pop_back() {
             self.undo.push_back(data.clone());
             *data = snapshot;
@@ -736,6 +792,52 @@ fn instrument_text(instrument: u8) -> String {
     }
 }
 
+fn pressed_note_letter(sharp: bool) -> Option<u8> {
+    const KEYS: [(KeyCode, u8); 7] = [
+        (KeyCode::C, 0),
+        (KeyCode::D, 2),
+        (KeyCode::E, 4),
+        (KeyCode::F, 5),
+        (KeyCode::G, 7),
+        (KeyCode::A, 9),
+        (KeyCode::B, 11),
+    ];
+    for (key, semitone) in KEYS {
+        if is_key_pressed(key) {
+            return Some(semitone + sharp as u8);
+        }
+    }
+    None
+}
+
+fn pressed_octave_digit() -> Option<u8> {
+    const KEYS: [(KeyCode, u8); 12] = [
+        (KeyCode::Key2, 2),
+        (KeyCode::Key3, 3),
+        (KeyCode::Key4, 4),
+        (KeyCode::Key5, 5),
+        (KeyCode::Key6, 6),
+        (KeyCode::Key7, 7),
+        (KeyCode::Kp2, 2),
+        (KeyCode::Kp3, 3),
+        (KeyCode::Kp4, 4),
+        (KeyCode::Kp5, 5),
+        (KeyCode::Kp6, 6),
+        (KeyCode::Kp7, 7),
+    ];
+    for (key, octave) in KEYS {
+        if is_key_pressed(key) {
+            return Some(octave);
+        }
+    }
+    None
+}
+
+fn note_number(octave: u8, semitone: u8) -> u8 {
+    let note = (octave as i32 - 2) * 12 + semitone as i32 + NOTE_MIN as i32;
+    note.clamp(NOTE_MIN as i32, NOTE_MAX as i32) as u8
+}
+
 fn pressed_hex_digit() -> Option<u8> {
     const KEYS: [(KeyCode, u8); 26] = [
         (KeyCode::Key0, 0),
@@ -837,6 +939,14 @@ mod tests {
         };
         assert_eq!(cell_text(cell).chars().count(), 9);
         assert_eq!(cell_text(MusicCell::default()), "---......");
+    }
+
+    #[test]
+    fn note_numbers_match_octaves() {
+        assert_eq!(note_number(2, 0), 1);
+        assert_eq!(note_number(4, 5), 30);
+        assert_eq!(note_number(7, 11), 72);
+        assert_eq!(note_number(7, 12), 72);
     }
 
     #[test]
