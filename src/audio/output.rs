@@ -44,6 +44,9 @@ impl AudioOutput {
     }
 
     pub fn push_samples(&mut self, samples: &[f32]) {
+        if samples.is_empty() {
+            return;
+        }
         let _ = self.tx.try_send(samples.to_vec());
     }
 }
@@ -68,11 +71,11 @@ where
                 for out_frame in data.chunks_mut(channels) {
                     if current.is_empty() || frame * 2 + 1 >= current.len() {
                         match rx.try_recv() {
-                            Ok(chunk) => {
+                            Ok(chunk) if !chunk.is_empty() => {
                                 current = chunk;
                                 frame = 0;
                             }
-                            Err(_) => {
+                            _ => {
                                 for sample in out_frame.iter_mut() {
                                     *sample = T::EQUILIBRIUM;
                                 }
