@@ -1,17 +1,22 @@
 use macroquad::prelude::*;
 
-use crate::audio::{MusicPlayer, SfxPlayer};
+use crate::audio::engine::{SoundEngine, DEFAULT_SAMPLE_RATE};
+use crate::audio::format::SoundData;
+use crate::audio::output::AudioOutput;
 use crate::compiler;
 use crate::config::{
-    COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
-    EDITOR_TILES_Y, MAP_REGION_START, MUSIC_REGION_SIZE, MUSIC_REGION_START, SCREEN_HEIGHT,
-    SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH, SFX_REGION_SIZE,
-    SFX_REGION_START, SPRITE_REGION_START, TILE_HEIGHT, TILE_WIDTH,
+    AUDIO_INSTRUMENT_COUNT, AUDIO_INSTRUMENT_OFFSET, AUDIO_INSTRUMENT_SIZE, AUDIO_REGION_END,
+    AUDIO_REGION_SIZE, AUDIO_REGION_START, AUDIO_SFX_COUNT, AUDIO_SFX_OFFSET, AUDIO_SFX_SIZE,
+    AUDIO_TABLE_COUNT, AUDIO_TABLE_OFFSET, AUDIO_TABLE_SIZE, AUDIO_WAVE_REGION_SIZE, COLOR_BLACK,
+    COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
+    EDITOR_TILES_Y, MAP_REGION_START, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
+    SCROLLBAR_WIDTH, SONG_REGION_SIZE, SONG_REGION_START, SPRITE_REGION_START, TILE_HEIGHT,
+    TILE_WIDTH,
 };
 use crate::editor::{
     operations, Cursor, CursorPosition, History, MapEditor, MapEditorAction, MusicEditor,
-    MusicEditorAction, Selection, SfxEditor, SfxEditorAction, SpriteEditor, SpriteEditorAction,
-    TextBuffer,
+    MusicEditorAction, PreviewRequest, Selection, SoundEditor, SoundEditorAction, SpriteEditor,
+    SpriteEditorAction, TextBuffer,
 };
 use crate::filesystem;
 use crate::input::{get_editor_action, get_terminal_action, is_shift_pressed, EditorAction};
@@ -88,8 +93,8 @@ pub enum AppMode {
     SpriteEditor,
     /// Map editor
     MapEditor,
-    /// SFX editor
-    SfxEditor,
+    /// Sound editor
+    SoundEditor,
     /// Music editor
     MusicEditor,
 }
@@ -142,15 +147,14 @@ pub struct App {
     // Map editor
     map_editor: MapEditor,
 
-    // SFX editor + audio
-    sfx_editor: SfxEditor,
-    sfx_player: SfxPlayer,
-    pending_sfx_plays: Vec<u8>,
-
-    // Music editor + audio
+    // Sound data and editors
+    sound_data: SoundData,
+    sound_editor: SoundEditor,
     music_editor: MusicEditor,
-    music_player: MusicPlayer,
-    pending_music_plays: Vec<u8>,
+
+    // Audio
+    audio_engine: SoundEngine,
+    audio_output: Option<AudioOutput>,
 }
 
 impl App {
@@ -172,6 +176,27 @@ impl App {
         run_state: Option<Vm>,
         player_mode: bool,
     ) -> Self {
+        let sound_data = if let Some(vm) = &run_state {
+            let mut data =
+                SoundData::from_audio_bytes(&vm.memory[AUDIO_REGION_START..AUDIO_REGION_END]);
+            let song = SoundData::from_song_bytes(
+                &vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE],
+            );
+            data.patterns = song.patterns;
+            data.orders = song.orders;
+            data.songs = song.songs;
+            data.header = song.header;
+            data
+        } else {
+            SoundData::default()
+        };
+        let audio_output = AudioOutput::new();
+        let sample_rate = audio_output
+            .as_ref()
+            .map(|output| output.sample_rate())
+            .unwrap_or(DEFAULT_SAMPLE_RATE);
+        let audio_engine = SoundEngine::new(sample_rate, sound_data.clone());
+
         let font = BitmapFont::new().await;
         let rt = render_target_ex(
             SCREEN_WIDTH,
@@ -237,13 +262,12 @@ impl App {
             sprite_editor: SpriteEditor::new(),
             map_editor: MapEditor::new(),
 
-            sfx_editor: SfxEditor::new(),
-            sfx_player: SfxPlayer::new(),
-            pending_sfx_plays: Vec::new(),
-
+            sound_data,
+            sound_editor: SoundEditor::new(),
             music_editor: MusicEditor::new(),
-            music_player: MusicPlayer::new(),
-            pending_music_plays: Vec::new(),
+
+            audio_engine,
+            audio_output,
         }
     }
 
@@ -285,8 +309,8 @@ impl App {
             self.update_map_editor();
             return;
         }
-        if self.mode == AppMode::SfxEditor {
-            self.update_sfx_editor();
+        if self.mode == AppMode::SoundEditor {
+            self.update_sound_editor();
             return;
         }
         if self.mode == AppMode::MusicEditor {
@@ -314,7 +338,7 @@ impl App {
             AppMode::Running
             | AppMode::SpriteEditor
             | AppMode::MapEditor
-            | AppMode::SfxEditor
+            | AppMode::SoundEditor
             | AppMode::MusicEditor => {
                 unreachable!()
             }
@@ -731,10 +755,13 @@ impl App {
                             .copy_from_slice(&self.sprite_editor.data);
                         vm.memory[MAP_REGION_START..MAP_REGION_START + 4096]
                             .copy_from_slice(&self.map_editor.data);
-                        vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE]
-                            .copy_from_slice(&self.sfx_editor.data);
-                        vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE]
-                            .copy_from_slice(&self.music_editor.data);
+                        let audio = self.sound_data.to_audio_bytes();
+                        vm.memory[AUDIO_REGION_START..AUDIO_REGION_END].copy_from_slice(&audio);
+                        let song = self.sound_data.to_song_bytes();
+                        vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE]
+                            .copy_from_slice(&song);
+                        self.audio_engine.stop_all();
+                        self.audio_engine.set_data(self.sound_data.clone());
                         self.run_state = Some(vm);
                         self.run_enter_held = true;
                         self.mode = AppMode::Running;
@@ -775,8 +802,8 @@ impl App {
         payload.extend(&bc_bytes);
         payload.extend(&self.sprite_editor.data);
         payload.extend(&self.map_editor.data);
-        payload.extend(&self.sfx_editor.data);
-        payload.extend(&self.music_editor.data);
+        payload.extend(&self.sound_data.to_audio_bytes());
+        payload.extend(&self.sound_data.to_song_bytes());
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.export_native(name, &payload);
@@ -835,8 +862,7 @@ impl App {
         let mut full_source = source.to_string();
         self.sprite_editor.append_data(&mut full_source);
         self.map_editor.append_data(&mut full_source);
-        self.sfx_editor.append_data(&mut full_source);
-        self.music_editor.append_data(&mut full_source);
+        self.sound_data.append_to_source(&mut full_source);
         let escaped = full_source
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
@@ -1388,8 +1414,7 @@ impl App {
             let mut content = self.editor.buffer.to_string();
             self.sprite_editor.append_data(&mut content);
             self.map_editor.append_data(&mut content);
-            self.sfx_editor.append_data(&mut content);
-            self.music_editor.append_data(&mut content);
+            self.sound_data.append_to_source(&mut content);
             match filesystem::write_file(filename, &content) {
                 Ok(()) => {
                     self.is_modified = false;
@@ -1420,13 +1445,18 @@ impl App {
     fn open_file(&mut self, filename: &str) -> bool {
         match filesystem::read_file(filename) {
             Ok(content) => {
-                let (source, spr, map, sfx, mus) = split_data_sections(&content);
+                let (source, spr, map, audio, song) = split_data_sections(&content);
                 self.sprite_editor.data = spr;
                 self.map_editor.data = map;
-                self.sfx_editor.data = sfx;
-                self.music_editor.data = mus;
-                self.sfx_player.mark_all_dirty();
-                self.music_player.mark_all_dirty();
+                let mut data = SoundData::from_audio_bytes(&audio);
+                let song_data = SoundData::from_song_bytes(&song);
+                data.patterns = song_data.patterns;
+                data.orders = song_data.orders;
+                data.songs = song_data.songs;
+                data.header = song_data.header;
+                self.sound_data = data;
+                self.audio_engine.stop_all();
+                self.audio_engine.set_data(self.sound_data.clone());
                 self.reset_editor(TextBuffer::from_str(source), Some(filename.to_string()));
                 true
             }
@@ -1435,6 +1465,9 @@ impl App {
     }
 
     fn create_new_file(&mut self) {
+        self.sound_data = SoundData::default();
+        self.audio_engine.stop_all();
+        self.audio_engine.set_data(self.sound_data.clone());
         self.reset_editor(TextBuffer::new(), None);
     }
 
@@ -1480,8 +1513,7 @@ impl App {
     }
 
     fn stop_running(&mut self) {
-        self.sfx_player.stop_all();
-        self.music_player.stop();
+        self.audio_engine.stop_all();
         self.run_state = None;
         self.mode = AppMode::Terminal;
     }
@@ -1522,8 +1554,16 @@ impl App {
                 for line in vm.trace_output.drain(..) {
                     self.terminal.push_output(&line);
                 }
-                self.pending_sfx_plays.append(&mut vm.sfx_queue);
-                self.pending_music_plays.append(&mut vm.music_queue);
+                for sfx in vm.sfx_queue.drain(..) {
+                    self.audio_engine.trigger_sfx(sfx);
+                }
+                for song in vm.music_queue.drain(..) {
+                    if song == 0xFF {
+                        self.audio_engine.stop_song();
+                    } else {
+                        self.audio_engine.play_song(song);
+                    }
+                }
             }
             Ok(VmResult::Halted) => {
                 for line in vm.trace_output.drain(..) {
@@ -1585,8 +1625,7 @@ impl App {
                 let mut content = self.editor.buffer.to_string();
                 self.sprite_editor.append_data(&mut content);
                 self.map_editor.append_data(&mut content);
-                self.sfx_editor.append_data(&mut content);
-                self.music_editor.append_data(&mut content);
+                self.sound_data.append_to_source(&mut content);
                 match filesystem::write_file(&name, &content) {
                     Ok(()) => {
                         self.current_filename = Some(name.clone());
@@ -1766,85 +1805,82 @@ impl App {
         match output.action {
             MapEditorAction::None => {}
             MapEditorAction::ExitToSpriteEditor => self.mode = AppMode::SpriteEditor,
-            MapEditorAction::ExitToSfxEditor => self.mode = AppMode::SfxEditor,
+            MapEditorAction::ExitToSfxEditor => self.mode = AppMode::SoundEditor,
             MapEditorAction::Save => self.save_and_show_message(),
             MapEditorAction::Run => self.run_program(),
         }
     }
 
-    fn update_sfx_editor(&mut self) {
+    fn update_sound_editor(&mut self) {
         while get_char_pressed().is_some() {}
-        let output = self.sfx_editor.update();
-        if let Some(idx) = output.modified_sfx {
+        let output = self.sound_editor.update(&mut self.sound_data);
+        if output.modified {
             self.is_modified = true;
-            self.sfx_player.mark_dirty(idx);
-            self.music_player.mark_all_dirty();
+            self.audio_engine.set_data(self.sound_data.clone());
         }
         match output.action {
-            SfxEditorAction::None => {}
-            SfxEditorAction::ExitToMapEditor => {
-                self.sfx_player.stop_all();
+            SoundEditorAction::None => {}
+            SoundEditorAction::ExitToMapEditor => {
+                self.audio_engine.stop_all();
                 self.mode = AppMode::MapEditor;
             }
-            SfxEditorAction::ExitToMusicEditor => {
-                self.sfx_player.stop_all();
+            SoundEditorAction::ExitToMusicEditor => {
+                self.audio_engine.stop_all();
                 self.mode = AppMode::MusicEditor;
             }
-            SfxEditorAction::Save => self.save_and_show_message(),
-            SfxEditorAction::Run => self.run_program(),
-            SfxEditorAction::Audition(idx) => self.pending_sfx_plays.push(idx),
-            SfxEditorAction::Stop => self.sfx_player.stop_all(),
+            SoundEditorAction::Save => self.save_and_show_message(),
+            SoundEditorAction::Run => self.run_program(),
+            SoundEditorAction::Preview(request) => {
+                self.audio_engine.stop_all();
+                self.audio_engine.set_data(self.sound_data.clone());
+                match request {
+                    PreviewRequest::Instrument(index, note) => {
+                        self.audio_engine.preview_instrument(index, note);
+                    }
+                    PreviewRequest::Table(index) => self.audio_engine.preview_table(index),
+                    PreviewRequest::Wave(index) => self.audio_engine.preview_wave(index),
+                    PreviewRequest::Sfx(index) => self.audio_engine.trigger_sfx(index),
+                }
+            }
+            SoundEditorAction::Stop => self.audio_engine.stop_all(),
         }
     }
 
     fn update_music_editor(&mut self) {
         while get_char_pressed().is_some() {}
-        let output = self.music_editor.update(&self.sfx_editor.data);
-        if let Some(idx) = output.modified_pattern {
+        let output = self.music_editor.update(&mut self.sound_data);
+        if output.modified {
             self.is_modified = true;
-            self.music_player.mark_dirty(idx);
+            self.audio_engine.set_data(self.sound_data.clone());
         }
         match output.action {
             MusicEditorAction::None => {}
-            MusicEditorAction::ExitToSfxEditor => {
-                self.music_player.stop();
-                self.mode = AppMode::SfxEditor;
+            MusicEditorAction::ExitToSoundEditor => {
+                self.audio_engine.stop_all();
+                self.mode = AppMode::SoundEditor;
             }
             MusicEditorAction::ExitToTerminal => {
-                self.music_player.stop();
+                self.audio_engine.stop_all();
                 self.mode = AppMode::Terminal;
             }
             MusicEditorAction::Save => self.save_and_show_message(),
             MusicEditorAction::Run => self.run_program(),
-            MusicEditorAction::Audition(idx) => self.pending_music_plays.push(idx),
-            MusicEditorAction::Stop => self.music_player.stop(),
+            MusicEditorAction::Preview(song) => {
+                self.audio_engine.stop_all();
+                self.audio_engine.set_data(self.sound_data.clone());
+                self.audio_engine
+                    .play_song_from(song, self.music_editor.current_order());
+            }
+            MusicEditorAction::Stop => self.audio_engine.stop_all(),
         }
     }
 
-    pub async fn process_audio(&mut self) {
-        if !self.pending_sfx_plays.is_empty() {
-            let plays = std::mem::take(&mut self.pending_sfx_plays);
-            for idx in plays {
-                if self
-                    .sfx_player
-                    .ensure_loaded(&self.sfx_editor.data, idx)
-                    .await
-                {
-                    self.sfx_player.play(&self.sfx_editor.data, idx);
-                }
-            }
-        }
-        if !self.pending_music_plays.is_empty() {
-            let plays = std::mem::take(&mut self.pending_music_plays);
-            for idx in plays {
-                if self
-                    .music_player
-                    .ensure_loaded(&self.music_editor.data, &self.sfx_editor.data, idx)
-                    .await
-                {
-                    self.music_player.play(idx);
-                }
-            }
+    pub fn process_audio(&mut self) {
+        let dt = get_frame_time() as f64;
+        let mut samples = Vec::new();
+        self.audio_engine.advance(dt, &mut samples);
+        if let Some(output) = &mut self.audio_output {
+            output.push_samples(&samples);
         }
     }
 
@@ -1935,11 +1971,11 @@ impl App {
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
-        } else if self.mode == AppMode::SfxEditor
-            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::SfxEditor)
+        } else if self.mode == AppMode::SoundEditor
+            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::SoundEditor)
         {
             clear_background(COLOR_BLACK);
-            self.sfx_editor.draw(&helpers);
+            self.sound_editor.draw(&self.sound_data, &helpers);
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
@@ -1947,7 +1983,7 @@ impl App {
             || (self.mode == AppMode::Message && self.message_return_mode == AppMode::MusicEditor)
         {
             clear_background(COLOR_BLACK);
-            self.music_editor.draw(&helpers);
+            self.music_editor.draw(&self.sound_data, &helpers);
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
@@ -1976,7 +2012,7 @@ impl App {
                 | AppMode::Running
                 | AppMode::SpriteEditor
                 | AppMode::MapEditor
-                | AppMode::SfxEditor
+                | AppMode::SoundEditor
                 | AppMode::MusicEditor => {
                     unreachable!()
                 }
@@ -2227,54 +2263,66 @@ pub fn split_data_sections(
     &str,
     [u8; 4096],
     [u8; 4096],
-    [u8; SFX_REGION_SIZE],
-    [u8; MUSIC_REGION_SIZE],
+    [u8; AUDIO_REGION_SIZE],
+    [u8; SONG_REGION_SIZE],
 ) {
     const SPR: &str = "\n__spr__\n";
     const MAP: &str = "\n__map__\n";
+    const WAV: &str = "\n__wav__\n";
+    const INS: &str = "\n__ins__\n";
+    const TBL: &str = "\n__tbl__\n";
     const SFX: &str = "\n__sfx__\n";
     const MUS: &str = "\n__mus__\n";
-    let mut spr = [0u8; 4096];
-    let mut map = [0u8; 4096];
-    let mut sfx = [0u8; SFX_REGION_SIZE];
-    let mut mus = [0u8; MUSIC_REGION_SIZE];
+    let markers = [SPR, MAP, WAV, INS, TBL, SFX, MUS];
 
-    let spr_marker = content.find(SPR);
-    let map_marker = content.find(MAP);
-    let sfx_marker = content.find(SFX);
-    let mus_marker = content.find(MUS);
+    let mut sections: Vec<(&str, usize)> = markers
+        .iter()
+        .filter_map(|&marker| content.find(marker).map(|pos| (marker, pos)))
+        .collect();
+    sections.sort_by_key(|(_, pos)| *pos);
 
-    let source_end = spr_marker
-        .or(map_marker)
-        .or(sfx_marker)
-        .or(mus_marker)
+    let source_end = sections
+        .first()
+        .map(|(_, pos)| *pos)
         .unwrap_or(content.len());
     let source = &content[..source_end];
 
-    if let Some(pos) = spr_marker {
-        let start = pos + SPR.len();
-        let end = map_marker
-            .or(sfx_marker)
-            .or(mus_marker)
+    let mut spr = [0u8; 4096];
+    let mut map = [0u8; 4096];
+    let mut audio = [0u8; AUDIO_REGION_SIZE];
+    let mut song = [0u8; SONG_REGION_SIZE];
+
+    for (index, (marker, pos)) in sections.iter().enumerate() {
+        let start = pos + marker.len();
+        let end = sections
+            .get(index + 1)
+            .map(|(_, next)| *next)
             .unwrap_or(content.len());
-        parse_hex_section(&content[start..end], &mut spr);
-    }
-    if let Some(pos) = map_marker {
-        let start = pos + MAP.len();
-        let end = sfx_marker.or(mus_marker).unwrap_or(content.len());
-        parse_hex_section(&content[start..end], &mut map);
-    }
-    if let Some(pos) = sfx_marker {
-        let start = pos + SFX.len();
-        let end = mus_marker.unwrap_or(content.len());
-        parse_hex_section(&content[start..end], &mut sfx);
-    }
-    if let Some(pos) = mus_marker {
-        let start = pos + MUS.len();
-        parse_hex_section(&content[start..], &mut mus);
+        let hex = &content[start..end];
+        match *marker {
+            SPR => parse_hex_section(hex, &mut spr),
+            MAP => parse_hex_section(hex, &mut map),
+            WAV => parse_hex_section(hex, &mut audio[..AUDIO_WAVE_REGION_SIZE]),
+            INS => parse_hex_section(
+                hex,
+                &mut audio[AUDIO_INSTRUMENT_OFFSET
+                    ..AUDIO_INSTRUMENT_OFFSET + AUDIO_INSTRUMENT_COUNT * AUDIO_INSTRUMENT_SIZE],
+            ),
+            TBL => parse_hex_section(
+                hex,
+                &mut audio
+                    [AUDIO_TABLE_OFFSET..AUDIO_TABLE_OFFSET + AUDIO_TABLE_COUNT * AUDIO_TABLE_SIZE],
+            ),
+            SFX => parse_hex_section(
+                hex,
+                &mut audio[AUDIO_SFX_OFFSET..AUDIO_SFX_OFFSET + AUDIO_SFX_COUNT * AUDIO_SFX_SIZE],
+            ),
+            MUS => parse_hex_section(hex, &mut song),
+            _ => {}
+        }
     }
 
-    (source, spr, map, sfx, mus)
+    (source, spr, map, audio, song)
 }
 
 fn parse_hex_section(hex: &str, buf: &mut [u8]) {
@@ -2340,4 +2388,48 @@ fn sample_buttons() -> u8 {
         b |= 128;
     }
     b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::format::SfxEntry;
+
+    #[test]
+    fn bricks_audio_sections_parse() {
+        let content = include_str!("../examples/bricks.mkr");
+        let (source, _, _, audio, song) = split_data_sections(content);
+        assert!(source.contains("fn main()"));
+        let data = SoundData::from_audio_bytes(&audio);
+        assert_eq!(data.sfx[0].table, 1);
+        assert_eq!(data.sfx[0].instrument, 2);
+        assert!(data.waves[0].iter().any(|&byte| byte != 0));
+        assert_eq!(data.tables[1].speed, 5);
+        assert!(song.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn audio_sections_roundtrip() {
+        let mut data = SoundData::default();
+        data.waves[3][0] = 0xAB;
+        data.sfx[2] = SfxEntry {
+            channel: crate::audio::format::ChannelType::Wave,
+            instrument: 4,
+            table: 5,
+            note: 40,
+            priority: 2,
+            duration: 12,
+        };
+        data.header.ticks_per_row = 7;
+        data.header.order_count = 9;
+        let mut content = String::from("fn main()\nend");
+        data.append_to_source(&mut content);
+        let (source, _, _, audio, song) = split_data_sections(&content);
+        assert_eq!(source, "fn main()\nend");
+        let decoded = SoundData::from_audio_bytes(&audio);
+        assert_eq!(decoded.sfx[2], data.sfx[2]);
+        assert_eq!(decoded.waves[3][0], 0xAB);
+        let decoded_song = SoundData::from_song_bytes(&song);
+        assert_eq!(decoded_song.header, data.header);
+    }
 }

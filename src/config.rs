@@ -41,23 +41,59 @@ pub const MAP_WIDTH: usize = 128;
 pub const MAP_HEIGHT: usize = 32;
 pub const MAP_REGION_START: usize = 0x4000; // 16384
 
-// SFX
-pub const SFX_COUNT: usize = 16;
-pub const SFX_CELLS: usize = 32;
-pub const SFX_HEADER_BYTES: usize = 4;
-pub const SFX_SIZE: usize = SFX_HEADER_BYTES + SFX_CELLS * 2; // 68
-pub const SFX_REGION_START: usize = 0x5000; // 20480
-pub const SFX_REGION_SIZE: usize = SFX_COUNT * SFX_SIZE; // 1088
-
 // Music
-pub const MUSIC_COUNT: usize = 16;
 pub const MUSIC_ROWS: usize = 32;
 pub const MUSIC_CHANNELS: usize = 4;
-pub const MUSIC_HEADER_BYTES: usize = 4;
-pub const MUSIC_PATTERN_SIZE: usize = MUSIC_HEADER_BYTES + MUSIC_ROWS * MUSIC_CHANNELS * 2; // 260
-pub const MUSIC_REGION_START: usize = 0x6000; // 24576
-pub const MUSIC_REGION_SIZE: usize = MUSIC_COUNT * MUSIC_PATTERN_SIZE; // 4160
 
-pub const MUSIC_END_STOP: u8 = 0;
-pub const MUSIC_END_LOOP: u8 = 1;
-pub const MUSIC_END_NEXT: u8 = 2;
+// Audio
+pub const AUDIO_WAVE_COUNT: usize = 16;
+pub const AUDIO_WAVE_SIZE: usize = 16; // 32 samples of 4 bits
+pub const AUDIO_WAVE_REGION_START: usize = 0x5000;
+pub const AUDIO_WAVE_REGION_SIZE: usize = AUDIO_WAVE_COUNT * AUDIO_WAVE_SIZE;
+
+pub const AUDIO_INSTRUMENT_COUNT: usize = 32;
+pub const AUDIO_INSTRUMENT_SIZE: usize = 16;
+pub const AUDIO_INSTRUMENT_REGION_START: usize = AUDIO_WAVE_REGION_START + AUDIO_WAVE_REGION_SIZE;
+pub const AUDIO_INSTRUMENT_REGION_SIZE: usize = AUDIO_INSTRUMENT_COUNT * AUDIO_INSTRUMENT_SIZE;
+
+pub const AUDIO_TABLE_COUNT: usize = 16;
+pub const AUDIO_TABLE_STEPS: usize = 32;
+pub const AUDIO_TABLE_STEP_SIZE: usize = 3;
+pub const AUDIO_TABLE_HEADER_BYTES: usize = 4;
+pub const AUDIO_TABLE_SIZE: usize =
+    AUDIO_TABLE_HEADER_BYTES + AUDIO_TABLE_STEPS * AUDIO_TABLE_STEP_SIZE;
+pub const AUDIO_TABLE_REGION_START: usize =
+    AUDIO_INSTRUMENT_REGION_START + AUDIO_INSTRUMENT_REGION_SIZE;
+pub const AUDIO_TABLE_REGION_SIZE: usize = AUDIO_TABLE_COUNT * AUDIO_TABLE_SIZE;
+
+pub const AUDIO_SFX_COUNT: usize = 16;
+pub const AUDIO_SFX_SIZE: usize = 6;
+pub const AUDIO_SFX_REGION_START: usize = AUDIO_TABLE_REGION_START + AUDIO_TABLE_REGION_SIZE;
+
+pub const AUDIO_REGION_START: usize = AUDIO_WAVE_REGION_START;
+pub const AUDIO_REGION_END: usize = 0x6000;
+pub const AUDIO_REGION_SIZE: usize = AUDIO_REGION_END - AUDIO_REGION_START;
+pub const AUDIO_INSTRUMENT_OFFSET: usize = AUDIO_INSTRUMENT_REGION_START - AUDIO_REGION_START;
+pub const AUDIO_TABLE_OFFSET: usize = AUDIO_TABLE_REGION_START - AUDIO_REGION_START;
+pub const AUDIO_SFX_OFFSET: usize = AUDIO_SFX_REGION_START - AUDIO_REGION_START;
+
+pub const SONG_REGION_START: usize = 0x6000;
+pub const SONG_REGION_SIZE: usize = 0x2000;
+pub const SONG_PATTERN_COUNT: usize = 16;
+pub const SONG_CELL_SIZE: usize = 3;
+pub const SONG_PATTERN_SIZE: usize = MUSIC_ROWS * SONG_CELL_SIZE;
+pub const SONG_PATTERN_REGION_SIZE: usize = MUSIC_CHANNELS * SONG_PATTERN_COUNT * SONG_PATTERN_SIZE;
+pub const SONG_ORDER_COUNT: usize = 64;
+pub const SONG_ORDER_SIZE: usize = MUSIC_CHANNELS;
+pub const SONG_ORDER_REGION_SIZE: usize = SONG_ORDER_COUNT * SONG_ORDER_SIZE;
+pub const SONG_COUNT: usize = 16;
+pub const SONG_SIZE: usize = 3;
+pub const SONG_TABLE_SIZE: usize = SONG_COUNT * SONG_SIZE;
+pub const SONG_HEADER_BYTES: usize = 16;
+pub const SONG_HEADER_START: usize =
+    SONG_REGION_START + SONG_PATTERN_REGION_SIZE + SONG_ORDER_REGION_SIZE;
+pub const SONG_TABLE_START: usize = SONG_HEADER_START + SONG_HEADER_BYTES;
+
+pub const SONG_LOOP_ENABLED: u8 = 0x80;
+pub const SONG_ORDER_MASK: u8 = 0x3F;
+pub const SONG_END_MASK: u8 = 0x7F;

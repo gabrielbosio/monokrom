@@ -1,6 +1,6 @@
 use crate::compiler::bytecode::*;
 use crate::config::{
-    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, MUSIC_COUNT, SFX_COUNT, SPRITE_COUNT,
+    AUDIO_SFX_COUNT, MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, SONG_COUNT, SPRITE_COUNT,
     SPRITE_REGION_START, SPRITE_SIZE,
 };
 use crate::render::font::FONT_DATA;
@@ -499,13 +499,15 @@ impl Vm {
             }
             OP_SFX => {
                 let n = self.pop()?;
-                if n >= 0 && (n as usize) < SFX_COUNT {
+                if n >= 0 && (n as usize) < AUDIO_SFX_COUNT {
                     self.sfx_queue.push(n as u8);
                 }
             }
             OP_MUSIC => {
                 let n = self.pop()?;
-                if n >= 0 && (n as usize) < MUSIC_COUNT {
+                if n < 0 {
+                    self.music_queue.push(0xFF);
+                } else if (n as usize) < SONG_COUNT {
                     self.music_queue.push(n as u8);
                 }
             }
@@ -1467,7 +1469,7 @@ end";
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.sfx_queue, vec![0, (SFX_COUNT - 1) as u8]);
+        assert_eq!(vm.sfx_queue, vec![0, (AUDIO_SFX_COUNT - 1) as u8]);
     }
 
     #[test]
@@ -1481,7 +1483,7 @@ end";
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.music_queue, vec![0, (MUSIC_COUNT - 1) as u8]);
+        assert_eq!(vm.music_queue, vec![0, (SONG_COUNT - 1) as u8, 0xFF]);
     }
 
     #[test]

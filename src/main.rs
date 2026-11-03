@@ -14,7 +14,7 @@ use macroquad::prelude::*;
 
 use app::App;
 use config::{
-    MAP_REGION_START, MUSIC_REGION_SIZE, MUSIC_REGION_START, SFX_REGION_SIZE, SFX_REGION_START,
+    AUDIO_REGION_END, AUDIO_REGION_START, MAP_REGION_START, SONG_REGION_SIZE, SONG_REGION_START,
     SPRITE_REGION_START,
 };
 use vm::Vm;
@@ -76,15 +76,16 @@ fn detect_embedded_game() -> Option<Vm> {
         vm.memory[MAP_REGION_START..MAP_REGION_START + 4096]
             .copy_from_slice(&payload[map_start..map_start + 4096]);
     }
-    let sfx_start = map_start + 4096;
-    if payload.len() >= sfx_start + SFX_REGION_SIZE {
-        vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE]
-            .copy_from_slice(&payload[sfx_start..sfx_start + SFX_REGION_SIZE]);
+    let audio_start = map_start + 4096;
+    let audio_len = AUDIO_REGION_END - AUDIO_REGION_START;
+    if payload.len() >= audio_start + audio_len {
+        vm.memory[AUDIO_REGION_START..AUDIO_REGION_END]
+            .copy_from_slice(&payload[audio_start..audio_start + audio_len]);
     }
-    let mus_start = sfx_start + SFX_REGION_SIZE;
-    if payload.len() >= mus_start + MUSIC_REGION_SIZE {
-        vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE]
-            .copy_from_slice(&payload[mus_start..mus_start + MUSIC_REGION_SIZE]);
+    let song_start = audio_start + audio_len;
+    if payload.len() >= song_start + SONG_REGION_SIZE {
+        vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE]
+            .copy_from_slice(&payload[song_start..song_start + SONG_REGION_SIZE]);
     }
     Some(vm)
 }
@@ -92,13 +93,13 @@ fn detect_embedded_game() -> Option<Vm> {
 #[cfg(target_arch = "wasm32")]
 fn detect_embedded_game() -> Option<Vm> {
     let full_source = get_embedded_source()?;
-    let (source, spr, map, sfx, mus) = split_data_sections(&full_source);
+    let (source, spr, map, audio, song) = split_data_sections(&full_source);
     let bc = compile(source).ok()?;
     let mut vm = Vm::new(&bc, 0.0).ok()?;
     vm.memory[SPRITE_REGION_START..SPRITE_REGION_START + 4096].copy_from_slice(&spr);
     vm.memory[MAP_REGION_START..MAP_REGION_START + 4096].copy_from_slice(&map);
-    vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE].copy_from_slice(&sfx);
-    vm.memory[MUSIC_REGION_START..MUSIC_REGION_START + MUSIC_REGION_SIZE].copy_from_slice(&mus);
+    vm.memory[AUDIO_REGION_START..AUDIO_REGION_END].copy_from_slice(&audio);
+    vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE].copy_from_slice(&song);
     Some(vm)
 }
 
@@ -112,7 +113,7 @@ async fn main() {
     loop {
         app.update();
         app.draw();
-        app.process_audio().await;
+        app.process_audio();
 
         next_frame().await;
     }
