@@ -161,6 +161,7 @@ pub struct MusicEditor {
     undo: VecDeque<SoundData>,
     redo: VecDeque<SoundData>,
     cell_clipboard: Option<MusicCell>,
+    value_high: Option<u8>,
 }
 
 impl Default for MusicEditor {
@@ -183,6 +184,7 @@ impl MusicEditor {
             undo: VecDeque::new(),
             redo: VecDeque::new(),
             cell_clipboard: None,
+            value_high: None,
         }
     }
 
@@ -225,6 +227,7 @@ impl MusicEditor {
         }
         if modifier && !shift && is_key_pressed(KeyCode::V) {
             if let Some(cell) = self.cell_clipboard {
+                self.value_high = None;
                 self.push_undo(data);
                 self.set_current_cell(data, cell);
                 return MusicEditorOutput::modified();
@@ -233,6 +236,7 @@ impl MusicEditor {
         }
 
         if is_key_pressed(KeyCode::Tab) {
+            self.value_high = None;
             self.header_focus = !self.header_focus;
             return MusicEditorOutput::none();
         }
@@ -251,6 +255,7 @@ impl MusicEditor {
     }
 
     fn update_header(&mut self, data: &mut SoundData) -> MusicEditorOutput {
+        self.value_high = None;
         if should_key_fire(KeyCode::Left, false) {
             self.header_field = self.header_field.prev();
         }
@@ -348,7 +353,8 @@ impl MusicEditor {
         let shift = is_shift_pressed();
         let arrow_mod = is_arrow_modifier_pressed();
         if should_key_fire(KeyCode::Left, false) && !arrow_mod {
-            if is_shift_pressed() {
+            self.value_high = None;
+            if shift {
                 self.channel = (self.channel + MUSIC_CHANNELS as u8 - 1) % MUSIC_CHANNELS as u8;
             } else {
                 self.field = self.field.prev();
@@ -358,7 +364,8 @@ impl MusicEditor {
             }
         }
         if should_key_fire(KeyCode::Right, false) && !arrow_mod {
-            if is_shift_pressed() {
+            self.value_high = None;
+            if shift {
                 self.channel = (self.channel + 1) % MUSIC_CHANNELS as u8;
             } else {
                 self.field = self.field.next();
@@ -372,23 +379,33 @@ impl MusicEditor {
         if !arrow_mod {
             let step = if shift { 8 } else { 1 };
             if up {
+                self.value_high = None;
                 self.row = (self.row + MUSIC_ROWS as u8 - step) % MUSIC_ROWS as u8;
                 self.ensure_cursor_visible();
             }
             if down {
+                self.value_high = None;
                 self.row = (self.row + step) % MUSIC_ROWS as u8;
                 self.ensure_cursor_visible();
             }
         } else {
             let bump = if up {
-                if shift && self.field == Field::Note {
-                    12
+                if shift {
+                    match self.field {
+                        Field::Note => 12,
+                        Field::Value => 16,
+                        _ => 1,
+                    }
                 } else {
                     1
                 }
             } else if down {
-                if shift && self.field == Field::Note {
-                    -12
+                if shift {
+                    match self.field {
+                        Field::Note => -12,
+                        Field::Value => -16,
+                        _ => -1,
+                    }
                 } else {
                     -1
                 }
@@ -396,6 +413,7 @@ impl MusicEditor {
                 0
             };
             if bump != 0 {
+                self.value_high = None;
                 if self.field == Field::Value && self.current_cell(data).effect == EFFECT_NONE {
                     return MusicEditorOutput::none();
                 }
@@ -405,7 +423,28 @@ impl MusicEditor {
             }
         }
 
+        if self.field == Field::Value && !is_shortcut_modifier_pressed() && !arrow_mod {
+            if let Some(digit) = pressed_hex_digit() {
+                let mut cell = self.current_cell(data);
+                if cell.effect == EFFECT_NONE {
+                    self.value_high = None;
+                    return MusicEditorOutput::none();
+                }
+                if let Some(high) = self.value_high.take() {
+                    cell.value = (high << 4) | digit;
+                    self.set_current_cell(data, cell);
+                } else {
+                    self.push_undo(data);
+                    cell.value = digit << 4;
+                    self.set_current_cell(data, cell);
+                    self.value_high = Some(digit);
+                }
+                return MusicEditorOutput::modified();
+            }
+        }
+
         if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
+            self.value_high = None;
             self.push_undo(data);
             self.set_current_cell(data, MusicCell::default());
             return MusicEditorOutput::modified();
@@ -498,6 +537,7 @@ impl MusicEditor {
     }
 
     fn do_undo(&mut self, data: &mut SoundData) -> MusicEditorOutput {
+        self.value_high = None;
         if let Some(snapshot) = self.undo.pop_back() {
             self.redo.push_back(data.clone());
             *data = snapshot;
@@ -507,6 +547,7 @@ impl MusicEditor {
     }
 
     fn do_redo(&mut self, data: &mut SoundData) -> MusicEditorOutput {
+        self.value_high = None;
         if let Some(snapshot) = self.redo.pop_back() {
             self.undo.push_back(data.clone());
             *data = snapshot;
@@ -693,6 +734,43 @@ fn instrument_text(instrument: u8) -> String {
     } else {
         format!("{instrument:02}")
     }
+}
+
+fn pressed_hex_digit() -> Option<u8> {
+    const KEYS: [(KeyCode, u8); 26] = [
+        (KeyCode::Key0, 0),
+        (KeyCode::Key1, 1),
+        (KeyCode::Key2, 2),
+        (KeyCode::Key3, 3),
+        (KeyCode::Key4, 4),
+        (KeyCode::Key5, 5),
+        (KeyCode::Key6, 6),
+        (KeyCode::Key7, 7),
+        (KeyCode::Key8, 8),
+        (KeyCode::Key9, 9),
+        (KeyCode::A, 10),
+        (KeyCode::B, 11),
+        (KeyCode::C, 12),
+        (KeyCode::D, 13),
+        (KeyCode::E, 14),
+        (KeyCode::F, 15),
+        (KeyCode::Kp0, 0),
+        (KeyCode::Kp1, 1),
+        (KeyCode::Kp2, 2),
+        (KeyCode::Kp3, 3),
+        (KeyCode::Kp4, 4),
+        (KeyCode::Kp5, 5),
+        (KeyCode::Kp6, 6),
+        (KeyCode::Kp7, 7),
+        (KeyCode::Kp8, 8),
+        (KeyCode::Kp9, 9),
+    ];
+    for (key, digit) in KEYS {
+        if is_key_pressed(key) {
+            return Some(digit);
+        }
+    }
+    None
 }
 
 fn effect_name(effect: u8) -> &'static str {
