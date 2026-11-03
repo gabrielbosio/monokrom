@@ -59,6 +59,7 @@ struct ChannelState {
     effect: u8,
     effect_value: u8,
     effect_tick: u8,
+    tone_porta: Option<(u8, u16)>,
     pending_note: Option<(u8, u8)>,
     priority: u8,
     sfx_remaining: Option<u8>,
@@ -91,6 +92,7 @@ impl Default for ChannelState {
             effect: EFFECT_NONE,
             effect_value: 0,
             effect_tick: 0,
+            tone_porta: None,
             pending_note: None,
             priority: 0,
             sfx_remaining: None,
@@ -480,6 +482,17 @@ impl SoundEngine {
                 .min(AUDIO_INSTRUMENT_COUNT as u8 - 1);
                 self.last_music_instrument[ch] = instrument_index;
 
+                if cell.effect == EFFECT_TONE_PORTA
+                    && self.channels[ch].owner == ChannelOwner::Music
+                    && self.channels[ch].gate
+                {
+                    if let Some(target_period) = self.note_period(ch, cell.note) {
+                        self.channels[ch].tone_porta = Some((cell.note, target_period));
+                        self.set_effect(ch, cell);
+                        continue;
+                    }
+                }
+
                 if cell.effect == EFFECT_NOTE_DELAY && cell.value > 0 {
                     self.channels[ch].effect = cell.effect;
                     self.channels[ch].effect_value = cell.value;
@@ -510,6 +523,9 @@ impl SoundEngine {
         self.channels[ch].effect = cell.effect;
         self.channels[ch].effect_value = cell.value;
         self.channels[ch].effect_tick = 0;
+        if cell.effect != EFFECT_TONE_PORTA {
+            self.channels[ch].tone_porta = None;
+        }
     }
 
     fn process_effects(&mut self) {
@@ -544,15 +560,21 @@ impl SoundEngine {
                     self.channels[ch].period = period.clamp(0, 2047) as u16;
                 }
                 EFFECT_TONE_PORTA => {
-                    if let Some(target) = self.note_period(ch, value) {
+                    if let Some((target_note, target_period)) = self.channels[ch].tone_porta {
+                        let speed = value.max(1) as i32;
                         let current = self.channels[ch].period as i32;
-                        let target = target as i32;
+                        let target = target_period as i32;
                         let next = if current < target {
-                            (current + 8).min(target)
+                            (current + speed).min(target)
                         } else {
-                            (current - 8).max(target)
+                            (current - speed).max(target)
                         };
                         self.channels[ch].period = next.clamp(0, 2047) as u16;
+                        if next == target {
+                            self.channels[ch].note = target_note;
+                            self.channels[ch].base_note = target_note;
+                            self.channels[ch].tone_porta = None;
+                        }
                     }
                 }
                 EFFECT_VIBRATO => {
@@ -826,6 +848,7 @@ impl SoundEngine {
         channel.effect = EFFECT_NONE;
         channel.effect_value = 0;
         channel.effect_tick = 0;
+        channel.tone_porta = None;
         channel.pending_note = None;
         channel.table = None;
         channel.gate = true;
@@ -858,6 +881,7 @@ impl SoundEngine {
         self.channels[ch].sweep_shadow = self.channels[ch].period;
         self.channels[ch].sweep_enabled = instrument.sweep_pace != 0 || instrument.sweep_step != 0;
         self.channels[ch].length_remaining = length_remaining(ch, &instrument);
+        self.channels[ch].tone_porta = None;
         self.channels[ch].gate = true;
         self.channels[ch].synth.reset();
     }
@@ -1124,6 +1148,31 @@ mod tests {
         }
         assert!(engine.song.is_some());
         assert_eq!(engine.order, 0);
+    }
+
+    #[test]
+    fn tone_porta_slides_to_note_without_retrigger() {
+        let mut data = test_data();
+        data.header.ticks_per_row = 32;
+        data.patterns[0][1][1] = MusicCell {
+            note: 46,
+            instrument: 1,
+            effect: EFFECT_TONE_PORTA,
+            value: 8,
+        };
+        let mut engine = SoundEngine::new(48000, data);
+        assert!(engine.play_song(0));
+        for _ in 0..32 {
+            engine.tick();
+        }
+        engine.tick();
+        assert_eq!(engine.channel(0).period, 1758);
+        assert_eq!(engine.channel(0).note, 34);
+        for _ in 0..20 {
+            engine.tick();
+        }
+        assert_eq!(engine.channel(0).period, 1899);
+        assert_eq!(engine.channel(0).note, 46);
     }
 
     #[test]
