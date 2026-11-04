@@ -1112,7 +1112,7 @@ impl SoundEditor {
                 "{:<4} {:<4} {:<4} {:<4} {:<4} {:<3}",
                 entry.channel.label(),
                 instrument_text(entry.instrument),
-                format!("{:02}", entry.table),
+                table_text(entry.table),
                 note,
                 entry.priority,
                 sfx_duration_text(entry.duration)
@@ -1147,7 +1147,7 @@ fn sfx_field_text(entry: SfxEntry, field: SfxField, note: &str) -> String {
     match field {
         SfxField::Channel => entry.channel.label().to_string(),
         SfxField::Instrument => instrument_text(entry.instrument),
-        SfxField::Table => format!("{:02}", entry.table),
+        SfxField::Table => table_text(entry.table),
         SfxField::Note => note.to_string(),
         SfxField::Priority => format!("{}", entry.priority),
         SfxField::Duration => sfx_duration_text(entry.duration),
@@ -1167,6 +1167,14 @@ fn instrument_text(instrument: u8) -> String {
         "..".to_string()
     } else {
         format!("{instrument:02}")
+    }
+}
+
+fn table_text(table: u8) -> String {
+    if table == 0 {
+        "..".to_string()
+    } else {
+        format!("{table:02}")
     }
 }
 
@@ -1365,6 +1373,13 @@ mod tests {
         assert_eq!(wrap_table(1, -1), 15);
         assert_eq!(wrap_table(15, 1), 1);
         assert_eq!(wrap_table(1, 10), 11);
+    }
+
+    #[test]
+    fn table_zero_is_empty_in_sfx_editor() {
+        assert_eq!(table_text(0), "..");
+        assert_eq!(table_text(1), "01");
+        assert_eq!(table_text(15), "15");
     }
 
     #[test]
