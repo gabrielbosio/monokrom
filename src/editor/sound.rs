@@ -481,34 +481,50 @@ impl SoundEditor {
 
     fn update_instruments(&mut self, data: &mut SoundData) -> SoundEditorOutput {
         let shift = is_shift_pressed();
+        let arrow_mod = is_arrow_modifier_pressed();
         let fields = self.fields_for(data);
         if self.instrument_field >= fields.len() {
             self.instrument_field = 0;
         }
-        if should_key_fire(KeyCode::Up, false) {
-            self.instrument_field = (self.instrument_field + fields.len() - 1) % fields.len();
-        }
-        if should_key_fire(KeyCode::Down, false) {
-            self.instrument_field = (self.instrument_field + 1) % fields.len();
+
+        let up = should_key_fire(KeyCode::Up, false);
+        let down = should_key_fire(KeyCode::Down, false);
+        if arrow_mod {
+            if up || down {
+                let field = fields[self.instrument_field];
+                let step = if shift {
+                    instrument_coarse_step(field)
+                } else {
+                    1
+                };
+                self.push_undo(data);
+                let sign = if up { 1 } else { -1 };
+                let instrument = &mut data.instruments[self.instrument as usize];
+                bump_instrument(instrument, field, sign * step);
+                return SoundEditorOutput::modified();
+            }
+        } else {
+            if up {
+                self.instrument_field = (self.instrument_field + fields.len() - 1) % fields.len();
+            }
+            if down {
+                self.instrument_field = (self.instrument_field + 1) % fields.len();
+            }
         }
 
         let left = should_key_fire(KeyCode::Left, false);
         let right = should_key_fire(KeyCode::Right, false);
-        let delta = if left || right {
-            if shift {
-                10
+        if left || right {
+            let field = fields[self.instrument_field];
+            let step = if shift {
+                instrument_coarse_step(field)
             } else {
                 1
-            }
-        } else {
-            0
-        };
-        if delta != 0 {
-            let field = fields[self.instrument_field];
+            };
             self.push_undo(data);
             let sign = if right { 1 } else { -1 };
             let instrument = &mut data.instruments[self.instrument as usize];
-            bump_instrument(instrument, field, sign * delta);
+            bump_instrument(instrument, field, sign * step);
             return SoundEditorOutput::modified();
         }
 
@@ -1275,6 +1291,26 @@ fn field_value(instrument: Instrument, field: InstrumentField) -> String {
     }
 }
 
+fn instrument_coarse_step(field: InstrumentField) -> i32 {
+    match field {
+        InstrumentField::Volume
+        | InstrumentField::WaveSlot
+        | InstrumentField::NoiseShift
+        | InstrumentField::Table => 4,
+        InstrumentField::EnvPeriod
+        | InstrumentField::SweepPace
+        | InstrumentField::SweepStep
+        | InstrumentField::NoiseDivider => 2,
+        InstrumentField::Duty | InstrumentField::WaveVolume | InstrumentField::Panning => 2,
+        InstrumentField::Length | InstrumentField::Finetune => 10,
+        InstrumentField::Type
+        | InstrumentField::EnvDir
+        | InstrumentField::LengthEnabled
+        | InstrumentField::SweepDir
+        | InstrumentField::NoiseWidth => 1,
+    }
+}
+
 fn bump_instrument(instrument: &mut Instrument, field: InstrumentField, delta: i32) {
     match field {
         InstrumentField::Type => {
@@ -1296,7 +1332,7 @@ fn bump_instrument(instrument: &mut Instrument, field: InstrumentField, delta: i
             instrument.duty = (instrument.duty as i32 + delta).rem_euclid(4) as u8;
         }
         InstrumentField::Length => {
-            instrument.length = (instrument.length as i32 + delta).clamp(0, 255) as u8;
+            instrument.length = (instrument.length as i32 + delta).rem_euclid(256) as u8;
         }
         InstrumentField::LengthEnabled => instrument.length_enabled = !instrument.length_enabled,
         InstrumentField::SweepPace => {
@@ -1329,7 +1365,7 @@ fn bump_instrument(instrument: &mut Instrument, field: InstrumentField, delta: i
             instrument.panning = (instrument.panning as i32 + delta).rem_euclid(4) as u8;
         }
         InstrumentField::Finetune => {
-            instrument.finetune = (instrument.finetune as i32 + delta).clamp(-128, 127) as i8;
+            instrument.finetune = (instrument.finetune as i32 + delta).rem_euclid(256) as i8;
         }
     }
 }
@@ -1352,6 +1388,30 @@ mod tests {
         assert_eq!(instrument.volume, 0);
         bump_instrument(&mut instrument, InstrumentField::Duty, 1);
         assert_eq!(instrument.duty, 3);
+    }
+
+    #[test]
+    fn full_range_instrument_fields_wrap() {
+        let mut instrument = Instrument::default();
+        bump_instrument(&mut instrument, InstrumentField::Length, -1);
+        assert_eq!(instrument.length, 255);
+        bump_instrument(&mut instrument, InstrumentField::Length, 1);
+        assert_eq!(instrument.length, 0);
+
+        instrument.finetune = 127;
+        bump_instrument(&mut instrument, InstrumentField::Finetune, 1);
+        assert_eq!(instrument.finetune, -128);
+        bump_instrument(&mut instrument, InstrumentField::Finetune, -1);
+        assert_eq!(instrument.finetune, 127);
+    }
+
+    #[test]
+    fn instrument_coarse_steps_follow_ranges() {
+        assert_eq!(instrument_coarse_step(InstrumentField::Volume), 4);
+        assert_eq!(instrument_coarse_step(InstrumentField::Duty), 2);
+        assert_eq!(instrument_coarse_step(InstrumentField::EnvPeriod), 2);
+        assert_eq!(instrument_coarse_step(InstrumentField::Length), 10);
+        assert_eq!(instrument_coarse_step(InstrumentField::Type), 1);
     }
 
     #[test]
