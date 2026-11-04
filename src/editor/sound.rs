@@ -327,7 +327,7 @@ impl SoundEditor {
             tab: SoundTab::Instruments,
             instrument: 1,
             instrument_field: 0,
-            table: 0,
+            table: 1,
             table_header_focus: false,
             table_header_field: TableHeaderField::Table,
             table_step: 0,
@@ -448,8 +448,7 @@ impl SoundEditor {
                     ((self.instrument as i32 - 1 + direction).rem_euclid(count) + 1) as u8;
             }
             SoundTab::Tables => {
-                self.table =
-                    (self.table as i32 + direction).rem_euclid(AUDIO_TABLE_COUNT as i32) as u8;
+                self.table = wrap_table(self.table, direction);
             }
             SoundTab::Waves => {
                 self.wave =
@@ -625,7 +624,7 @@ impl SoundEditor {
         let table = &mut data.tables[self.table as usize];
         match self.table_header_field {
             TableHeaderField::Table => {
-                self.table = (self.table as i32 + bump).rem_euclid(AUDIO_TABLE_COUNT as i32) as u8;
+                self.table = wrap_table(self.table, bump);
             }
             TableHeaderField::Speed => {
                 table.speed = (table.speed as i32 + bump).clamp(1, 255) as u8;
@@ -1169,6 +1168,11 @@ fn instrument_text(instrument: u8) -> String {
     }
 }
 
+fn wrap_table(table: u8, delta: i32) -> u8 {
+    let count = AUDIO_TABLE_COUNT as i32 - 1;
+    ((table as i32 - 1 + delta).rem_euclid(count) + 1) as u8
+}
+
 fn table_command_char(command: u8) -> char {
     match command {
         0 => '-',
@@ -1352,6 +1356,13 @@ mod tests {
         assert_eq!(instrument_text(0), "..");
         assert_eq!(instrument_text(1), "01");
         assert_eq!(instrument_text(31), "31");
+    }
+
+    #[test]
+    fn tables_are_numbered_from_one() {
+        assert_eq!(wrap_table(1, -1), 15);
+        assert_eq!(wrap_table(15, 1), 1);
+        assert_eq!(wrap_table(1, 10), 11);
     }
 
     #[test]
