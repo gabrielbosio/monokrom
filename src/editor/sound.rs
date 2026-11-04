@@ -990,7 +990,7 @@ impl SoundEditor {
             let shape = char::from_digit((step.shape & 0x0F) as u32, 16).unwrap_or('?');
             let volume = char::from_digit((step.volume & 0x0F) as u32, 16).unwrap_or('?');
             let detune = char::from_digit((step.detune & 0x0F) as u32, 16).unwrap_or('?');
-            let command = char::from_digit((step.command & 0x0F) as u32, 16).unwrap_or('?');
+            let command = table_command_char(step.command);
             for (row, y, c) in [
                 (TableRow::Shape, TABLE_SHAPE_Y, shape),
                 (TableRow::Volume, TABLE_VOLUME_Y, volume),
@@ -1022,7 +1022,7 @@ impl SoundEditor {
             TableRow::Shape => format!("{label:<8}{:>3}", format!("{:02}", step.shape)),
             TableRow::Volume => format!("{label:<8}{:>3}", format!("{:02}", step.volume)),
             TableRow::Detune => format!("{label:<8}{:>3}", format!("{:02}", step.detune)),
-            TableRow::Command => format!("{label:<8}{:>3}", step.command),
+            TableRow::Command => format!("{label} {}", table_command_name(step.command)),
         };
         draw_text(helpers, 0.0, INFO_Y, &text, COLOR_WHITE);
     }
@@ -1166,6 +1166,26 @@ fn instrument_text(instrument: u8) -> String {
         "..".to_string()
     } else {
         format!("{instrument:02}")
+    }
+}
+
+fn table_command_char(command: u8) -> char {
+    match command {
+        0 => '-',
+        1 => 'E',
+        2 => 'J',
+        3 => 'R',
+        _ => '?',
+    }
+}
+
+fn table_command_name(command: u8) -> &'static str {
+    match command {
+        0 => "None",
+        1 => "End",
+        2 => "Jump",
+        3 => "Restart",
+        _ => "Unknown",
     }
 }
 
@@ -1332,5 +1352,17 @@ mod tests {
         assert_eq!(instrument_text(0), "..");
         assert_eq!(instrument_text(1), "01");
         assert_eq!(instrument_text(31), "31");
+    }
+
+    #[test]
+    fn table_commands_have_labels() {
+        assert_eq!(table_command_char(0), '-');
+        assert_eq!(table_command_char(1), 'E');
+        assert_eq!(table_command_char(2), 'J');
+        assert_eq!(table_command_char(3), 'R');
+        assert_eq!(table_command_name(0), "None");
+        assert_eq!(table_command_name(1), "End");
+        assert_eq!(table_command_name(2), "Jump");
+        assert_eq!(table_command_name(3), "Restart");
     }
 }
