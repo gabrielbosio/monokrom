@@ -373,8 +373,10 @@ impl SoundEditor {
             return self.do_redo(data);
         }
 
-        if matches!(self.tab, SoundTab::Instruments | SoundTab::Waves)
-            && is_arrow_modifier_pressed()
+        if matches!(
+            self.tab,
+            SoundTab::Instruments | SoundTab::Tables | SoundTab::Waves
+        ) && is_arrow_modifier_pressed()
             && (is_key_down(KeyCode::Left) || is_key_down(KeyCode::Right))
         {
             if should_key_fire(KeyCode::Left, false) {
