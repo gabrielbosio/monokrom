@@ -373,6 +373,19 @@ impl SpriteEditor {
             SHEET_ROWS as f32 * SHEET_TILE + 2.0,
         );
 
+        // Tile panel scrollbar
+        let track_w = SHEET_COLS as f32 * SHEET_TILE;
+        let thumb_w = (track_w * SHEET_COLS as f32 / 16.0).round().max(1.0);
+        let max_start = (16 - SHEET_COLS) as f32;
+        let thumb_x = (track_w - thumb_w) * self.sheet_col as f32 / max_start;
+        helpers.draw_rect(
+            sheet_x + thumb_x.round(),
+            sheet_y + SHEET_ROWS as f32 * SHEET_TILE,
+            thumb_w,
+            1.0,
+            COLOR_WHITE,
+        );
+
         // Cursor highlight, drawn outside the pixel
         let cx = sprite_x + self.cursor_x as f32 * zoom;
         let cy = sprite_y + self.cursor_y as f32 * zoom;
