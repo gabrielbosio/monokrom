@@ -712,15 +712,17 @@ mod tests {
         );
         assert_eq!(SoundData::from_audio_bytes(&bytes).sfx[1].note, 42);
         assert_eq!(bytes.len(), AUDIO_REGION_SIZE);
-        assert!(AUDIO_SFX_OFFSET > AUDIO_TABLE_OFFSET);
+        const { assert!(AUDIO_SFX_OFFSET > AUDIO_TABLE_OFFSET) };
     }
 
     #[test]
     fn sound_data_song_roundtrip() {
-        let mut data = SoundData::default();
-        data.header = MusicHeader {
-            ticks_per_row: 8,
-            order_count: 24,
+        let mut data = SoundData {
+            header: MusicHeader {
+                ticks_per_row: 8,
+                order_count: 24,
+            },
+            ..Default::default()
         };
         data.patterns[2][5][17] = MusicCell {
             note: 40,
@@ -742,7 +744,7 @@ mod tests {
         assert_eq!(decoded.songs[2], data.songs[2]);
         assert_eq!(decoded.header, data.header);
         assert_eq!(bytes.len(), SONG_REGION_SIZE);
-        assert!(SONG_HEADER_START > 0);
-        assert!(SONG_TABLE_START > SONG_HEADER_START);
+        const { assert!(SONG_HEADER_START > 0) };
+        const { assert!(SONG_TABLE_START > SONG_HEADER_START) };
     }
 }
