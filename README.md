@@ -62,7 +62,6 @@ This section shows how to navigate through each screen. Depending on the screen,
 ### Code editor
 
 - **Ctrl+S** save, **Ctrl+O** open, **Ctrl+N** new file
-- **Ctrl+Enter** run program
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+X/C/V** cut, copy, paste
 - **Ctrl+A** select all
@@ -76,7 +75,7 @@ This section shows how to navigate through each screen. Depending on the screen,
 
 ### Sprite editor
 
-- **Arrow keys** move cursor on the 8x8 pixel grid
+- **Arrow keys** move cursor on the pixel grid
 - **Space** paint pixel (hold while moving to draw continuously)
 - **1/2/3/4** select color (1=black, 2=dark, 3=light, 4=white)
 - **C** eyedropper (pick color under cursor)
@@ -90,13 +89,13 @@ This section shows how to navigate through each screen. Depending on the screen,
 
 ### Map editor
 
-- **Arrow keys** move cursor on the 128×32 tile grid
+- **Arrow keys** move cursor on the tile grid
 - **Shift+Arrow** move cursor by 8 tiles
 - **Space** paint tile (hold while moving to paint continuously)
 - **Delete/Backspace** clear tile (place tile 0)
 - **C** eyedropper (pick tile under cursor)
 - **Ctrl+Arrow** navigate the tile picker (picker scrolls one column at a time)
-- **Tab** (hold) peek a 20×18 tile region as it will appear at runtime
+- **Tab** (hold) peek a 20x18 tile region as it will appear at runtime
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+S** save
 
