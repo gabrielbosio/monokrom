@@ -11,7 +11,22 @@ use crate::input::{
 use crate::render::DrawHelpers;
 
 const UNDO_LIMIT: usize = 32;
-const SHEET_COLS: u8 = 5;
+const SHEET_ROWS: u8 = 16;
+const SHEET_COLS: u8 = 11;
+const SHEET_TILE: f32 = 8.0;
+const PANEL_SIZE: f32 = 64.0;
+const SPRITE_SIZES: [u8; 4] = [8, 16, 32, 64];
+const ZOOMS: [u8; 4] = [8, 4, 2, 1];
+
+struct SpriteBlock {
+    tiles: u8,
+    data: Vec<u8>,
+}
+
+struct Snapshot {
+    base: u8,
+    block: SpriteBlock,
+}
 
 pub enum SpriteEditorAction {
     None,
@@ -54,11 +69,12 @@ pub struct SpriteEditor {
     cursor_x: u8,
     cursor_y: u8,
     color: u8,
-    undo: VecDeque<(u8, [u8; SPRITE_SIZE])>,
-    redo: VecDeque<(u8, [u8; SPRITE_SIZE])>,
-    clipboard: Option<[u8; SPRITE_SIZE]>,
+    undo: VecDeque<Snapshot>,
+    redo: VecDeque<Snapshot>,
+    clipboard: Option<SpriteBlock>,
     painting: bool,
     sheet_col: u8,
+    zoom_index: usize,
 }
 
 impl Default for SpriteEditor {
@@ -80,6 +96,7 @@ impl SpriteEditor {
             clipboard: None,
             painting: false,
             sheet_col: 0,
+            zoom_index: 0,
         }
     }
 
@@ -104,14 +121,18 @@ impl SpriteEditor {
             return self.do_redo();
         }
         if modifier && !shift && is_key_pressed(KeyCode::C) {
-            self.clipboard = Some(self.get_bytes(self.selected));
+            self.clipboard = Some(self.get_block(self.selected, self.tile_span()));
             return SpriteEditorOutput::none();
         }
         if modifier && !shift && is_key_pressed(KeyCode::V) {
-            if let Some(data) = self.clipboard {
-                self.push_undo();
-                self.set_bytes(self.selected, &data);
-                return SpriteEditorOutput::modified();
+            if let Some(block) = self.clipboard.take() {
+                if block.tiles == self.tile_span() {
+                    self.push_undo();
+                    self.set_block(self.selected, &block);
+                    self.clipboard = Some(block);
+                    return SpriteEditorOutput::modified();
+                }
+                self.clipboard = Some(block);
             }
             return SpriteEditorOutput::none();
         }
@@ -122,18 +143,31 @@ impl SpriteEditor {
             return SpriteEditorOutput::action(SpriteEditorAction::Run);
         }
 
+        if !modifier
+            && (is_key_pressed(KeyCode::Equal)
+                || is_key_pressed(KeyCode::KpAdd)
+                || is_key_pressed(KeyCode::KpEqual))
+        {
+            self.zoom_in();
+            return SpriteEditorOutput::none();
+        }
+        if !modifier && (is_key_pressed(KeyCode::Minus) || is_key_pressed(KeyCode::KpSubtract)) {
+            self.zoom_out();
+            return SpriteEditorOutput::none();
+        }
+
         if is_arrow_modifier_pressed() {
             if is_key_pressed(KeyCode::Left) {
-                self.select(self.selected.wrapping_sub(1));
+                self.move_selection(-1, 0);
             }
             if is_key_pressed(KeyCode::Right) {
-                self.select(self.selected.wrapping_add(1));
+                self.move_selection(1, 0);
             }
             if is_key_pressed(KeyCode::Up) {
-                self.select(self.selected.wrapping_sub(16));
+                self.move_selection(0, -1);
             }
             if is_key_pressed(KeyCode::Down) {
-                self.select(self.selected.wrapping_add(16));
+                self.move_selection(0, 1);
             }
             return SpriteEditorOutput::none();
         }
@@ -156,12 +190,12 @@ impl SpriteEditor {
             let mut modified = false;
             if let Some((dx, dy)) = dir {
                 self.push_undo();
-                self.shift_sprite(self.selected, dx, dy);
+                self.shift_sprite(dx, dy);
                 modified = true;
             }
             if is_key_pressed(KeyCode::F) {
                 self.push_undo();
-                self.flip_vertical(self.selected);
+                self.flip_vertical();
                 modified = true;
             }
             return SpriteEditorOutput {
@@ -172,15 +206,15 @@ impl SpriteEditor {
 
         if is_key_pressed(KeyCode::F) {
             self.push_undo();
-            self.flip_horizontal(self.selected);
+            self.flip_horizontal();
             return SpriteEditorOutput::modified();
         }
 
         if is_key_pressed(KeyCode::Delete) {
-            let bytes = self.get_bytes(self.selected);
-            if bytes != [0; SPRITE_SIZE] {
+            let block = self.get_block(self.selected, self.tile_span());
+            if block.data.iter().any(|&b| b != 0) {
                 self.push_undo();
-                self.set_bytes(self.selected, &[0; SPRITE_SIZE]);
+                self.clear_sprite();
                 return SpriteEditorOutput::modified();
             }
             return SpriteEditorOutput::none();
@@ -200,21 +234,22 @@ impl SpriteEditor {
             self.color = 3;
         }
 
+        let mask = self.sprite_size() - 1;
         let mut moved = false;
         if should_key_fire(KeyCode::Left, false) {
-            self.cursor_x = self.cursor_x.wrapping_sub(1) & 7;
+            self.cursor_x = self.cursor_x.wrapping_sub(1) & mask;
             moved = true;
         }
         if should_key_fire(KeyCode::Right, false) {
-            self.cursor_x = (self.cursor_x + 1) & 7;
+            self.cursor_x = (self.cursor_x + 1) & mask;
             moved = true;
         }
         if should_key_fire(KeyCode::Up, false) {
-            self.cursor_y = self.cursor_y.wrapping_sub(1) & 7;
+            self.cursor_y = self.cursor_y.wrapping_sub(1) & mask;
             moved = true;
         }
         if should_key_fire(KeyCode::Down, false) {
-            self.cursor_y = (self.cursor_y + 1) & 7;
+            self.cursor_y = (self.cursor_y + 1) & mask;
             moved = true;
         }
 
@@ -222,11 +257,11 @@ impl SpriteEditor {
         if is_key_pressed(KeyCode::Space) {
             self.push_undo();
             self.painting = true;
-            self.set_pixel(self.selected, self.cursor_x, self.cursor_y, self.color);
+            self.set_sprite_pixel(self.cursor_x, self.cursor_y, self.color);
             modified = true;
         } else if is_key_down(KeyCode::Space) {
             if moved {
-                self.set_pixel(self.selected, self.cursor_x, self.cursor_y, self.color);
+                self.set_sprite_pixel(self.cursor_x, self.cursor_y, self.color);
                 modified = true;
             }
         } else {
@@ -234,7 +269,7 @@ impl SpriteEditor {
         }
 
         if is_key_pressed(KeyCode::C) {
-            self.color = self.get_pixel(self.selected, self.cursor_x, self.cursor_y);
+            self.color = self.get_sprite_pixel(self.cursor_x, self.cursor_y);
         }
 
         SpriteEditorOutput {
@@ -263,16 +298,21 @@ impl SpriteEditor {
 
     pub fn draw(&self, helpers: &DrawHelpers) {
         let palette = [COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE];
-        let zoom = 14.0f32;
-        let editor_size = zoom * 8.0;
+        let size = self.sprite_size();
+        let zoom = self.zoom() as f32;
+        let tile_span = self.tile_span();
+        let sprite_x = 1.0;
+        let sprite_y = 1.0;
+        let sheet_x = PANEL_SIZE + 4.0;
+        let sheet_y = 1.0;
 
-        // Current sprite zoomed
-        for py in 0..8u8 {
-            for px in 0..8u8 {
-                let color = self.get_pixel(self.selected, px, py);
+        // Current sprite zoomed. The panel is always 64x64.
+        for py in 0..size {
+            for px in 0..size {
+                let color = self.get_sprite_pixel(px, py);
                 helpers.draw_rect(
-                    px as f32 * zoom,
-                    py as f32 * zoom,
+                    sprite_x + px as f32 * zoom,
+                    sprite_y + py as f32 * zoom,
                     zoom,
                     zoom,
                     palette[color as usize],
@@ -280,31 +320,13 @@ impl SpriteEditor {
             }
         }
 
-        // Grid
-        let grid_color = Color::new(0.2, 0.2, 0.2, 1.0);
-        for i in 1..8 {
-            let pos = i as f32 * zoom;
-            helpers.draw_rect(pos, 0.0, 1.0, editor_size, grid_color);
-            helpers.draw_rect(0.0, pos, editor_size, 1.0, grid_color);
-        }
-
-        // Cursor highlight
-        let cx = self.cursor_x as f32 * zoom;
-        let cy = self.cursor_y as f32 * zoom;
-        helpers.draw_rect(cx, cy, zoom, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy + zoom - 1.0, zoom, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy, 1.0, zoom, COLOR_WHITE);
-        helpers.draw_rect(cx + zoom - 1.0, cy, 1.0, zoom, COLOR_WHITE);
-
         // Sprite sheet view
-        let sheet_x = editor_size + 4.0;
-        let start_col = self.sheet_col;
-        for row in 0..16u8 {
-            for col_off in 0..SHEET_COLS {
-                let sheet_col = start_col.wrapping_add(col_off) % 16;
+        for row in 0..SHEET_ROWS {
+            for col in 0..SHEET_COLS {
+                let sheet_col = self.sheet_col + col;
                 let si = row * 16 + sheet_col;
-                let bx = sheet_x + col_off as f32 * 8.0;
-                let by = row as f32 * 8.0;
+                let bx = sheet_x + col as f32 * SHEET_TILE;
+                let by = sheet_y + row as f32 * SHEET_TILE;
                 for py in 0..8u8 {
                     for px in 0..8u8 {
                         let c = self.get_pixel(si, px, py);
@@ -324,13 +346,40 @@ impl SpriteEditor {
 
         // Selected sprite highlight
         let sel_col = self.selected % 16;
-        let col_off = sel_col.wrapping_sub(start_col) % 16;
-        let sel_bx = sheet_x + col_off as f32 * 8.0;
-        let sel_by = (self.selected / 16) as f32 * 8.0;
-        helpers.draw_rect(sel_bx, sel_by, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(sel_bx, sel_by + 7.0, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(sel_bx, sel_by, 1.0, 8.0, COLOR_WHITE);
-        helpers.draw_rect(sel_bx + 7.0, sel_by, 1.0, 8.0, COLOR_WHITE);
+        let sel_row = self.selected / 16;
+        if sel_col >= self.sheet_col && sel_col + tile_span <= self.sheet_col + SHEET_COLS {
+            let span = tile_span as f32 * SHEET_TILE;
+            let sel_bx = sheet_x + (sel_col - self.sheet_col) as f32 * SHEET_TILE;
+            let sel_by = sheet_y + sel_row as f32 * SHEET_TILE;
+            helpers.draw_rect(sel_bx, sel_by, span, 1.0, COLOR_WHITE);
+            helpers.draw_rect(sel_bx, sel_by + span - 1.0, span, 1.0, COLOR_WHITE);
+            helpers.draw_rect(sel_bx, sel_by, 1.0, span, COLOR_WHITE);
+            helpers.draw_rect(sel_bx + span - 1.0, sel_by, 1.0, span, COLOR_WHITE);
+        }
+
+        // Panel borders
+        Self::draw_panel_border(
+            helpers,
+            sprite_x - 1.0,
+            sprite_y - 1.0,
+            PANEL_SIZE + 2.0,
+            PANEL_SIZE + 2.0,
+        );
+        Self::draw_panel_border(
+            helpers,
+            sheet_x - 1.0,
+            sheet_y - 1.0,
+            SHEET_COLS as f32 * SHEET_TILE + 2.0,
+            SHEET_ROWS as f32 * SHEET_TILE + 2.0,
+        );
+
+        // Cursor highlight, drawn outside the pixel
+        let cx = sprite_x + self.cursor_x as f32 * zoom;
+        let cy = sprite_y + self.cursor_y as f32 * zoom;
+        helpers.draw_rect(cx - 1.0, cy - 1.0, zoom + 2.0, 1.0, COLOR_WHITE);
+        helpers.draw_rect(cx - 1.0, cy + zoom, zoom + 2.0, 1.0, COLOR_WHITE);
+        helpers.draw_rect(cx - 1.0, cy, 1.0, zoom, COLOR_WHITE);
+        helpers.draw_rect(cx + zoom, cy, 1.0, zoom, COLOR_WHITE);
 
         // Color palette bar
         let bar_y = 134.0f32;
@@ -351,8 +400,8 @@ impl SpriteEditor {
             }
         }
 
-        // Sprite number
-        let label = format!("#{}", self.selected);
+        // Sprite number and zoom
+        let label = format!("#{:03} {}x", self.selected, self.zoom());
         let label_x = 100.0;
         for (i, c) in label.chars().enumerate() {
             helpers.draw_char(
@@ -364,16 +413,91 @@ impl SpriteEditor {
         }
     }
 
-    fn get_bytes(&self, sprite: u8) -> [u8; SPRITE_SIZE] {
-        let base = sprite as usize * SPRITE_SIZE;
-        let mut data = [0u8; SPRITE_SIZE];
-        data.copy_from_slice(&self.data[base..base + SPRITE_SIZE]);
-        data
+    fn draw_panel_border(helpers: &DrawHelpers, x: f32, y: f32, w: f32, h: f32) {
+        helpers.draw_rect(x, y, w, 1.0, COLOR_LIGHT_GRAY);
+        helpers.draw_rect(x, y + h - 1.0, w, 1.0, COLOR_LIGHT_GRAY);
+        helpers.draw_rect(x, y, 1.0, h, COLOR_LIGHT_GRAY);
+        helpers.draw_rect(x + w - 1.0, y, 1.0, h, COLOR_LIGHT_GRAY);
     }
 
-    fn set_bytes(&mut self, sprite: u8, data: &[u8; SPRITE_SIZE]) {
-        let base = sprite as usize * SPRITE_SIZE;
-        self.data[base..base + SPRITE_SIZE].copy_from_slice(data);
+    fn sprite_size(&self) -> u8 {
+        SPRITE_SIZES[self.zoom_index]
+    }
+
+    fn zoom(&self) -> u8 {
+        ZOOMS[self.zoom_index]
+    }
+
+    fn tile_span(&self) -> u8 {
+        self.sprite_size() / 8
+    }
+
+    fn zoom_in(&mut self) {
+        if self.zoom_index > 0 {
+            self.set_zoom_index(self.zoom_index - 1);
+        }
+    }
+
+    fn zoom_out(&mut self) {
+        if self.zoom_index + 1 < SPRITE_SIZES.len() {
+            self.set_zoom_index(self.zoom_index + 1);
+        }
+    }
+
+    fn set_zoom_index(&mut self, index: usize) {
+        self.zoom_index = index;
+        let max = self.sprite_size() - 1;
+        self.cursor_x = self.cursor_x.min(max);
+        self.cursor_y = self.cursor_y.min(max);
+        self.painting = false;
+        self.select(self.selected);
+    }
+
+    fn select(&mut self, idx: u8) {
+        let span = self.tile_span();
+        let col = (idx % 16) / span * span;
+        let row = (idx / 16) / span * span;
+        self.selected = row * 16 + col;
+        self.ensure_selected_visible();
+    }
+
+    fn move_selection(&mut self, dx: i8, dy: i8) {
+        let span = self.tile_span();
+        let groups = 16 / span;
+        let col = (self.selected % 16) / span;
+        let row = (self.selected / 16) / span;
+        let new_col = (col as i8 + dx).rem_euclid(groups as i8) as u8;
+        let new_row = (row as i8 + dy).rem_euclid(groups as i8) as u8;
+        self.selected = new_row * span * 16 + new_col * span;
+        self.ensure_selected_visible();
+    }
+
+    fn ensure_selected_visible(&mut self) {
+        let max_start = SHEET_ROWS - SHEET_COLS;
+        self.sheet_col = self.sheet_col.min(max_start);
+        let sel_col = self.selected % 16;
+        let span = self.tile_span();
+        if sel_col < self.sheet_col {
+            self.sheet_col = sel_col;
+        } else if sel_col + span > self.sheet_col + SHEET_COLS {
+            self.sheet_col = (sel_col + span - SHEET_COLS).min(max_start);
+        }
+    }
+
+    fn tile_at(&self, x: u8, y: u8) -> u8 {
+        let col = self.selected % 16 + x / 8;
+        let row = self.selected / 16 + y / 8;
+        row * 16 + col
+    }
+
+    fn get_sprite_pixel(&self, x: u8, y: u8) -> u8 {
+        let tile = self.tile_at(x, y);
+        self.get_pixel(tile, x % 8, y % 8)
+    }
+
+    fn set_sprite_pixel(&mut self, x: u8, y: u8, color: u8) {
+        let tile = self.tile_at(x, y);
+        self.set_pixel(tile, x % 8, y % 8, color);
     }
 
     fn set_pixel(&mut self, sprite: u8, x: u8, y: u8, color: u8) {
@@ -385,22 +509,36 @@ impl SpriteEditor {
             (self.data[base + byte_idx] & mask) | ((color & 3) << bit_shift);
     }
 
-    fn select(&mut self, idx: u8) {
-        self.selected = idx;
-        let sel_col = idx % 16;
-        let offset = sel_col.wrapping_sub(self.sheet_col) % 16;
-        if offset >= SHEET_COLS {
-            if offset > 8 {
-                self.sheet_col = sel_col;
-            } else {
-                self.sheet_col = sel_col.wrapping_sub(SHEET_COLS - 1) % 16;
+    fn get_block(&self, base: u8, tiles: u8) -> SpriteBlock {
+        let mut data = Vec::with_capacity(tiles as usize * tiles as usize * SPRITE_SIZE);
+        for ty in 0..tiles {
+            for tx in 0..tiles {
+                let idx = base as usize + ty as usize * 16 + tx as usize;
+                let start = idx * SPRITE_SIZE;
+                data.extend_from_slice(&self.data[start..start + SPRITE_SIZE]);
+            }
+        }
+        SpriteBlock { tiles, data }
+    }
+
+    fn set_block(&mut self, base: u8, block: &SpriteBlock) {
+        for ty in 0..block.tiles {
+            for tx in 0..block.tiles {
+                let src = (ty as usize * block.tiles as usize + tx as usize) * SPRITE_SIZE;
+                let idx = base as usize + ty as usize * 16 + tx as usize;
+                let dst = idx * SPRITE_SIZE;
+                self.data[dst..dst + SPRITE_SIZE]
+                    .copy_from_slice(&block.data[src..src + SPRITE_SIZE]);
             }
         }
     }
 
     fn push_undo(&mut self) {
-        let data = self.get_bytes(self.selected);
-        self.undo.push_back((self.selected, data));
+        let block = self.get_block(self.selected, self.tile_span());
+        self.undo.push_back(Snapshot {
+            base: self.selected,
+            block,
+        });
         if self.undo.len() > UNDO_LIMIT {
             self.undo.pop_front();
         }
@@ -408,68 +546,203 @@ impl SpriteEditor {
     }
 
     fn do_undo(&mut self) -> SpriteEditorOutput {
-        if let Some((sprite, data)) = self.undo.pop_back() {
-            let current = self.get_bytes(sprite);
-            self.redo.push_back((sprite, current));
-            self.set_bytes(sprite, &data);
-            self.select(sprite);
+        if let Some(snapshot) = self.undo.pop_back() {
+            let current = self.get_block(snapshot.base, snapshot.block.tiles);
+            self.redo.push_back(Snapshot {
+                base: snapshot.base,
+                block: current,
+            });
+            self.set_block(snapshot.base, &snapshot.block);
+            self.select(snapshot.base);
             return SpriteEditorOutput::modified();
         }
         SpriteEditorOutput::none()
     }
 
     fn do_redo(&mut self) -> SpriteEditorOutput {
-        if let Some((sprite, data)) = self.redo.pop_back() {
-            let current = self.get_bytes(sprite);
-            self.undo.push_back((sprite, current));
-            self.set_bytes(sprite, &data);
-            self.select(sprite);
+        if let Some(snapshot) = self.redo.pop_back() {
+            let current = self.get_block(snapshot.base, snapshot.block.tiles);
+            self.undo.push_back(Snapshot {
+                base: snapshot.base,
+                block: current,
+            });
+            self.set_block(snapshot.base, &snapshot.block);
+            self.select(snapshot.base);
             return SpriteEditorOutput::modified();
         }
         SpriteEditorOutput::none()
     }
 
-    fn flip_horizontal(&mut self, sprite: u8) {
-        for y in 0..8u8 {
-            let mut row = [0u8; 8];
-            for x in 0..8u8 {
-                row[x as usize] = self.get_pixel(sprite, x, y);
-            }
-            for x in 0..8u8 {
-                self.set_pixel(sprite, x, y, row[7 - x as usize]);
-            }
-        }
-    }
-
-    fn flip_vertical(&mut self, sprite: u8) {
-        for y in 0..4u8 {
-            for x in 0..8u8 {
-                let top = self.get_pixel(sprite, x, y);
-                let bot = self.get_pixel(sprite, x, 7 - y);
-                self.set_pixel(sprite, x, y, bot);
-                self.set_pixel(sprite, x, 7 - y, top);
+    fn clear_sprite(&mut self) {
+        let span = self.tile_span();
+        for ty in 0..span {
+            for tx in 0..span {
+                let idx = self.selected as usize + ty as usize * 16 + tx as usize;
+                let start = idx * SPRITE_SIZE;
+                self.data[start..start + SPRITE_SIZE].fill(0);
             }
         }
     }
 
-    fn shift_sprite(&mut self, sprite: u8, dx: i8, dy: i8) {
-        let mut pixels = [[0u8; 8]; 8];
-        for y in 0..8u8 {
-            for x in 0..8u8 {
-                pixels[y as usize][x as usize] = self.get_pixel(sprite, x, y);
+    fn flip_horizontal(&mut self) {
+        let size = self.sprite_size();
+        for y in 0..size {
+            for x in 0..size / 2 {
+                let left = self.get_sprite_pixel(x, y);
+                let right = self.get_sprite_pixel(size - 1 - x, y);
+                self.set_sprite_pixel(x, y, right);
+                self.set_sprite_pixel(size - 1 - x, y, left);
             }
         }
-        for y in 0..8i8 {
-            for x in 0..8i8 {
-                let sx = x - dx;
-                let sy = y - dy;
-                let color = if (0..8).contains(&sx) && (0..8).contains(&sy) {
-                    pixels[sy as usize][sx as usize]
+    }
+
+    fn flip_vertical(&mut self) {
+        let size = self.sprite_size();
+        for y in 0..size / 2 {
+            for x in 0..size {
+                let top = self.get_sprite_pixel(x, y);
+                let bot = self.get_sprite_pixel(x, size - 1 - y);
+                self.set_sprite_pixel(x, y, bot);
+                self.set_sprite_pixel(x, size - 1 - y, top);
+            }
+        }
+    }
+
+    fn shift_sprite(&mut self, dx: i8, dy: i8) {
+        let size = self.sprite_size();
+        let mut pixels = vec![0u8; size as usize * size as usize];
+        for y in 0..size {
+            for x in 0..size {
+                pixels[y as usize * size as usize + x as usize] = self.get_sprite_pixel(x, y);
+            }
+        }
+        for y in 0..size as i16 {
+            for x in 0..size as i16 {
+                let sx = x - dx as i16;
+                let sy = y - dy as i16;
+                let color = if (0..size as i16).contains(&sx) && (0..size as i16).contains(&sy) {
+                    pixels[sy as usize * size as usize + sx as usize]
                 } else {
                     0
                 };
-                self.set_pixel(sprite, x as u8, y as u8, color);
+                self.set_sprite_pixel(x as u8, y as u8, color);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_zoom_fills_the_fixed_panel() {
+        let mut editor = SpriteEditor::new();
+        for index in 0..SPRITE_SIZES.len() {
+            editor.set_zoom_index(index);
+            assert_eq!(editor.sprite_size() as u16 * editor.zoom() as u16, 64);
+        }
+    }
+
+    #[test]
+    fn zoom_steps_through_four_levels() {
+        let mut editor = SpriteEditor::new();
+        assert_eq!(editor.zoom(), 8);
+
+        editor.zoom_in();
+        assert_eq!(editor.zoom(), 8);
+        editor.zoom_out();
+        assert_eq!(editor.zoom(), 4);
+        editor.zoom_out();
+        assert_eq!(editor.zoom(), 2);
+        editor.zoom_out();
+        assert_eq!(editor.zoom(), 1);
+        editor.zoom_out();
+        assert_eq!(editor.zoom(), 1);
+
+        editor.zoom_in();
+        assert_eq!(editor.zoom(), 2);
+        editor.zoom_in();
+        assert_eq!(editor.zoom(), 4);
+        editor.zoom_in();
+        assert_eq!(editor.zoom(), 8);
+    }
+
+    #[test]
+    fn pixels_map_across_tiles_of_large_sprite() {
+        let mut editor = SpriteEditor::new();
+        editor.set_zoom_index(1);
+
+        editor.set_sprite_pixel(0, 0, 1);
+        editor.set_sprite_pixel(8, 0, 2);
+        editor.set_sprite_pixel(0, 8, 3);
+        editor.set_sprite_pixel(8, 8, 1);
+
+        assert_eq!(editor.get_pixel(0, 0, 0), 1);
+        assert_eq!(editor.get_pixel(1, 0, 0), 2);
+        assert_eq!(editor.get_pixel(16, 0, 0), 3);
+        assert_eq!(editor.get_pixel(17, 0, 0), 1);
+        assert_eq!(editor.get_sprite_pixel(8, 8), 1);
+    }
+
+    #[test]
+    fn selection_moves_in_whole_sprites() {
+        let mut editor = SpriteEditor::new();
+        editor.set_zoom_index(2);
+
+        editor.select(5);
+        assert_eq!(editor.selected, 4);
+        editor.move_selection(1, 0);
+        assert_eq!(editor.selected, 8);
+        editor.move_selection(-1, 0);
+        assert_eq!(editor.selected, 4);
+        editor.move_selection(0, -1);
+        assert_eq!(editor.selected, 4 + 16 * 12);
+    }
+
+    #[test]
+    fn selection_wraps_by_sprite() {
+        let mut editor = SpriteEditor::new();
+        editor.set_zoom_index(3);
+
+        editor.select(8 + 16 * 8);
+        assert_eq!(editor.selected, 8 + 16 * 8);
+        editor.move_selection(1, 0);
+        assert_eq!(editor.selected, 128);
+        editor.move_selection(0, 1);
+        assert_eq!(editor.selected, 0);
+        editor.move_selection(-1, 0);
+        assert_eq!(editor.selected, 8);
+        editor.move_selection(0, -1);
+        assert_eq!(editor.selected, 8 + 16 * 8);
+    }
+
+    #[test]
+    fn undo_restores_whole_sprite() {
+        let mut editor = SpriteEditor::new();
+        editor.set_zoom_index(1);
+        editor.set_sprite_pixel(8, 8, 2);
+
+        editor.push_undo();
+        editor.set_sprite_pixel(8, 8, 3);
+        editor.do_undo();
+
+        assert_eq!(editor.get_sprite_pixel(8, 8), 2);
+    }
+
+    #[test]
+    fn clear_removes_every_tile_of_sprite() {
+        let mut editor = SpriteEditor::new();
+        editor.set_zoom_index(2);
+        editor.set_sprite_pixel(0, 0, 1);
+        editor.set_sprite_pixel(31, 31, 2);
+
+        editor.clear_sprite();
+
+        assert!(editor
+            .get_block(editor.selected, editor.tile_span())
+            .data
+            .iter()
+            .all(|&b| b == 0));
     }
 }
