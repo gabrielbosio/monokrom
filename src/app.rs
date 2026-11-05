@@ -19,7 +19,10 @@ use crate::editor::{
     SpriteEditorAction, TextBuffer,
 };
 use crate::filesystem;
-use crate::input::{get_editor_action, get_terminal_action, is_shift_pressed, EditorAction};
+use crate::input::{
+    get_editor_action, get_terminal_action, is_shift_pressed, is_shortcut_modifier_pressed,
+    EditorAction,
+};
 use crate::render::highlight::{self, CharStyle};
 use crate::render::{BitmapFont, DrawHelpers, ScrollbarState};
 use crate::terminal::{complete, parse_command, TerminalCommand, TerminalState, COMMAND_NAMES};
@@ -99,6 +102,35 @@ pub enum AppMode {
     MusicEditor,
 }
 
+impl AppMode {
+    fn is_editor_mode(self) -> bool {
+        matches!(
+            self,
+            AppMode::Editing
+                | AppMode::SpriteEditor
+                | AppMode::MapEditor
+                | AppMode::SoundEditor
+                | AppMode::MusicEditor
+        )
+    }
+}
+
+const EDITOR_FUNCTION_SHORTCUTS: &[(KeyCode, AppMode)] = &[
+    (KeyCode::F1, AppMode::Editing),
+    (KeyCode::F2, AppMode::SpriteEditor),
+    (KeyCode::F3, AppMode::MapEditor),
+    (KeyCode::F4, AppMode::SoundEditor),
+    (KeyCode::F5, AppMode::MusicEditor),
+];
+
+const EDITOR_DIGIT_SHORTCUTS: &[(KeyCode, AppMode)] = &[
+    (KeyCode::Key1, AppMode::Editing),
+    (KeyCode::Key2, AppMode::SpriteEditor),
+    (KeyCode::Key3, AppMode::MapEditor),
+    (KeyCode::Key4, AppMode::SoundEditor),
+    (KeyCode::Key5, AppMode::MusicEditor),
+];
+
 pub struct App {
     editor: EditorState,
     view: ViewState,
@@ -111,6 +143,7 @@ pub struct App {
 
     // UI state
     mode: AppMode,
+    last_editor: AppMode,
     input_dialog: InputDialog,
     confirm_dialog: ConfirmDialog,
     message_dialog: MessageDialog,
@@ -236,6 +269,7 @@ impl App {
             is_modified: false,
 
             mode,
+            last_editor: AppMode::Editing,
             input_dialog: InputDialog::new(),
             confirm_dialog: ConfirmDialog::new(),
             message_dialog: MessageDialog::new(),
@@ -275,6 +309,44 @@ impl App {
         !self.search.query.is_empty()
     }
 
+    fn switch_to_editor(&mut self, mode: AppMode) {
+        if self.mode == mode {
+            return;
+        }
+        if matches!(self.mode, AppMode::SoundEditor | AppMode::MusicEditor) {
+            self.audio_engine.stop_all();
+        }
+        self.last_editor = mode;
+        self.mode = mode;
+    }
+
+    fn apply_editor_shortcut(&mut self, shortcuts: &[(KeyCode, AppMode)]) -> bool {
+        for &(key, mode) in shortcuts {
+            if is_key_pressed(key) {
+                while get_char_pressed().is_some() {}
+                self.switch_to_editor(mode);
+                return true;
+            }
+        }
+        false
+    }
+
+    fn handle_editor_shortcut(&mut self) -> bool {
+        if self.mode != AppMode::Terminal && !self.mode.is_editor_mode() {
+            return false;
+        }
+        if !is_shortcut_modifier_pressed()
+            && !is_shift_pressed()
+            && self.apply_editor_shortcut(EDITOR_FUNCTION_SHORTCUTS)
+        {
+            return true;
+        }
+        if is_shortcut_modifier_pressed() && !is_shift_pressed() {
+            return self.apply_editor_shortcut(EDITOR_DIGIT_SHORTCUTS);
+        }
+        false
+    }
+
     /// After cursor movement: clear selection and ensure cursor is visible
     fn after_cursor_move(&mut self) {
         self.editor
@@ -301,6 +373,15 @@ impl App {
             self.update_running();
             return;
         }
+
+        if self.mode.is_editor_mode() {
+            self.last_editor = self.mode;
+        }
+
+        if self.handle_editor_shortcut() {
+            return;
+        }
+
         if self.mode == AppMode::SpriteEditor {
             self.update_sprite_editor();
             return;
@@ -433,10 +514,8 @@ impl App {
                         self.search.match_pos = None;
                         self.search.is_replacing = false;
                         self.editor.selection.clear();
-                    } else if is_shift_pressed() {
-                        self.mode = AppMode::Terminal;
                     } else {
-                        self.mode = AppMode::SpriteEditor;
+                        self.mode = AppMode::Terminal;
                     }
                 }
                 _ => {}
@@ -1485,13 +1564,7 @@ impl App {
                         self.execute_terminal_command(&input);
                     }
                 }
-                EditorAction::DialogCancel => {
-                    self.mode = if is_shift_pressed() {
-                        AppMode::MusicEditor
-                    } else {
-                        AppMode::Editing
-                    };
-                }
+                EditorAction::DialogCancel => self.mode = self.last_editor,
                 EditorAction::InsertChar(c) => self.terminal.insert_char(c),
                 EditorAction::Backspace => self.terminal.backspace(),
                 EditorAction::Delete => self.terminal.delete(),
@@ -1789,8 +1862,7 @@ impl App {
         }
         match output.action {
             SpriteEditorAction::None => {}
-            SpriteEditorAction::ExitToTextEditor => self.mode = AppMode::Editing,
-            SpriteEditorAction::ExitToMapEditor => self.mode = AppMode::MapEditor,
+            SpriteEditorAction::ExitToTerminal => self.mode = AppMode::Terminal,
             SpriteEditorAction::Save => self.save_and_show_message(),
             SpriteEditorAction::Run => self.run_program(),
         }
@@ -1804,8 +1876,7 @@ impl App {
         }
         match output.action {
             MapEditorAction::None => {}
-            MapEditorAction::ExitToSpriteEditor => self.mode = AppMode::SpriteEditor,
-            MapEditorAction::ExitToSfxEditor => self.mode = AppMode::SoundEditor,
+            MapEditorAction::ExitToTerminal => self.mode = AppMode::Terminal,
             MapEditorAction::Save => self.save_and_show_message(),
             MapEditorAction::Run => self.run_program(),
         }
@@ -1820,13 +1891,9 @@ impl App {
         }
         match output.action {
             SoundEditorAction::None => {}
-            SoundEditorAction::ExitToMapEditor => {
+            SoundEditorAction::ExitToTerminal => {
                 self.audio_engine.stop_all();
-                self.mode = AppMode::MapEditor;
-            }
-            SoundEditorAction::ExitToMusicEditor => {
-                self.audio_engine.stop_all();
-                self.mode = AppMode::MusicEditor;
+                self.mode = AppMode::Terminal;
             }
             SoundEditorAction::Save => self.save_and_show_message(),
             SoundEditorAction::Run => self.run_program(),
@@ -1855,10 +1922,6 @@ impl App {
         }
         match output.action {
             MusicEditorAction::None => {}
-            MusicEditorAction::ExitToSoundEditor => {
-                self.audio_engine.stop_all();
-                self.mode = AppMode::SoundEditor;
-            }
             MusicEditorAction::ExitToTerminal => {
                 self.audio_engine.stop_all();
                 self.mode = AppMode::Terminal;

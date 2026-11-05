@@ -17,8 +17,7 @@ const PICKER_COLS: u8 = 4;
 
 pub enum MapEditorAction {
     None,
-    ExitToSpriteEditor,
-    ExitToSfxEditor,
+    ExitToTerminal,
     Save,
     Run,
 }
@@ -92,11 +91,7 @@ impl MapEditor {
         if is_key_pressed(KeyCode::Escape) {
             self.painting = false;
             self.peeking = false;
-            return MapEditorOutput::action(if is_shift_pressed() {
-                MapEditorAction::ExitToSpriteEditor
-            } else {
-                MapEditorAction::ExitToSfxEditor
-            });
+            return MapEditorOutput::action(MapEditorAction::ExitToTerminal);
         }
 
         self.peeking = is_key_down(KeyCode::Tab);

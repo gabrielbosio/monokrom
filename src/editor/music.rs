@@ -127,7 +127,6 @@ impl HeaderField {
 
 pub enum MusicEditorAction {
     None,
-    ExitToSoundEditor,
     ExitToTerminal,
     Save,
     Run,
@@ -210,11 +209,7 @@ impl MusicEditor {
 
     pub fn update(&mut self, data: &mut SoundData) -> MusicEditorOutput {
         if is_key_pressed(KeyCode::Escape) {
-            return MusicEditorOutput::action(if is_shift_pressed() {
-                MusicEditorAction::ExitToSoundEditor
-            } else {
-                MusicEditorAction::ExitToTerminal
-            });
+            return MusicEditorOutput::action(MusicEditorAction::ExitToTerminal);
         }
 
         let modifier = is_shortcut_modifier_pressed();

@@ -28,25 +28,22 @@ Debug stores files in `./fs/`, release in `~/.monokrom/`.
 
 ## Usage
 
-Monokrom boots into a terminal. Press **Escape** to cycle through the following screens in order:
-
-- Terminal
-- Code editor
-- Sprite editor
-- Map editor
-- Sfx editor
-- Music editor
-
-**Shift+Escape** cycles in reverse.
-
-**Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and switches to the terminal, as does returning from `main()`. Any error triggered during program execution is shown there too.
-
-This section shows how to navigate through each screen. Depending on the screen, navigation may consist of running commands by writing them and/or triggering them using specific hotkeys.
-
 > *NOTE:* The docs show that some hotkeys involve pressing the Ctrl key. Due to context-specific restrictions, some hotkeys are mapped differently depending where Monokrom is running:
 >
 > - On macOS, Ctrl+Arrow, Ctrl+Backspace, and Ctrl+Delete shortcuts use Option instead of Ctrl.
 > - On WASM, all Ctrl hotkeys use Alt instead.
+
+Monokrom boots into a terminal. Press **Escape** to switch between edit mode and terminal. Edit mode consists of different editors that can be accessed through the following hotkeys:
+
+- **F1/Ctrl+1** Code editor
+- **F2/Ctrl+2** Sprite editor
+- **F3/Ctrl+3** Map editor
+- **F4/Ctrl+4** Sfx editor
+- **F5/Ctrl+5** Music editor
+
+**Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and switches to the terminal, as does returning from `main()`. Any error triggered during program execution is shown there too.
+
+This section shows how to navigate through each screen. Depending on the screen, navigation may consist of running commands by writing them and/or triggering them using specific hotkeys.
 
 ### Terminal
 

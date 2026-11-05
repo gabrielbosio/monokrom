@@ -74,8 +74,7 @@ pub enum PreviewRequest {
 
 pub enum SoundEditorAction {
     None,
-    ExitToMapEditor,
-    ExitToMusicEditor,
+    ExitToTerminal,
     Save,
     Run,
     Preview(PreviewRequest),
@@ -345,11 +344,7 @@ impl SoundEditor {
 
     pub fn update(&mut self, data: &mut SoundData) -> SoundEditorOutput {
         if is_key_pressed(KeyCode::Escape) {
-            return SoundEditorOutput::action(if is_shift_pressed() {
-                SoundEditorAction::ExitToMapEditor
-            } else {
-                SoundEditorAction::ExitToMusicEditor
-            });
+            return SoundEditorOutput::action(SoundEditorAction::ExitToTerminal);
         }
 
         let modifier = is_shortcut_modifier_pressed();

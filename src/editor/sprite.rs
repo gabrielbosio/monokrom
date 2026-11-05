@@ -15,8 +15,7 @@ const SHEET_COLS: u8 = 5;
 
 pub enum SpriteEditorAction {
     None,
-    ExitToTextEditor,
-    ExitToMapEditor,
+    ExitToTerminal,
     Save,
     Run,
 }
@@ -87,11 +86,7 @@ impl SpriteEditor {
     pub fn update(&mut self) -> SpriteEditorOutput {
         if is_key_pressed(KeyCode::Escape) {
             self.painting = false;
-            return SpriteEditorOutput::action(if is_shift_pressed() {
-                SpriteEditorAction::ExitToTextEditor
-            } else {
-                SpriteEditorAction::ExitToMapEditor
-            });
+            return SpriteEditorOutput::action(SpriteEditorAction::ExitToTerminal);
         }
 
         let modifier = is_shortcut_modifier_pressed();
