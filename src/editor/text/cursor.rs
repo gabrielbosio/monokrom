@@ -173,6 +173,42 @@ impl Cursor {
     pub fn char_index(&self, buffer: &TextBuffer) -> usize {
         buffer.line_col_to_char(self.position.line, self.position.col)
     }
+
+    /// Get the word under the cursor, if any.
+    ///
+    /// The character under the cursor is preferred. If the cursor is just
+    /// after a word, the preceding word is used instead.
+    pub fn word_at(&self, buffer: &TextBuffer) -> Option<String> {
+        let line = buffer.get_line(self.position.line);
+        let chars: Vec<char> = line.chars().collect();
+        let col = self.position.col;
+
+        if col > chars.len() {
+            return None;
+        }
+
+        let mut start = if chars.get(col).is_some_and(|c| is_word_char(*c)) {
+            col
+        } else if col > 0 && chars.get(col - 1).is_some_and(|c| is_word_char(*c)) {
+            col - 1
+        } else {
+            return None;
+        };
+
+        let mut end = start + 1;
+        while start > 0 && is_word_char(chars[start - 1]) {
+            start -= 1;
+        }
+        while end < chars.len() && is_word_char(chars[end]) {
+            end += 1;
+        }
+
+        Some(chars[start..end].iter().collect())
+    }
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
 }
 
 #[cfg(test)]
@@ -371,5 +407,78 @@ mod tests {
         let clamped = pos.clamp(&buffer);
         assert_eq!(clamped.line, 1);
         assert_eq!(clamped.col, 5);
+    }
+
+    #[test]
+    fn test_word_at_inside_word() {
+        let buffer = TextBuffer::from_str("hello world");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 2);
+        assert_eq!(cursor.word_at(&buffer), Some("hello".to_string()));
+    }
+
+    #[test]
+    fn test_word_at_word_boundaries() {
+        let buffer = TextBuffer::from_str("hello world");
+
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 6);
+        assert_eq!(cursor.word_at(&buffer), Some("world".to_string()));
+
+        cursor.set_position(0, 11);
+        assert_eq!(cursor.word_at(&buffer), Some("world".to_string()));
+
+        cursor.set_position(0, 5);
+        assert_eq!(cursor.word_at(&buffer), Some("hello".to_string()));
+
+        cursor.set_position(0, 0);
+        assert_eq!(cursor.word_at(&buffer), Some("hello".to_string()));
+    }
+
+    #[test]
+    fn test_word_at_returns_none_on_whitespace() {
+        let buffer = TextBuffer::from_str("hello  world");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 6);
+        assert_eq!(cursor.word_at(&buffer), None);
+    }
+
+    #[test]
+    fn test_word_at_with_punctuation() {
+        let buffer = TextBuffer::from_str("foo.bar");
+
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 3);
+        assert_eq!(cursor.word_at(&buffer), Some("foo".to_string()));
+
+        cursor.set_position(0, 4);
+        assert_eq!(cursor.word_at(&buffer), Some("bar".to_string()));
+
+        let buffer = TextBuffer::from_str("()");
+        cursor.set_position(0, 0);
+        assert_eq!(cursor.word_at(&buffer), None);
+    }
+
+    #[test]
+    fn test_word_at_with_underscores_and_digits() {
+        let buffer = TextBuffer::from_str("foo_2 bar");
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 2);
+        assert_eq!(cursor.word_at(&buffer), Some("foo_2".to_string()));
+    }
+
+    #[test]
+    fn test_word_at_empty_buffer() {
+        let buffer = TextBuffer::from_str("");
+        let cursor = Cursor::new();
+        assert_eq!(cursor.word_at(&buffer), None);
+    }
+
+    #[test]
+    fn test_word_at_other_line() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut cursor = Cursor::new();
+        cursor.set_position(1, 3);
+        assert_eq!(cursor.word_at(&buffer), Some("world".to_string()));
     }
 }

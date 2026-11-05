@@ -1010,23 +1010,21 @@ impl App {
             EditorAction::Find => {
                 self.search.is_replacing = false;
                 self.mode = AppMode::FindDialog;
-                let initial = self
-                    .editor
-                    .selection
-                    .get_text(&self.editor.buffer)
-                    .filter(|s| !s.contains('\n'))
-                    .unwrap_or_default();
+                let initial = find_initial_text(
+                    &self.editor.selection,
+                    &self.editor.cursor,
+                    &self.editor.buffer,
+                );
                 self.input_dialog.show_with_text("Find:", &initial);
             }
             EditorAction::Replace => {
                 self.search.is_replacing = true;
                 self.mode = AppMode::FindDialog;
-                let initial = self
-                    .editor
-                    .selection
-                    .get_text(&self.editor.buffer)
-                    .filter(|s| !s.contains('\n'))
-                    .unwrap_or_default();
+                let initial = find_initial_text(
+                    &self.editor.selection,
+                    &self.editor.cursor,
+                    &self.editor.buffer,
+                );
                 self.input_dialog.show_with_text("Find:", &initial);
             }
             EditorAction::GoToLine => {
@@ -2320,6 +2318,14 @@ impl App {
     }
 }
 
+fn find_initial_text(selection: &Selection, cursor: &Cursor, buffer: &TextBuffer) -> String {
+    match selection.get_text(buffer) {
+        Some(text) if !text.contains('\n') => text,
+        Some(_) => String::new(),
+        None => cursor.word_at(buffer).unwrap_or_default(),
+    }
+}
+
 pub fn split_data_sections(
     content: &str,
 ) -> (
@@ -2494,5 +2500,47 @@ mod tests {
         assert_eq!(decoded.waves[3][0], 0xAB);
         let decoded_song = SoundData::from_song_bytes(&song);
         assert_eq!(decoded_song.header, data.header);
+    }
+
+    #[test]
+    fn find_initial_text_uses_single_line_selection() {
+        let buffer = TextBuffer::from_str("hello world");
+        let mut selection = Selection::new();
+        selection.start(CursorPosition::new(0, 0));
+        selection.cursor = CursorPosition::new(0, 5);
+        let cursor = Cursor::new();
+
+        assert_eq!(find_initial_text(&selection, &cursor, &buffer), "hello");
+    }
+
+    #[test]
+    fn find_initial_text_ignores_multiline_selection() {
+        let buffer = TextBuffer::from_str("hello\nworld");
+        let mut selection = Selection::new();
+        selection.start(CursorPosition::new(0, 3));
+        selection.cursor = CursorPosition::new(1, 3);
+        let cursor = Cursor::new();
+
+        assert_eq!(find_initial_text(&selection, &cursor, &buffer), "");
+    }
+
+    #[test]
+    fn find_initial_text_uses_word_without_selection() {
+        let buffer = TextBuffer::from_str("hello world");
+        let selection = Selection::new();
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 8);
+
+        assert_eq!(find_initial_text(&selection, &cursor, &buffer), "world");
+    }
+
+    #[test]
+    fn find_initial_text_is_empty_without_selection_or_word() {
+        let buffer = TextBuffer::from_str("hello  world");
+        let selection = Selection::new();
+        let mut cursor = Cursor::new();
+        cursor.set_position(0, 6);
+
+        assert_eq!(find_initial_text(&selection, &cursor, &buffer), "");
     }
 }
