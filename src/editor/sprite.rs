@@ -346,18 +346,8 @@ impl SpriteEditor {
             }
         }
 
-        // Selected sprite highlight
         let sel_col = self.selected % 16;
         let sel_row = self.selected / 16;
-        if sel_col >= self.sheet_col && sel_col + tile_span <= self.sheet_col + SHEET_COLS {
-            let span = tile_span as f32 * SHEET_TILE;
-            let sel_bx = sheet_x + (sel_col - self.sheet_col) as f32 * SHEET_TILE;
-            let sel_by = sheet_y + sel_row as f32 * SHEET_TILE;
-            helpers.draw_rect(sel_bx, sel_by, span, 1.0, COLOR_WHITE);
-            helpers.draw_rect(sel_bx, sel_by + span - 1.0, span, 1.0, COLOR_WHITE);
-            helpers.draw_rect(sel_bx, sel_by, 1.0, span, COLOR_WHITE);
-            helpers.draw_rect(sel_bx + span - 1.0, sel_by, 1.0, span, COLOR_WHITE);
-        }
 
         // Panel borders
         Self::draw_panel_border(
@@ -388,13 +378,32 @@ impl SpriteEditor {
             COLOR_WHITE,
         );
 
-        // Cursor highlight, drawn outside the pixel
+        // Spritesheet cursor, drawn outside the sprite
+        if sel_col >= self.sheet_col && sel_col + tile_span <= self.sheet_col + SHEET_COLS {
+            let span = tile_span as f32 * SHEET_TILE;
+            let sel_bx = sheet_x + (sel_col - self.sheet_col) as f32 * SHEET_TILE;
+            let sel_by = sheet_y + sel_row as f32 * SHEET_TILE;
+            Self::draw_outline(
+                helpers,
+                sel_bx - 1.0,
+                sel_by - 1.0,
+                span + 2.0,
+                span + 2.0,
+                COLOR_WHITE,
+            );
+        }
+
+        // Sprite cursor, drawn outside the pixel
         let cx = sprite_x + self.cursor_x as f32 * zoom;
         let cy = sprite_y + self.cursor_y as f32 * zoom;
-        helpers.draw_rect(cx - 1.0, cy - 1.0, zoom + 2.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx - 1.0, cy + zoom, zoom + 2.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx - 1.0, cy, 1.0, zoom, COLOR_WHITE);
-        helpers.draw_rect(cx + zoom, cy, 1.0, zoom, COLOR_WHITE);
+        Self::draw_outline(
+            helpers,
+            cx - 1.0,
+            cy - 1.0,
+            zoom + 2.0,
+            zoom + 2.0,
+            COLOR_WHITE,
+        );
 
         // Color palette bar
         let bar_y = 134.0f32;
@@ -429,10 +438,14 @@ impl SpriteEditor {
     }
 
     fn draw_panel_border(helpers: &DrawHelpers, x: f32, y: f32, w: f32, h: f32) {
-        helpers.draw_rect(x, y, w, 1.0, COLOR_LIGHT_GRAY);
-        helpers.draw_rect(x, y + h - 1.0, w, 1.0, COLOR_LIGHT_GRAY);
-        helpers.draw_rect(x, y, 1.0, h, COLOR_LIGHT_GRAY);
-        helpers.draw_rect(x + w - 1.0, y, 1.0, h, COLOR_LIGHT_GRAY);
+        Self::draw_outline(helpers, x, y, w, h, COLOR_LIGHT_GRAY);
+    }
+
+    fn draw_outline(helpers: &DrawHelpers, x: f32, y: f32, w: f32, h: f32, color: Color) {
+        helpers.draw_rect(x, y, w, 1.0, color);
+        helpers.draw_rect(x, y + h - 1.0, w, 1.0, color);
+        helpers.draw_rect(x, y, 1.0, h, color);
+        helpers.draw_rect(x + w - 1.0, y, 1.0, h, color);
     }
 
     fn sprite_size(&self) -> u8 {
