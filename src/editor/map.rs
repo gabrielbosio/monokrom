@@ -96,6 +96,12 @@ impl MapEditor {
 
         if is_key_pressed(KeyCode::Tab) {
             self.peeking = !self.peeking;
+            if !self.peeking {
+                let max_x = self.viewport_x + VIEWPORT_TILES - 1;
+                let max_y = self.viewport_y + VIEWPORT_TILES - 1;
+                self.cursor_x = self.cursor_x.clamp(self.viewport_x, max_x);
+                self.cursor_y = self.cursor_y.clamp(self.viewport_y, max_y);
+            }
         }
         if self.peeking {
             self.painting = false;
