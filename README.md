@@ -72,17 +72,20 @@ This section shows how to navigate through each screen. Depending on the screen,
 
 ### Sprite editor
 
-- **Arrow keys** move cursor on the pixel grid
+- **Arrow keys** move sprite cursor
 - **Space** paint pixel (hold while moving to draw continuously)
 - **1/2/3/4** select color (1=black, 2=dark, 3=light, 4=white)
 - **C** eyedropper (pick color under cursor)
-- **Ctrl+Arrow** navigate the sprite sheet
+- **Ctrl+Arrow** move spritesheet cursor by 1 tile
+- **Ctrl+Shift+Arrow** move spritesheet cursor by 4 tiles
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+C/V** copy/paste sprite
 - **Ctrl+S** save
 - **F** flip horizontal, **Shift+F** flip vertical
 - **Shift+Arrow** shift sprite contents
 - **Delete** clear sprite
+- **+/=** zoom in
+- **-** zoom out
 
 ### Map editor
 
