@@ -89,13 +89,14 @@ This section shows how to navigate through each screen. Depending on the screen,
 
 ### Map editor
 
-- **Arrow keys** move cursor on the tile grid
-- **Shift+Arrow** move cursor by 8 tiles
+- **Arrow keys** move map cursor by 1 tile on editor mode, or move map by 1 tile on full map mode
+- **Shift+Arrow** move map cursor by 8 tiles on editor mode, or move map by 8 tiles on full map mode
 - **Space** paint tile (hold while moving to paint continuously)
 - **Delete/Backspace** clear tile (place tile 0)
 - **C** eyedropper (pick tile under cursor)
-- **Ctrl+Arrow** navigate the tile picker (picker scrolls one column at a time)
-- **Tab** (hold) peek a 20x18 tile region as it will appear at runtime
+- **Ctrl+Arrow** move tile cursor by 1 tile
+- **Ctrl+Shift+Arrow** move tile cursor by 4 tiles
+- **Tab** toggle editor/full map mode
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+S** save
 
