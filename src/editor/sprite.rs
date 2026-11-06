@@ -15,6 +15,7 @@ const SHEET_ROWS: u8 = 16;
 const SHEET_COLS: u8 = 11;
 const SHEET_TILE: f32 = 8.0;
 const PANEL_SIZE: f32 = 64.0;
+const COARSE_STEP_TILES: u8 = 4;
 const SPRITE_SIZES: [u8; 4] = [8, 16, 32, 64];
 const ZOOMS: [u8; 4] = [8, 4, 2, 1];
 
@@ -157,17 +158,18 @@ impl SpriteEditor {
         }
 
         if is_arrow_modifier_pressed() {
+            let step = self.selection_step(shift);
             if is_key_pressed(KeyCode::Left) {
-                self.move_selection(-1, 0);
+                self.move_selection(-step, 0);
             }
             if is_key_pressed(KeyCode::Right) {
-                self.move_selection(1, 0);
+                self.move_selection(step, 0);
             }
             if is_key_pressed(KeyCode::Up) {
-                self.move_selection(0, -1);
+                self.move_selection(0, -step);
             }
             if is_key_pressed(KeyCode::Down) {
-                self.move_selection(0, 1);
+                self.move_selection(0, step);
             }
             return SpriteEditorOutput::none();
         }
@@ -467,22 +469,28 @@ impl SpriteEditor {
     }
 
     fn select(&mut self, idx: u8) {
-        let span = self.tile_span();
-        let col = (idx % 16) / span * span;
-        let row = (idx / 16) / span * span;
+        let max_pos = 16 - self.tile_span();
+        let col = (idx % 16).min(max_pos);
+        let row = (idx / 16).min(max_pos);
         self.selected = row * 16 + col;
         self.ensure_selected_visible();
     }
 
+    fn selection_step(&self, coarse: bool) -> i8 {
+        if coarse {
+            COARSE_STEP_TILES as i8
+        } else {
+            1
+        }
+    }
+
     fn move_selection(&mut self, dx: i8, dy: i8) {
-        let span = self.tile_span();
-        let groups = 16 / span;
-        let col = (self.selected % 16) / span;
-        let row = (self.selected / 16) / span;
-        let new_col = (col as i8 + dx).rem_euclid(groups as i8) as u8;
-        let new_row = (row as i8 + dy).rem_euclid(groups as i8) as u8;
-        self.selected = new_row * span * 16 + new_col * span;
-        self.ensure_selected_visible();
+        let positions = (16 - self.tile_span() + 1) as i8;
+        let col = (self.selected % 16) as i8;
+        let row = (self.selected / 16) as i8;
+        let new_col = (col + dx).rem_euclid(positions) as u8;
+        let new_row = (row + dy).rem_euclid(positions) as u8;
+        self.select(new_row * 16 + new_col);
     }
 
     fn ensure_selected_visible(&mut self) {
@@ -547,11 +555,9 @@ impl SpriteEditor {
     }
 
     fn push_undo(&mut self) {
-        let block = self.get_block(self.selected, self.tile_span());
-        self.undo.push_back(Snapshot {
-            base: self.selected,
-            block,
-        });
+        let base = self.selected;
+        let block = self.get_block(base, self.tile_span());
+        self.undo.push_back(Snapshot { base, block });
         if self.undo.len() > UNDO_LIMIT {
             self.undo.pop_front();
         }
@@ -587,10 +593,11 @@ impl SpriteEditor {
     }
 
     fn clear_sprite(&mut self) {
+        let base = self.selected;
         let span = self.tile_span();
         for ty in 0..span {
             for tx in 0..span {
-                let idx = self.selected as usize + ty as usize * 16 + tx as usize;
+                let idx = base as usize + ty as usize * 16 + tx as usize;
                 let start = idx * SPRITE_SIZE;
                 self.data[start..start + SPRITE_SIZE].fill(0);
             }
@@ -682,6 +689,16 @@ mod tests {
     }
 
     #[test]
+    fn selection_step_is_one_or_four_sprites_at_every_zoom() {
+        let mut editor = SpriteEditor::new();
+        for index in 0..SPRITE_SIZES.len() {
+            editor.set_zoom_index(index);
+            assert_eq!(editor.selection_step(false), 1);
+            assert_eq!(editor.selection_step(true), 4);
+        }
+    }
+
+    #[test]
     fn pixels_map_across_tiles_of_large_sprite() {
         let mut editor = SpriteEditor::new();
         editor.set_zoom_index(1);
@@ -699,18 +716,16 @@ mod tests {
     }
 
     #[test]
-    fn selection_moves_in_whole_sprites() {
+    fn selection_moves_one_sprite_at_every_zoom() {
         let mut editor = SpriteEditor::new();
-        editor.set_zoom_index(2);
-
-        editor.select(5);
-        assert_eq!(editor.selected, 4);
-        editor.move_selection(1, 0);
-        assert_eq!(editor.selected, 8);
-        editor.move_selection(-1, 0);
-        assert_eq!(editor.selected, 4);
-        editor.move_selection(0, -1);
-        assert_eq!(editor.selected, 4 + 16 * 12);
+        for index in 0..SPRITE_SIZES.len() {
+            editor.set_zoom_index(index);
+            editor.select(0);
+            editor.move_selection(1, 0);
+            assert_eq!(editor.selected, 1);
+            editor.move_selection(0, 1);
+            assert_eq!(editor.selected, 17);
+        }
     }
 
     #[test]
@@ -718,16 +733,24 @@ mod tests {
         let mut editor = SpriteEditor::new();
         editor.set_zoom_index(3);
 
-        editor.select(8 + 16 * 8);
-        assert_eq!(editor.selected, 8 + 16 * 8);
-        editor.move_selection(1, 0);
-        assert_eq!(editor.selected, 128);
-        editor.move_selection(0, 1);
-        assert_eq!(editor.selected, 0);
+        editor.select(0);
         editor.move_selection(-1, 0);
         assert_eq!(editor.selected, 8);
+        editor.move_selection(1, 0);
+        assert_eq!(editor.selected, 0);
         editor.move_selection(0, -1);
-        assert_eq!(editor.selected, 8 + 16 * 8);
+        assert_eq!(editor.selected, 128);
+    }
+
+    #[test]
+    fn selection_is_not_group_aligned() {
+        let mut editor = SpriteEditor::new();
+        editor.set_zoom_index(3);
+        editor.select(3);
+
+        assert_eq!(editor.selected, 3);
+        editor.set_sprite_pixel(0, 0, 2);
+        assert_eq!(editor.get_pixel(3, 0, 0), 2);
     }
 
     #[test]
