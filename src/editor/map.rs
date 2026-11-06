@@ -139,17 +139,18 @@ impl MapEditor {
         }
 
         if is_arrow_modifier_pressed() {
+            let step = if shift { 4 } else { 1 };
             if is_key_pressed(KeyCode::Left) {
-                self.select_tile(self.selected_tile.wrapping_sub(1));
+                self.select_tile(self.selected_tile.wrapping_sub(step));
             }
             if is_key_pressed(KeyCode::Right) {
-                self.select_tile(self.selected_tile.wrapping_add(1));
+                self.select_tile(self.selected_tile.wrapping_add(step));
             }
             if is_key_pressed(KeyCode::Up) {
-                self.select_tile(self.selected_tile.wrapping_sub(16));
+                self.select_tile(self.selected_tile.wrapping_sub(step * 16));
             }
             if is_key_pressed(KeyCode::Down) {
-                self.select_tile(self.selected_tile.wrapping_add(16));
+                self.select_tile(self.selected_tile.wrapping_add(step * 16));
             }
             return MapEditorOutput::none();
         }
