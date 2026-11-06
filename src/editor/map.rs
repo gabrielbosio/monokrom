@@ -280,14 +280,6 @@ impl MapEditor {
             helpers.draw_rect(0.0, pos, 128.0, 1.0, grid_color);
         }
 
-        // Cursor
-        let cx = (self.cursor_x - self.viewport_x) as f32 * 8.0;
-        let cy = (self.cursor_y - self.viewport_y) as f32 * 8.0;
-        helpers.draw_rect(cx, cy, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy + 7.0, 8.0, 1.0, COLOR_WHITE);
-        helpers.draw_rect(cx, cy, 1.0, 8.0, COLOR_WHITE);
-        helpers.draw_rect(cx + 7.0, cy, 1.0, 8.0, COLOR_WHITE);
-
         // Sprite picker
         let sheet_x = 128.0f32;
         let picker_col_offset = self.picker_col;
@@ -313,17 +305,28 @@ impl MapEditor {
             }
         }
 
+        // Picker scrollbar
+        let bar_y = 16.0 * 8.0;
+        let track_w = PICKER_COLS as f32 * 8.0;
+        let thumb_w = (track_w * PICKER_COLS as f32 / 16.0).round().max(1.0);
+        let max_start = (16 - PICKER_COLS) as f32;
+        let thumb_x = (track_w - thumb_w) * self.picker_col as f32 / max_start;
+        helpers.draw_rect(sheet_x, bar_y, track_w, 1.0, COLOR_DARK_GRAY);
+        helpers.draw_rect(sheet_x + thumb_x.round(), bar_y, thumb_w, 1.0, COLOR_WHITE);
+
         // Picker selection highlight
         let sel_row = self.selected_tile / 16;
         let sel_col = self.selected_tile % 16 - picker_col_offset;
         if sel_col < PICKER_COLS {
             let sx = sheet_x + sel_col as f32 * 8.0;
             let sy = sel_row as f32 * 8.0;
-            helpers.draw_rect(sx, sy, 8.0, 1.0, COLOR_WHITE);
-            helpers.draw_rect(sx, sy + 7.0, 8.0, 1.0, COLOR_WHITE);
-            helpers.draw_rect(sx, sy, 1.0, 8.0, COLOR_WHITE);
-            helpers.draw_rect(sx + 7.0, sy, 1.0, 8.0, COLOR_WHITE);
+            helpers.draw_outline(sx, sy, 8.0, 8.0, COLOR_WHITE);
         }
+
+        // Cursor, drawn over the tile panel at the viewport edge
+        let cx = (self.cursor_x - self.viewport_x) as f32 * 8.0;
+        let cy = (self.cursor_y - self.viewport_y) as f32 * 8.0;
+        helpers.draw_outline(cx, cy, 9.0, 9.0, COLOR_WHITE);
 
         // Status bar
         let tw = TILE_WIDTH as f32;

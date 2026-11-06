@@ -37,6 +37,14 @@ impl<'a> DrawHelpers<'a> {
         );
     }
 
+    /// Draw a 1px rectangle outline inside the given bounds.
+    pub fn draw_outline(&self, x: f32, y: f32, w: f32, h: f32, color: Color) {
+        self.draw_rect(x, y, w, 1.0, color);
+        self.draw_rect(x, y + h - 1.0, w, 1.0, color);
+        self.draw_rect(x, y, 1.0, h, color);
+        self.draw_rect(x + w - 1.0, y, 1.0, h, color);
+    }
+
     /// Draw a character with scaling applied
     pub fn draw_char(&self, c: char, x: f32, y: f32, color: Color) {
         self.font
