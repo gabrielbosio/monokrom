@@ -94,9 +94,26 @@ impl MapEditor {
             return MapEditorOutput::action(MapEditorAction::ExitToTerminal);
         }
 
-        self.peeking = is_key_down(KeyCode::Tab);
+        if is_key_pressed(KeyCode::Tab) {
+            self.peeking = !self.peeking;
+        }
         if self.peeking {
             self.painting = false;
+            let max_x = 128u16.saturating_sub(PEEK_TILES_X);
+            let max_y = 32u16.saturating_sub(PEEK_TILES_Y);
+            let step: u16 = if is_shift_pressed() { 8 } else { 1 };
+            if is_key_pressed(KeyCode::Left) {
+                self.viewport_x = self.viewport_x.saturating_sub(step);
+            }
+            if is_key_pressed(KeyCode::Right) {
+                self.viewport_x = (self.viewport_x + step).min(max_x);
+            }
+            if is_key_pressed(KeyCode::Up) {
+                self.viewport_y = self.viewport_y.saturating_sub(step);
+            }
+            if is_key_pressed(KeyCode::Down) {
+                self.viewport_y = (self.viewport_y + step).min(max_y);
+            }
             return MapEditorOutput::none();
         }
 
