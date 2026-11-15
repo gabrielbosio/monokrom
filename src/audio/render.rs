@@ -7,12 +7,10 @@ use crate::audio::format::SoundData;
 
 pub fn render_song(data: SoundData, sample_rate: u32, seconds: f64, song: u8) -> Vec<f32> {
     let mut engine = SoundEngine::new(sample_rate, data);
-    if !engine.play_song(song) {
-        return Vec::new();
-    }
     let mut samples = Vec::new();
-    let ticks = (seconds.max(0.0) * TICK_RATE).ceil() as usize;
-    for _ in 0..ticks {
+    let frames = (seconds.max(0.0) * TICK_RATE).ceil() as usize;
+    for frame in 0..frames {
+        engine.apply_song_frame(song as i16, frame as i16);
         engine.advance(1.0 / TICK_RATE, &mut samples);
     }
     samples

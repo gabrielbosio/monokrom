@@ -42,7 +42,6 @@ pub enum Intrinsic {
     Btn,
     Btnp,
     Sfx,
-    Music,
     Peek,
     Poke,
     Sin,

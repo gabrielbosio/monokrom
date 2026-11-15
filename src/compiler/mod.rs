@@ -793,8 +793,8 @@ mod tests {
     #[test]
     fn bytecode_limit_is_checked_after_peephole() {
         let mut src = String::from("fn main()\n");
-        for i in 0..3_300 {
-            src.push_str(&format!("  sfx({i})\n"));
+        for i in 0..1_600 {
+            src.push_str(&format!("  sfx({i}, 0)\n"));
         }
         src.push_str("end\n");
 

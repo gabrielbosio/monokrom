@@ -14,8 +14,9 @@ use macroquad::prelude::*;
 
 use app::App;
 use config::{
-    AUDIO_REGION_END, AUDIO_REGION_START, MAP_REGION_START, SONG_REGION_SIZE, SONG_REGION_START,
-    SPRITE_REGION_START,
+    APU_MASTER_VOLUME, APU_PANNING, MAP_REGION_START, SFX_REGION_SIZE, SFX_REGION_START,
+    SPRITE_REGION_START, WAVE_RAM_SIZE, WAVE_RAM_START, WAVE_TABLE_REGION_SIZE,
+    WAVE_TABLE_REGION_START,
 };
 use vm::Vm;
 
@@ -76,30 +77,42 @@ fn detect_embedded_game() -> Option<Vm> {
         vm.memory[MAP_REGION_START..MAP_REGION_START + 4096]
             .copy_from_slice(&payload[map_start..map_start + 4096]);
     }
-    let audio_start = map_start + 4096;
-    let audio_len = AUDIO_REGION_END - AUDIO_REGION_START;
-    if payload.len() >= audio_start + audio_len {
-        vm.memory[AUDIO_REGION_START..AUDIO_REGION_END]
-            .copy_from_slice(&payload[audio_start..audio_start + audio_len]);
+    let waves_start = map_start + 4096;
+    if payload.len() >= waves_start + WAVE_TABLE_REGION_SIZE {
+        vm.memory[WAVE_TABLE_REGION_START..WAVE_TABLE_REGION_START + WAVE_TABLE_REGION_SIZE]
+            .copy_from_slice(&payload[waves_start..waves_start + WAVE_TABLE_REGION_SIZE]);
+        vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]
+            .copy_from_slice(&payload[waves_start..waves_start + WAVE_RAM_SIZE]);
     }
-    let song_start = audio_start + audio_len;
-    if payload.len() >= song_start + SONG_REGION_SIZE {
-        vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE]
-            .copy_from_slice(&payload[song_start..song_start + SONG_REGION_SIZE]);
+    let sfx_start = waves_start + WAVE_TABLE_REGION_SIZE;
+    if payload.len() > sfx_start {
+        vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE].fill(0);
+        let sfx = &payload[sfx_start..];
+        let sfx_len = sfx.len().min(SFX_REGION_SIZE);
+        vm.memory[SFX_REGION_START..SFX_REGION_START + sfx_len].copy_from_slice(&sfx[..sfx_len]);
     }
+    vm.memory[APU_MASTER_VOLUME] = 0xFF;
+    vm.memory[APU_PANNING] = 0xFF;
     Some(vm)
 }
 
 #[cfg(target_arch = "wasm32")]
 fn detect_embedded_game() -> Option<Vm> {
     let full_source = get_embedded_source()?;
-    let (source, spr, map, audio, song) = split_data_sections(&full_source);
+    let (source, spr, map, waves, sfx, _ui) = split_data_sections(&full_source);
     let bc = compile(source).ok()?;
     let mut vm = Vm::new(&bc, 0.0).ok()?;
     vm.memory[SPRITE_REGION_START..SPRITE_REGION_START + 4096].copy_from_slice(&spr);
     vm.memory[MAP_REGION_START..MAP_REGION_START + 4096].copy_from_slice(&map);
-    vm.memory[AUDIO_REGION_START..AUDIO_REGION_END].copy_from_slice(&audio);
-    vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE].copy_from_slice(&song);
+    vm.memory[WAVE_TABLE_REGION_START..WAVE_TABLE_REGION_START + WAVE_TABLE_REGION_SIZE]
+        .copy_from_slice(&waves);
+    vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE].fill(0);
+    let sfx_len = sfx.len().min(SFX_REGION_SIZE);
+    vm.memory[SFX_REGION_START..SFX_REGION_START + sfx_len].copy_from_slice(&sfx[..sfx_len]);
+    vm.memory[APU_MASTER_VOLUME] = 0xFF;
+    vm.memory[APU_PANNING] = 0xFF;
+    vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]
+        .copy_from_slice(&waves[..WAVE_RAM_SIZE]);
     Some(vm)
 }
 

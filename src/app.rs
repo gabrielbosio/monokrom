@@ -5,18 +5,15 @@ use crate::audio::format::SoundData;
 use crate::audio::output::AudioOutput;
 use crate::compiler;
 use crate::config::{
-    AUDIO_INSTRUMENT_COUNT, AUDIO_INSTRUMENT_OFFSET, AUDIO_INSTRUMENT_SIZE, AUDIO_REGION_END,
-    AUDIO_REGION_SIZE, AUDIO_REGION_START, AUDIO_SFX_COUNT, AUDIO_SFX_OFFSET, AUDIO_SFX_SIZE,
-    AUDIO_TABLE_COUNT, AUDIO_TABLE_OFFSET, AUDIO_TABLE_SIZE, AUDIO_WAVE_REGION_SIZE, COLOR_BLACK,
-    COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE, CURSOR_BLINK_RATE, EDITOR_TILES_X,
-    EDITOR_TILES_Y, MAP_REGION_START, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH,
-    SCROLLBAR_WIDTH, SONG_REGION_SIZE, SONG_REGION_START, SPRITE_REGION_START, TILE_HEIGHT,
-    TILE_WIDTH,
+    APU_MASTER_VOLUME, APU_PANNING, COLOR_BLACK, COLOR_DARK_GRAY, COLOR_LIGHT_GRAY, COLOR_WHITE,
+    CURSOR_BLINK_RATE, DEFAULT_PREVIEW_SPEED, EDITOR_TILES_X, EDITOR_TILES_Y, MAP_REGION_START,
+    MAX_SONG_COUNT, SCREEN_HEIGHT, SCREEN_TILES_X, SCREEN_TILES_Y, SCREEN_WIDTH, SCROLLBAR_WIDTH,
+    SFX_REGION_SIZE, SFX_REGION_START, SPRITE_REGION_START, TILE_HEIGHT, TILE_WIDTH, WAVE_RAM_SIZE,
+    WAVE_RAM_START, WAVE_TABLE_REGION_SIZE, WAVE_TABLE_REGION_START,
 };
 use crate::editor::{
-    operations, Cursor, CursorPosition, History, MapEditor, MapEditorAction, MusicEditor,
-    MusicEditorAction, PreviewRequest, Selection, SoundEditor, SoundEditorAction, SpriteEditor,
-    SpriteEditorAction, TextBuffer,
+    operations, Cursor, CursorPosition, History, MapEditor, MapEditorAction, Selection, SfxEditor,
+    SfxEditorAction, SpriteEditor, SpriteEditorAction, TextBuffer, WaveEditor, WaveEditorAction,
 };
 use crate::filesystem;
 use crate::input::{
@@ -96,10 +93,10 @@ pub enum AppMode {
     SpriteEditor,
     /// Map editor
     MapEditor,
-    /// Sound editor
-    SoundEditor,
-    /// Music editor
-    MusicEditor,
+    /// Wave editor
+    WaveEditor,
+    /// SFX editor
+    SfxEditor,
 }
 
 impl AppMode {
@@ -109,8 +106,8 @@ impl AppMode {
             AppMode::Editing
                 | AppMode::SpriteEditor
                 | AppMode::MapEditor
-                | AppMode::SoundEditor
-                | AppMode::MusicEditor
+                | AppMode::WaveEditor
+                | AppMode::SfxEditor
         )
     }
 }
@@ -119,16 +116,16 @@ const EDITOR_FUNCTION_SHORTCUTS: &[(KeyCode, AppMode)] = &[
     (KeyCode::F1, AppMode::Editing),
     (KeyCode::F2, AppMode::SpriteEditor),
     (KeyCode::F3, AppMode::MapEditor),
-    (KeyCode::F4, AppMode::SoundEditor),
-    (KeyCode::F5, AppMode::MusicEditor),
+    (KeyCode::F4, AppMode::WaveEditor),
+    (KeyCode::F5, AppMode::SfxEditor),
 ];
 
 const EDITOR_DIGIT_SHORTCUTS: &[(KeyCode, AppMode)] = &[
     (KeyCode::Key1, AppMode::Editing),
     (KeyCode::Key2, AppMode::SpriteEditor),
     (KeyCode::Key3, AppMode::MapEditor),
-    (KeyCode::Key4, AppMode::SoundEditor),
-    (KeyCode::Key5, AppMode::MusicEditor),
+    (KeyCode::Key4, AppMode::WaveEditor),
+    (KeyCode::Key5, AppMode::SfxEditor),
 ];
 
 pub struct App {
@@ -182,8 +179,8 @@ pub struct App {
 
     // Sound data and editors
     sound_data: SoundData,
-    sound_editor: SoundEditor,
-    music_editor: MusicEditor,
+    wave_editor: WaveEditor,
+    sfx_editor: SfxEditor,
 
     // Audio
     audio_engine: SoundEngine,
@@ -206,19 +203,20 @@ impl App {
     async fn init(
         mode: AppMode,
         terminal: TerminalState,
-        run_state: Option<Vm>,
+        mut run_state: Option<Vm>,
         player_mode: bool,
     ) -> Self {
-        let sound_data = if let Some(vm) = &run_state {
-            let mut data =
-                SoundData::from_audio_bytes(&vm.memory[AUDIO_REGION_START..AUDIO_REGION_END]);
-            let song = SoundData::from_song_bytes(
-                &vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE],
+        let sound_data = if let Some(vm) = run_state.as_mut() {
+            let mut data = SoundData::default();
+            data.set_wave_bytes(
+                &vm.memory
+                    [WAVE_TABLE_REGION_START..WAVE_TABLE_REGION_START + WAVE_TABLE_REGION_SIZE],
             );
-            data.patterns = song.patterns;
-            data.orders = song.orders;
-            data.songs = song.songs;
-            data.header = song.header;
+            data.set_sfx_bytes(&vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE]);
+            vm.memory[APU_MASTER_VOLUME] = 0xFF;
+            vm.memory[APU_PANNING] = 0xFF;
+            vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]
+                .copy_from_slice(&data.waves[0]);
             data
         } else {
             SoundData::default()
@@ -228,7 +226,18 @@ impl App {
             .as_ref()
             .map(|output| output.sample_rate())
             .unwrap_or(DEFAULT_SAMPLE_RATE);
-        let audio_engine = SoundEngine::new(sample_rate, sound_data.clone());
+        let mut audio_engine = SoundEngine::new(sample_rate, sound_data.clone());
+        if let Some(vm) = &run_state {
+            let mut wave_ram = [0u8; WAVE_RAM_SIZE];
+            wave_ram.copy_from_slice(&vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]);
+            let master = vm.memory[APU_MASTER_VOLUME];
+            audio_engine.set_apu_state(
+                master >> 4,
+                master & 0x0F,
+                vm.memory[APU_PANNING],
+                wave_ram,
+            );
+        }
 
         let font = BitmapFont::new().await;
         let rt = render_target_ex(
@@ -297,8 +306,8 @@ impl App {
             map_editor: MapEditor::new(),
 
             sound_data,
-            sound_editor: SoundEditor::new(),
-            music_editor: MusicEditor::new(),
+            wave_editor: WaveEditor::new(),
+            sfx_editor: SfxEditor::new(),
 
             audio_engine,
             audio_output,
@@ -313,7 +322,7 @@ impl App {
         if self.mode == mode {
             return;
         }
-        if matches!(self.mode, AppMode::SoundEditor | AppMode::MusicEditor) {
+        if matches!(self.mode, AppMode::WaveEditor | AppMode::SfxEditor) {
             self.audio_engine.stop_all();
         }
         self.last_editor = mode;
@@ -390,12 +399,12 @@ impl App {
             self.update_map_editor();
             return;
         }
-        if self.mode == AppMode::SoundEditor {
-            self.update_sound_editor();
+        if self.mode == AppMode::WaveEditor {
+            self.update_wave_editor();
             return;
         }
-        if self.mode == AppMode::MusicEditor {
-            self.update_music_editor();
+        if self.mode == AppMode::SfxEditor {
+            self.update_sfx_editor();
             return;
         }
 
@@ -419,8 +428,8 @@ impl App {
             AppMode::Running
             | AppMode::SpriteEditor
             | AppMode::MapEditor
-            | AppMode::SoundEditor
-            | AppMode::MusicEditor => {
+            | AppMode::WaveEditor
+            | AppMode::SfxEditor => {
                 unreachable!()
             }
         }
@@ -834,13 +843,23 @@ impl App {
                             .copy_from_slice(&self.sprite_editor.data);
                         vm.memory[MAP_REGION_START..MAP_REGION_START + 4096]
                             .copy_from_slice(&self.map_editor.data);
-                        let audio = self.sound_data.to_audio_bytes();
-                        vm.memory[AUDIO_REGION_START..AUDIO_REGION_END].copy_from_slice(&audio);
-                        let song = self.sound_data.to_song_bytes();
-                        vm.memory[SONG_REGION_START..SONG_REGION_START + SONG_REGION_SIZE]
-                            .copy_from_slice(&song);
+                        let waves = self.sound_data.to_wave_bytes();
+                        vm.memory[WAVE_TABLE_REGION_START
+                            ..WAVE_TABLE_REGION_START + WAVE_TABLE_REGION_SIZE]
+                            .copy_from_slice(&waves);
+                        vm.memory[SFX_REGION_START..SFX_REGION_START + SFX_REGION_SIZE].fill(0);
+                        let sfx = self.sound_data.to_sfx_bytes();
+                        let sfx_len = sfx.len().min(SFX_REGION_SIZE);
+                        vm.memory[SFX_REGION_START..SFX_REGION_START + sfx_len]
+                            .copy_from_slice(&sfx[..sfx_len]);
+                        vm.memory[APU_MASTER_VOLUME] = 0xFF;
+                        vm.memory[APU_PANNING] = 0xFF;
+                        vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]
+                            .copy_from_slice(&self.sound_data.waves[0]);
                         self.audio_engine.stop_all();
                         self.audio_engine.set_data(self.sound_data.clone());
+                        self.audio_engine
+                            .set_apu_state(15, 15, 0xFF, self.sound_data.waves[0]);
                         self.run_state = Some(vm);
                         self.run_enter_held = true;
                         self.mode = AppMode::Running;
@@ -881,8 +900,8 @@ impl App {
         payload.extend(&bc_bytes);
         payload.extend(&self.sprite_editor.data);
         payload.extend(&self.map_editor.data);
-        payload.extend(&self.sound_data.to_audio_bytes());
-        payload.extend(&self.sound_data.to_song_bytes());
+        payload.extend(&self.sound_data.to_wave_bytes());
+        payload.extend(&self.sound_data.to_sfx_bytes());
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.export_native(name, &payload);
@@ -1522,15 +1541,13 @@ impl App {
     fn open_file(&mut self, filename: &str) -> bool {
         match filesystem::read_file(filename) {
             Ok(content) => {
-                let (source, spr, map, audio, song) = split_data_sections(&content);
+                let (source, spr, map, waves, sfx, ui) = split_data_sections(&content);
                 self.sprite_editor.data = spr;
                 self.map_editor.data = map;
-                let mut data = SoundData::from_audio_bytes(&audio);
-                let song_data = SoundData::from_song_bytes(&song);
-                data.patterns = song_data.patterns;
-                data.orders = song_data.orders;
-                data.songs = song_data.songs;
-                data.header = song_data.header;
+                let mut data = SoundData::default();
+                data.set_wave_bytes(&waves);
+                data.set_sfx_bytes(&sfx);
+                data.set_ui_bytes(&ui);
                 self.sound_data = data;
                 self.audio_engine.stop_all();
                 self.audio_engine.set_data(self.sound_data.clone());
@@ -1625,16 +1642,21 @@ impl App {
                 for line in vm.trace_output.drain(..) {
                     self.terminal.push_output(&line);
                 }
-                for sfx in vm.sfx_queue.drain(..) {
-                    self.audio_engine.trigger_sfx(sfx);
+                let mut wave_ram = [0u8; WAVE_RAM_SIZE];
+                wave_ram
+                    .copy_from_slice(&vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]);
+                let master = vm.memory[APU_MASTER_VOLUME];
+                self.audio_engine.set_apu_state(
+                    master >> 4,
+                    master & 0x0F,
+                    vm.memory[APU_PANNING],
+                    wave_ram,
+                );
+                for (song, frame) in vm.sfx_queue.drain(..) {
+                    self.audio_engine.apply_song_frame(song, frame);
                 }
-                for song in vm.music_queue.drain(..) {
-                    if song == 0xFF {
-                        self.audio_engine.stop_song();
-                    } else {
-                        self.audio_engine.play_song(song);
-                    }
-                }
+                vm.memory[WAVE_RAM_START..WAVE_RAM_START + WAVE_RAM_SIZE]
+                    .copy_from_slice(&self.audio_engine.wave_ram());
             }
             Ok(VmResult::Halted) => {
                 for line in vm.trace_output.drain(..) {
@@ -1880,59 +1902,69 @@ impl App {
         }
     }
 
-    fn update_sound_editor(&mut self) {
+    fn update_wave_editor(&mut self) {
         while get_char_pressed().is_some() {}
-        let output = self.sound_editor.update(&mut self.sound_data);
+        let output = self.wave_editor.update(&mut self.sound_data);
         if output.modified {
             self.is_modified = true;
             self.audio_engine.set_data(self.sound_data.clone());
+            if self.audio_engine.is_previewing() {
+                self.audio_engine
+                    .update_wave_preview(self.wave_editor.wave());
+            }
         }
         match output.action {
-            SoundEditorAction::None => {}
-            SoundEditorAction::ExitToTerminal => {
+            WaveEditorAction::None => {}
+            WaveEditorAction::ExitToTerminal => {
                 self.audio_engine.stop_all();
                 self.mode = AppMode::Terminal;
             }
-            SoundEditorAction::Save => self.save_and_show_message(),
-            SoundEditorAction::Run => self.run_program(),
-            SoundEditorAction::Preview(request) => {
-                self.audio_engine.stop_all();
-                self.audio_engine.set_data(self.sound_data.clone());
-                match request {
-                    PreviewRequest::Instrument(index, note) => {
-                        self.audio_engine.preview_instrument(index, note);
-                    }
-                    PreviewRequest::Table(index) => self.audio_engine.preview_table(index),
-                    PreviewRequest::Wave(index) => self.audio_engine.preview_wave(index),
-                    PreviewRequest::Sfx(index) => self.audio_engine.trigger_sfx(index),
+            WaveEditorAction::Save => self.save_and_show_message(),
+            WaveEditorAction::Run => self.run_program(),
+            WaveEditorAction::Preview(wave) => {
+                if self.audio_engine.is_previewing() {
+                    self.audio_engine.stop_all();
+                } else {
+                    self.audio_engine.stop_all();
+                    self.reset_preview_apu();
+                    self.audio_engine.set_data(self.sound_data.clone());
+                    self.audio_engine.preview_wave(wave);
                 }
             }
-            SoundEditorAction::Stop => self.audio_engine.stop_all(),
+            WaveEditorAction::Stop => self.audio_engine.stop_all(),
         }
     }
 
-    fn update_music_editor(&mut self) {
+    fn update_sfx_editor(&mut self) {
         while get_char_pressed().is_some() {}
-        let output = self.music_editor.update(&mut self.sound_data);
+        let output = self.sfx_editor.update(&mut self.sound_data);
         if output.modified {
             self.is_modified = true;
             self.audio_engine.set_data(self.sound_data.clone());
         }
         match output.action {
-            MusicEditorAction::None => {}
-            MusicEditorAction::ExitToTerminal => {
+            SfxEditorAction::None => {}
+            SfxEditorAction::ExitToTerminal => {
                 self.audio_engine.stop_all();
                 self.mode = AppMode::Terminal;
             }
-            MusicEditorAction::Save => self.save_and_show_message(),
-            MusicEditorAction::Run => self.run_program(),
-            MusicEditorAction::Preview(song) => {
-                self.audio_engine.stop_all();
-                self.audio_engine.set_data(self.sound_data.clone());
-                self.audio_engine
-                    .play_song_from(song, self.music_editor.current_order());
+            SfxEditorAction::Save => self.save_and_show_message(),
+            SfxEditorAction::Run => self.run_program(),
+            SfxEditorAction::Preview {
+                song,
+                frame,
+                toggle,
+            } => {
+                if toggle && self.audio_engine.is_previewing() {
+                    self.audio_engine.stop_all();
+                } else {
+                    self.audio_engine.stop_all();
+                    self.reset_preview_apu();
+                    self.audio_engine.set_data(self.sound_data.clone());
+                    self.audio_engine.start_preview(song, frame);
+                }
             }
-            MusicEditorAction::Stop => self.audio_engine.stop_all(),
+            SfxEditorAction::Stop => self.audio_engine.stop_all(),
         }
     }
 
@@ -1943,6 +1975,11 @@ impl App {
         if let Some(output) = &mut self.audio_output {
             output.push_samples(&samples);
         }
+    }
+
+    fn reset_preview_apu(&mut self) {
+        let wave_ram = self.audio_engine.wave_ram();
+        self.audio_engine.set_apu_state(15, 15, 0xFF, wave_ram);
     }
 
     fn save_and_show_message(&mut self) {
@@ -2032,19 +2069,19 @@ impl App {
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
-        } else if self.mode == AppMode::SoundEditor
-            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::SoundEditor)
+        } else if self.mode == AppMode::WaveEditor
+            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::WaveEditor)
         {
             clear_background(COLOR_BLACK);
-            self.sound_editor.draw(&self.sound_data, &helpers);
+            self.wave_editor.draw(&self.sound_data, &helpers);
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
-        } else if self.mode == AppMode::MusicEditor
-            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::MusicEditor)
+        } else if self.mode == AppMode::SfxEditor
+            || (self.mode == AppMode::Message && self.message_return_mode == AppMode::SfxEditor)
         {
             clear_background(COLOR_BLACK);
-            self.music_editor.draw(&self.sound_data, &helpers);
+            self.sfx_editor.draw(&self.sound_data, &helpers);
             if self.mode == AppMode::Message {
                 self.message_dialog.draw_scaled(&helpers);
             }
@@ -2073,8 +2110,8 @@ impl App {
                 | AppMode::Running
                 | AppMode::SpriteEditor
                 | AppMode::MapEditor
-                | AppMode::SoundEditor
-                | AppMode::MusicEditor => {
+                | AppMode::WaveEditor
+                | AppMode::SfxEditor => {
                     unreachable!()
                 }
             }
@@ -2326,23 +2363,22 @@ fn find_initial_text(selection: &Selection, cursor: &Cursor, buffer: &TextBuffer
     }
 }
 
-pub fn split_data_sections(
-    content: &str,
-) -> (
-    &str,
+pub type DataSections<'a> = (
+    &'a str,
     [u8; 4096],
     [u8; 4096],
-    [u8; AUDIO_REGION_SIZE],
-    [u8; SONG_REGION_SIZE],
-) {
+    [u8; WAVE_TABLE_REGION_SIZE],
+    Vec<u8>,
+    [u8; MAX_SONG_COUNT],
+);
+
+pub fn split_data_sections(content: &str) -> DataSections<'_> {
     const SPR: &str = "\n__spr__\n";
     const MAP: &str = "\n__map__\n";
     const WAV: &str = "\n__wav__\n";
-    const INS: &str = "\n__ins__\n";
-    const TBL: &str = "\n__tbl__\n";
     const SFX: &str = "\n__sfx__\n";
-    const MUS: &str = "\n__mus__\n";
-    let markers = [SPR, MAP, WAV, INS, TBL, SFX, MUS];
+    const UI: &str = "\n__ui__\n";
+    let markers = [SPR, MAP, WAV, SFX, UI];
 
     let mut sections: Vec<(&str, usize)> = markers
         .iter()
@@ -2358,8 +2394,9 @@ pub fn split_data_sections(
 
     let mut spr = [0u8; 4096];
     let mut map = [0u8; 4096];
-    let mut audio = [0u8; AUDIO_REGION_SIZE];
-    let mut song = [0u8; SONG_REGION_SIZE];
+    let mut waves = [0u8; WAVE_TABLE_REGION_SIZE];
+    let mut sfx = Vec::new();
+    let mut ui = [DEFAULT_PREVIEW_SPEED; MAX_SONG_COUNT];
 
     for (index, (marker, pos)) in sections.iter().enumerate() {
         let start = pos + marker.len();
@@ -2371,27 +2408,32 @@ pub fn split_data_sections(
         match *marker {
             SPR => parse_hex_section(hex, &mut spr),
             MAP => parse_hex_section(hex, &mut map),
-            WAV => parse_hex_section(hex, &mut audio[..AUDIO_WAVE_REGION_SIZE]),
-            INS => parse_hex_section(
-                hex,
-                &mut audio[AUDIO_INSTRUMENT_OFFSET
-                    ..AUDIO_INSTRUMENT_OFFSET + AUDIO_INSTRUMENT_COUNT * AUDIO_INSTRUMENT_SIZE],
-            ),
-            TBL => parse_hex_section(
-                hex,
-                &mut audio
-                    [AUDIO_TABLE_OFFSET..AUDIO_TABLE_OFFSET + AUDIO_TABLE_COUNT * AUDIO_TABLE_SIZE],
-            ),
-            SFX => parse_hex_section(
-                hex,
-                &mut audio[AUDIO_SFX_OFFSET..AUDIO_SFX_OFFSET + AUDIO_SFX_COUNT * AUDIO_SFX_SIZE],
-            ),
-            MUS => parse_hex_section(hex, &mut song),
+            WAV => parse_hex_section(hex, &mut waves),
+            SFX => sfx = parse_hex_section_vec(hex),
+            UI => parse_hex_section(hex, &mut ui),
             _ => {}
         }
     }
 
-    (source, spr, map, audio, song)
+    (source, spr, map, waves, sfx, ui)
+}
+
+fn parse_hex_section_vec(hex: &str) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for line in hex.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut i = 0;
+        while i + 1 < line.len() {
+            if let Ok(byte) = u8::from_str_radix(&line[i..i + 2], 16) {
+                bytes.push(byte);
+            }
+            i += 2;
+        }
+    }
+    bytes
 }
 
 fn parse_hex_section(hex: &str, buf: &mut [u8]) {
@@ -2462,44 +2504,49 @@ fn sample_buttons() -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::format::SfxEntry;
+    use crate::audio::format::Event;
 
     #[test]
-    fn bricks_audio_sections_parse() {
+    fn bricks_sections_parse() {
         let content = include_str!("../examples/bricks.mkr");
-        let (source, _, _, audio, song) = split_data_sections(content);
+        let (source, _, _, waves, sfx, ui) = split_data_sections(content);
         assert!(source.contains("fn main()"));
-        let data = SoundData::from_audio_bytes(&audio);
-        assert_eq!(data.sfx[0].table, 1);
-        assert_eq!(data.sfx[0].instrument, 2);
+        assert_eq!(waves.len(), WAVE_TABLE_REGION_SIZE);
+        assert_eq!(ui.len(), MAX_SONG_COUNT);
+        let mut data = SoundData::default();
+        data.set_wave_bytes(&waves);
+        data.set_sfx_bytes(&sfx);
+        data.set_ui_bytes(&ui);
+        assert_eq!(
+            sfx.len(),
+            crate::config::SONG_LENGTH_TABLE_SIZE + data.used_frames() * crate::config::FRAME_SIZE
+        );
+        assert_eq!(data.songs[0].length(), 15);
+        assert_eq!(data.songs[1].length(), 5);
+        assert_eq!(data.songs[4].length(), 16);
+        assert_eq!(data.songs[5].length(), 15);
         assert!(data.waves[0].iter().any(|&byte| byte != 0));
-        assert_eq!(data.tables[1].speed, 5);
-        assert!(song.iter().all(|&byte| byte == 0));
     }
 
     #[test]
     fn audio_sections_roundtrip() {
         let mut data = SoundData::default();
         data.waves[3][0] = 0xAB;
-        data.sfx[2] = SfxEntry {
-            channel: crate::audio::format::ChannelType::Wave,
-            instrument: 4,
-            table: 5,
-            note: 40,
-            priority: 2,
-            duration: 12,
-        };
-        data.header.ticks_per_row = 7;
-        data.header.order_count = 9;
+        data.songs[2].frames.push([Event::default(); 4]);
+        data.songs[2].frames[0][0].param = 34;
+        data.songs[2].frames[0][0].volume_timbre = 0xF2;
+        data.songs[5].preview_speed = 120;
         let mut content = String::from("fn main()\nend");
         data.append_to_source(&mut content);
-        let (source, _, _, audio, song) = split_data_sections(&content);
+        let (source, _, _, waves, sfx, ui) = split_data_sections(&content);
         assert_eq!(source, "fn main()\nend");
-        let decoded = SoundData::from_audio_bytes(&audio);
-        assert_eq!(decoded.sfx[2], data.sfx[2]);
+        let mut decoded = SoundData::default();
+        decoded.set_wave_bytes(&waves);
+        decoded.set_sfx_bytes(&sfx);
+        decoded.set_ui_bytes(&ui);
         assert_eq!(decoded.waves[3][0], 0xAB);
-        let decoded_song = SoundData::from_song_bytes(&song);
-        assert_eq!(decoded_song.header, data.header);
+        assert_eq!(decoded.songs[2].frames[0][0], data.songs[2].frames[0][0]);
+        assert_eq!(decoded.songs[5].preview_speed, 120);
     }
 
     #[test]

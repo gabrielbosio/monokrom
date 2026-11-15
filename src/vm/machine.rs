@@ -1,7 +1,7 @@
 use crate::compiler::bytecode::*;
 use crate::config::{
-    AUDIO_SFX_COUNT, MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, SONG_COUNT, SPRITE_COUNT,
-    SPRITE_REGION_START, SPRITE_SIZE,
+    MAP_HEIGHT, MAP_REGION_START, MAP_WIDTH, MAX_SONG_COUNT, SPRITE_COUNT, SPRITE_REGION_START,
+    SPRITE_SIZE,
 };
 use crate::render::font::FONT_DATA;
 
@@ -80,8 +80,7 @@ pub struct Vm {
     func_idx: usize,
     pub halted: bool,
     pub trace_output: Vec<String>,
-    pub sfx_queue: Vec<u8>,
-    pub music_queue: Vec<u8>,
+    pub sfx_queue: Vec<(i16, i16)>,
     start_time: f64,
     pub current_time: f64,
     rng_state: u32,
@@ -132,7 +131,6 @@ impl Vm {
             halted: false,
             trace_output: Vec::new(),
             sfx_queue: Vec::new(),
-            music_queue: Vec::new(),
             start_time: time,
             current_time: time,
             rng_state: (time * 1_000_000.0) as u32 | 1,
@@ -498,17 +496,10 @@ impl Vm {
                 self.push(if cur != 0 && prev == 0 { 1 } else { 0 })?;
             }
             OP_SFX => {
+                let frame = self.pop()?;
                 let n = self.pop()?;
-                if n >= 0 && (n as usize) < AUDIO_SFX_COUNT {
-                    self.sfx_queue.push(n as u8);
-                }
-            }
-            OP_MUSIC => {
-                let n = self.pop()?;
-                if n < 0 {
-                    self.music_queue.push(0xFF);
-                } else if (n as usize) < SONG_COUNT {
-                    self.music_queue.push(n as u8);
+                if n < 0 || (n as usize) < MAX_SONG_COUNT {
+                    self.sfx_queue.push((n, frame));
                 }
             }
             OP_PEEK => {
@@ -1459,31 +1450,17 @@ end";
     }
 
     #[test]
-    fn sfx_queues_valid_indices_and_drops_others() {
+    fn sfx_queues_song_and_frame_pairs() {
         let bc = make_bc(
             vec![
-                OP_PUSH_I8, 0, OP_SFX, OP_PUSH_I8, 15, OP_SFX, OP_PUSH_I8, 16, OP_SFX, OP_PUSH_I8,
-                -1i8 as u8, OP_SFX, OP_HALT,
+                OP_PUSH_I8, 0, OP_PUSH_I8, 7, OP_SFX, OP_PUSH_I8, -1i8 as u8, OP_PUSH_I8, 0,
+                OP_SFX, OP_HALT,
             ],
             0,
         );
         let mut vm = Vm::new(&bc, 0.0).unwrap();
         vm.run_until_flip().unwrap();
-        assert_eq!(vm.sfx_queue, vec![0, (AUDIO_SFX_COUNT - 1) as u8]);
-    }
-
-    #[test]
-    fn music_queues_valid_indices_and_drops_others() {
-        let bc = make_bc(
-            vec![
-                OP_PUSH_I8, 0, OP_MUSIC, OP_PUSH_I8, 15, OP_MUSIC, OP_PUSH_I8, 16, OP_MUSIC,
-                OP_PUSH_I8, -1i8 as u8, OP_MUSIC, OP_HALT,
-            ],
-            0,
-        );
-        let mut vm = Vm::new(&bc, 0.0).unwrap();
-        vm.run_until_flip().unwrap();
-        assert_eq!(vm.music_queue, vec![0, (SONG_COUNT - 1) as u8, 0xFF]);
+        assert_eq!(vm.sfx_queue, vec![(0, 7), (-1, 0)]);
     }
 
     #[test]

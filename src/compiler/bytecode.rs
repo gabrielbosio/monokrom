@@ -67,7 +67,6 @@ pub const OP_PRINTS: u8 = 0x47;
 pub const OP_BTN: u8 = 0x48;
 pub const OP_BTNP: u8 = 0x49;
 pub const OP_SFX: u8 = 0x4A;
-pub const OP_MUSIC: u8 = 0x4B;
 pub const OP_PEEK: u8 = 0x4C;
 pub const OP_POKE: u8 = 0x4D;
 pub const OP_SIN: u8 = 0x4E;
@@ -118,7 +117,6 @@ pub fn intrinsic_opcode(op: Intrinsic) -> u8 {
         Intrinsic::Btn => OP_BTN,
         Intrinsic::Btnp => OP_BTNP,
         Intrinsic::Sfx => OP_SFX,
-        Intrinsic::Music => OP_MUSIC,
         Intrinsic::Peek => OP_PEEK,
         Intrinsic::Poke => OP_POKE,
         Intrinsic::Sin => OP_SIN,
@@ -219,7 +217,6 @@ fn op_name(b: u8) -> Option<&'static str> {
         OP_BTN => Some("Btn"),
         OP_BTNP => Some("Btnp"),
         OP_SFX => Some("Sfx"),
-        OP_MUSIC => Some("Music"),
         OP_PEEK => Some("Peek"),
         OP_POKE => Some("Poke"),
         OP_SIN => Some("Sin"),
@@ -258,7 +255,7 @@ fn op_name(b: u8) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-const ALL_OPCODES: [u8; 79] = [
+const ALL_OPCODES: [u8; 78] = [
     OP_PUSH0,
     OP_PUSH1,
     OP_PUSH_I8,
@@ -303,7 +300,6 @@ const ALL_OPCODES: [u8; 79] = [
     OP_BTN,
     OP_BTNP,
     OP_SFX,
-    OP_MUSIC,
     OP_PEEK,
     OP_POKE,
     OP_SIN,

@@ -41,59 +41,40 @@ pub const MAP_WIDTH: usize = 128;
 pub const MAP_HEIGHT: usize = 32;
 pub const MAP_REGION_START: usize = 0x4000; // 16384
 
-// Music
-pub const MUSIC_ROWS: usize = 32;
+// Audio
 pub const MUSIC_CHANNELS: usize = 4;
 
-// Audio
-pub const AUDIO_WAVE_COUNT: usize = 16;
-pub const AUDIO_WAVE_SIZE: usize = 16; // 32 samples of 4 bits
-pub const AUDIO_WAVE_REGION_START: usize = 0x5000;
-pub const AUDIO_WAVE_REGION_SIZE: usize = AUDIO_WAVE_COUNT * AUDIO_WAVE_SIZE;
+pub const WAVE_TABLE_COUNT: usize = 16;
+pub const WAVE_TABLE_SIZE: usize = 16; // 32 samples of 4 bits
+pub const WAVE_TABLE_REGION_START: usize = 0x5000;
+pub const WAVE_TABLE_REGION_SIZE: usize = WAVE_TABLE_COUNT * WAVE_TABLE_SIZE; // 256
 
-pub const AUDIO_INSTRUMENT_COUNT: usize = 32;
-pub const AUDIO_INSTRUMENT_SIZE: usize = 16;
-pub const AUDIO_INSTRUMENT_REGION_START: usize = AUDIO_WAVE_REGION_START + AUDIO_WAVE_REGION_SIZE;
-pub const AUDIO_INSTRUMENT_REGION_SIZE: usize = AUDIO_INSTRUMENT_COUNT * AUDIO_INSTRUMENT_SIZE;
+pub const MAX_SONG_COUNT: usize = 256;
+pub const SONG_LENGTH_TABLE_START: usize = WAVE_TABLE_REGION_START + WAVE_TABLE_REGION_SIZE;
+pub const SONG_LENGTH_TABLE_SIZE: usize = MAX_SONG_COUNT; // 256
 
-pub const AUDIO_TABLE_COUNT: usize = 16;
-pub const AUDIO_TABLE_STEPS: usize = 32;
-pub const AUDIO_TABLE_STEP_SIZE: usize = 3;
-pub const AUDIO_TABLE_HEADER_BYTES: usize = 4;
-pub const AUDIO_TABLE_SIZE: usize =
-    AUDIO_TABLE_HEADER_BYTES + AUDIO_TABLE_STEPS * AUDIO_TABLE_STEP_SIZE;
-pub const AUDIO_TABLE_REGION_START: usize =
-    AUDIO_INSTRUMENT_REGION_START + AUDIO_INSTRUMENT_REGION_SIZE;
-pub const AUDIO_TABLE_REGION_SIZE: usize = AUDIO_TABLE_COUNT * AUDIO_TABLE_SIZE;
+pub const EVENT_SIZE: usize = 3;
+pub const FRAME_SIZE: usize = MUSIC_CHANNELS * EVENT_SIZE; // 12
+pub const FRAME_POOL_START: usize = SONG_LENGTH_TABLE_START + SONG_LENGTH_TABLE_SIZE;
+pub const FRAME_POOL_END: usize = 0x7FE0;
+pub const FRAME_POOL_SIZE: usize = FRAME_POOL_END - FRAME_POOL_START; // 11744
+pub const MAX_TOTAL_FRAMES: usize = 978;
 
-pub const AUDIO_SFX_COUNT: usize = 16;
-pub const AUDIO_SFX_SIZE: usize = 6;
-pub const AUDIO_SFX_REGION_START: usize = AUDIO_TABLE_REGION_START + AUDIO_TABLE_REGION_SIZE;
+pub const WAVE_RAM_START: usize = FRAME_POOL_END;
+pub const WAVE_RAM_SIZE: usize = 16;
 
-pub const AUDIO_REGION_START: usize = AUDIO_WAVE_REGION_START;
-pub const AUDIO_REGION_END: usize = 0x6000;
-pub const AUDIO_REGION_SIZE: usize = AUDIO_REGION_END - AUDIO_REGION_START;
-pub const AUDIO_INSTRUMENT_OFFSET: usize = AUDIO_INSTRUMENT_REGION_START - AUDIO_REGION_START;
-pub const AUDIO_TABLE_OFFSET: usize = AUDIO_TABLE_REGION_START - AUDIO_REGION_START;
-pub const AUDIO_SFX_OFFSET: usize = AUDIO_SFX_REGION_START - AUDIO_REGION_START;
+pub const APU_REGION_START: usize = 0x7FF0;
+pub const APU_REGION_SIZE: usize = 16;
+pub const APU_MASTER_VOLUME: usize = APU_REGION_START;
+pub const APU_PANNING: usize = APU_REGION_START + 1;
 
-pub const SONG_REGION_START: usize = 0x6000;
-pub const SONG_REGION_SIZE: usize = 0x2000;
-pub const SONG_PATTERN_COUNT: usize = 16;
-pub const SONG_CELL_SIZE: usize = 3;
-pub const SONG_PATTERN_SIZE: usize = MUSIC_ROWS * SONG_CELL_SIZE;
-pub const SONG_PATTERN_REGION_SIZE: usize = MUSIC_CHANNELS * SONG_PATTERN_COUNT * SONG_PATTERN_SIZE;
-pub const SONG_ORDER_COUNT: usize = 64;
-pub const SONG_ORDER_SIZE: usize = MUSIC_CHANNELS;
-pub const SONG_ORDER_REGION_SIZE: usize = SONG_ORDER_COUNT * SONG_ORDER_SIZE;
-pub const SONG_COUNT: usize = 16;
-pub const SONG_SIZE: usize = 3;
-pub const SONG_TABLE_SIZE: usize = SONG_COUNT * SONG_SIZE;
-pub const SONG_HEADER_BYTES: usize = 16;
-pub const SONG_HEADER_START: usize =
-    SONG_REGION_START + SONG_PATTERN_REGION_SIZE + SONG_ORDER_REGION_SIZE;
-pub const SONG_TABLE_START: usize = SONG_HEADER_START + SONG_HEADER_BYTES;
+pub const SFX_REGION_START: usize = SONG_LENGTH_TABLE_START;
+pub const SFX_REGION_SIZE: usize = SONG_LENGTH_TABLE_SIZE + FRAME_POOL_SIZE; // 12000
+pub const UI_SECTION_SIZE: usize = MAX_SONG_COUNT; // 256
 
-pub const SONG_LOOP_ENABLED: u8 = 0x80;
-pub const SONG_ORDER_MASK: u8 = 0x3F;
-pub const SONG_END_MASK: u8 = 0x7F;
+pub const DEFAULT_PREVIEW_SPEED: u8 = 60;
+
+const _: () = assert!(FRAME_POOL_SIZE == 11744);
+const _: () = assert!(MAX_TOTAL_FRAMES * FRAME_SIZE <= FRAME_POOL_SIZE);
+const _: () = assert!(SFX_REGION_SIZE == 12000);
+const _: () = assert!(APU_REGION_START + APU_REGION_SIZE == 0x8000);
