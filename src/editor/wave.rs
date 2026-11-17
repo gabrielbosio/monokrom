@@ -164,7 +164,7 @@ impl WaveEditor {
             return WaveEditorOutput::modified();
         }
 
-        if is_key_pressed(KeyCode::Delete) || is_key_pressed(KeyCode::Backspace) {
+        if is_key_pressed(KeyCode::Delete) {
             self.push_undo(data);
             data.waves[self.wave as usize] = [0; 16];
             return WaveEditorOutput::modified();
