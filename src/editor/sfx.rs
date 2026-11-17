@@ -913,13 +913,14 @@ fn is_off_event(channel: usize, event: Event) -> bool {
 }
 
 fn pressed_noise_gate_key() -> bool {
-    const KEYS: [KeyCode; 6] = [
+    const KEYS: [KeyCode; 7] = [
         KeyCode::A,
         KeyCode::B,
         KeyCode::C,
         KeyCode::D,
         KeyCode::E,
         KeyCode::F,
+        KeyCode::G,
     ];
     KEYS.iter().any(|&key| is_key_pressed(key))
 }
