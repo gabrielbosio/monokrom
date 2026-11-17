@@ -363,7 +363,7 @@ Built-in functions that compile to single opcodes.
 - `rect(x, y, w, h, col)`: Draw rectangle.
 - `circ(x, y, r, col)`: Draw circle
 - `spr(n, x, y, flip_x, flip_y)`: Draw sprite. Colors marked transparent by `palt` are skipped.
-- `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), w×h tiles. Tiles are drawn as sprites, so `palt` applies.
+- `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), wxh tiles. Tiles are drawn as sprites, so `palt` applies.
 - `palt(mask)`: Set which colors `spr` and `map` skip. Bit `i` set means color `i` is transparent. Defaults to 1, so color 0 is transparent and the other three are drawn. `palt(0)` makes sprites fully opaque.
 - `prints(s, x, y, col)`: Print string.
 - `printi(val, x, y, col)`: Print integer.
@@ -397,12 +397,16 @@ Memory layout:
 | Address | Size | Contents |
 |---------|------|----------|
 | `0x0000` | 12KB | Program data (globals, locals, storage for call frames) |
-| `0x3000` | 4KB | Sprite data (256 × 16 bytes) |
-| `0x4000` | 4KB | Map data (128 × 32 tiles) |
-| `0x5000` | 1088 bytes | SFX data (16 × 68 bytes) |
-| `0x5440` | 3008 bytes | Unallocated |
-| `0x6000` | 4160 bytes | Music data (16 × 260 bytes) |
-| `0x7040` | 4032 bytes | Unallocated |
+| `0x3000` | 4KB | Sprite data (256 x 8 cols x 8 rows of 2-bit pixels) |
+| `0x4000` | 4KB | Map data (128 x 32 tiles, 1 byte per tile) |
+| `0x5000` | 256 bytes | Wave tables (16 x 32 4-bit samples) |
+| `0x5100` | 256 bytes | Sfx lengths (256 x 1 byte) |
+| `0x5200` | 11736 bytes | Sfx frames data (978 x 12 bytes) |
+| `0x7FD8` | 8 bytes | Padding |
+| `0x7FE0` | 16 bytes | live wave data |
+| `0x7FF0` | 1 byte | Master volume |
+| `0x7FF1` | 1 byte | Channel panning |
+| `0x7FF2` | 14 bytes | Reserved |
 
 Peek and poke operate on single bytes. Since `int` is 16-bit (2 bytes, little-endian), reading a full int requires two peeks:
 
@@ -455,8 +459,7 @@ Constants are inlined at compile time.
 
 ### Audio
 
-- `sfx(n)`: Play sound effect
-- `music(n)`: Play music pattern
+- `sfx(n, frame)`: Play frame `frame` of sfx `n`. `n < 0` stops all channels.
 
 ## Game Loop
 

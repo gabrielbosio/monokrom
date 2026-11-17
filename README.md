@@ -38,8 +38,8 @@ Monokrom boots into a terminal. Press **Escape** to switch between edit mode and
 - **F1/Ctrl+1** Code editor
 - **F2/Ctrl+2** Sprite editor
 - **F3/Ctrl+3** Map editor
-- **F4/Ctrl+4** Sfx editor
-- **F5/Ctrl+5** Music editor
+- **F4/Ctrl+4** Wave editor
+- **F5/Ctrl+5** Sfx editor
 
 **Ctrl+Enter** runs the current file from any editor mode or the terminal. **Escape** while running stops the program and switches to the terminal, as does returning from `main()`. Any error triggered during program execution is shown there too.
 
@@ -100,60 +100,45 @@ This section shows how to navigate through each screen. Depending on the screen,
 - **Ctrl+Z** undo, **Ctrl+Y** redo
 - **Ctrl+S** save
 
+### Wave editor
+
+- **Left/Right** move cursor by 1 sample
+- **Shift+Left/Right** move cursor by 8 samples
+- **Up/Down** increase/decrease selected sample amplitude by 1
+- **Shift+Up/Down** increase/decrease selected sample amplitude by 4
+- **Ctrl+Left/Right** switch current wave
+- **Ctrl+Z** undo, **Ctrl+Y** redo
+- **Ctrl+S** save
+- **Space** play/stop
+
 ### Sfx editor
 
-This editor has two panes which you set focus on one of them: The header and the grid. When entering this editor for the first time, the focus is set on the grid. There are hotkeys that are exclusive for each pane and that work for both.
-
 #### Global
 
-- **Tab** toggle header / grid focus
-- **Space** play selected SFX, **Shift+Space** stop all sounds
-- **Ctrl+S** save
-- **Ctrl+Z** undo, **Ctrl+Y** — redo
-- **Ctrl+Shift+C/V** copy/paste whole SFX
-
-#### Grid
-
-- **Ctrl+C/V** copy/paste cell
-- **Left/Right** move cell cursor
-- **Up/Down** change row (Pitch, Timbre, Volume, Detune)
-- **Ctrl+Up/Down** change current field by 1
-- **Shift+Up/Shift+Down** change current field on Pitch row by an octave
-- **Delete/Backspace** clear current cell
-
-#### Header
-
-- **Left/Right** previous / next field (Sfx, Channel, Speed, LoopStart, LoopEnd)
-- **Up/Down** change value by 1
-- **Shift+Up/Down** change value by 10
-
-### Music editor
-
-Same two-pane structure as the Sfx editor.
-
-#### Global
-
-- **Tab** toggle header / grid focus
-- **Space** play selected pattern, **Shift+Space** stop playback
+- **Tab** switch between header and grid
 - **Ctrl+S** save
 - **Ctrl+Z** undo, **Ctrl+Y** redo
-- **Ctrl+Shift+C/V** copy/paste whole pattern
-
-#### Grid
-
-- **Ctrl+C/V** copy/paste cell
-- **Left/Right** step through cell fields (Pitch, Sfx, Volume, Detune), wrapping into the adjacent channel column at the edge
-- **Shift+Left/Right** move between channels (PU1, PU2, WV, NS)
-- **Up/Down** move row by 1, **Shift+Up/Down** by 8
-- **Ctrl+Up/Down** change current field by 1 (on Sfx, scrolls through valid SFX slots for the column)
-- **Ctrl+Shift+Up/Down** change Pitch by an octave
-- **Delete/Backspace** clear current cell
+- **Space** play from start, stop
+- **Shift+Space** play from cursor position
 
 #### Header
 
-- **Left/Right** previous / next field (Pattern, Speed, End, LoopStart, LoopEnd)
-- **Up/Down** change value by 1
-- **Shift+Up/Down** change value by 10
+- **Left/Right** switch selected value
+- **Up/Down** increase/decrease selected value by 1 step
+- **Shift+Up/Down** increase/decrease selected value by big steps
+
+#### Grid
+
+- **Left/Right** move cursor by 1 frame
+- **Shift+Left/Right** move cursor by 8 frames
+- **Ctrl+Left/Right** increase/decrease selected parameter value by 1 step
+- **Ctrl+Shift+Left/Right** increase/decrease selected parameter value by big steps
+- **Up/Down** switch selected channel
+- **Ctrl+Up/Down** switch selected parameter
+- **A/B/C/D/E/F/G** put A, B, C, D, E, F or G note in selected frame in P1, P2 and WV channels, gate the noise on in NS channel
+- **Shift+A/B/C/D/E/F/G** put A#, B# (C), C#, D#, E# (F), F# or G# note in selected frame in P1, P2 and WV channels, gate the noise on in NS channel
+- **Delete/Backspace** remove note, put rest or remove rest in selected frame
+- **Ctrl+C/V** copy/paste selected frame
 
 ### Exporting
 
