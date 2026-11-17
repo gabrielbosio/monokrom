@@ -260,13 +260,13 @@ impl SfxEditor {
         }
 
         if should_key_fire(KeyCode::Left, false) && !arrow_mod {
-            let step = if shift { VISIBLE_FRAMES as i32 } else { 1 };
+            let step = if shift { 8 } else { 1 };
             self.frame = (self.frame as i32 - step).clamp(0, length as i32 - 1) as u16;
             self.ensure_cursor_visible(data);
             self.note_octave_pending = false;
         }
         if should_key_fire(KeyCode::Right, false) && !arrow_mod {
-            let step = if shift { VISIBLE_FRAMES as i32 } else { 1 };
+            let step = if shift { 8 } else { 1 };
             self.frame = (self.frame as i32 + step).clamp(0, length as i32 - 1) as u16;
             self.ensure_cursor_visible(data);
             self.note_octave_pending = false;
