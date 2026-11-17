@@ -1931,7 +1931,6 @@ impl App {
                     self.audio_engine.preview_wave(wave);
                 }
             }
-            WaveEditorAction::Stop => self.audio_engine.stop_all(),
         }
     }
 

@@ -22,7 +22,6 @@ pub enum WaveEditorAction {
     Save,
     Run,
     Preview(u8),
-    Stop,
 }
 
 pub struct WaveEditorOutput {
@@ -121,12 +120,8 @@ impl WaveEditor {
             return WaveEditorOutput::none();
         }
 
-        if is_key_pressed(KeyCode::Space) {
-            return WaveEditorOutput::action(if shift {
-                WaveEditorAction::Stop
-            } else {
-                WaveEditorAction::Preview(self.wave)
-            });
+        if !shift && is_key_pressed(KeyCode::Space) {
+            return WaveEditorOutput::action(WaveEditorAction::Preview(self.wave));
         }
 
         if is_arrow_modifier_pressed()
