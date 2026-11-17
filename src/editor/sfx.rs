@@ -215,6 +215,7 @@ impl SfxEditor {
         }
         let sign = if up { 1 } else { -1 };
         let step = if shift { 10 } else { 1 };
+        let len_step = if shift { 8 } else { 1 };
 
         match self.header_field {
             HeaderField::Sfx => {
@@ -234,7 +235,7 @@ impl SfxEditor {
             }
             HeaderField::Len => {
                 let length = self.length(data);
-                let next = next_length(length, data.unused_frames(), step as usize, up);
+                let next = next_length(length, data.unused_frames(), len_step as usize, up);
                 if next == length {
                     return SfxEditorOutput::none();
                 }
@@ -1074,11 +1075,11 @@ mod tests {
 
     #[test]
     fn length_coarse_step_clamps_to_available_frames() {
-        assert_eq!(next_length(0, 100, 10, true), 10);
-        assert_eq!(next_length(0, 5, 10, true), 5);
-        assert_eq!(next_length(250, 100, 10, true), 255);
+        assert_eq!(next_length(0, 100, 8, true), 8);
+        assert_eq!(next_length(0, 5, 8, true), 5);
+        assert_eq!(next_length(250, 100, 8, true), 255);
         assert_eq!(next_length(100, 0, 1, true), 100);
-        assert_eq!(next_length(5, 0, 10, false), 0);
+        assert_eq!(next_length(5, 0, 8, false), 0);
     }
 
     #[test]
