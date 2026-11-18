@@ -363,6 +363,8 @@ impl SfxEditor {
         }
         let mut event = self.current_or_default_event(data);
         let step = if coarse { 4 } else { 1 };
+        // Timbre has four values, so a coarse step of four would not change it.
+        let timbre_step = if coarse { 2 } else { 1 };
         match self.channel {
             0 => match self.param {
                 0 => {
@@ -370,7 +372,7 @@ impl SfxEditor {
                     event.set_volume(next);
                 }
                 1 => {
-                    let next = (event.timbre() as i32 + sign * step).rem_euclid(4) as u8;
+                    let next = (event.timbre() as i32 + sign * timbre_step).rem_euclid(4) as u8;
                     event.set_timbre(next);
                 }
                 2 => {
@@ -393,7 +395,7 @@ impl SfxEditor {
                     event.set_volume(next);
                 }
                 _ => {
-                    let next = (event.timbre() as i32 + sign * step).rem_euclid(4) as u8;
+                    let next = (event.timbre() as i32 + sign * timbre_step).rem_euclid(4) as u8;
                     event.set_timbre(next);
                 }
             },
@@ -1081,6 +1083,33 @@ mod tests {
         assert_eq!(next_length(250, 100, 8, true), 255);
         assert_eq!(next_length(100, 0, 1, true), 100);
         assert_eq!(next_length(5, 0, 8, false), 0);
+    }
+
+    #[test]
+    fn timbre_coarse_step_is_two() {
+        let mut data = SoundData::default();
+        let mut note = Event {
+            param: 34,
+            ..Event::default()
+        };
+        note.set_volume(15);
+        note.set_timbre(0);
+        data.songs[0].frames[0][0] = note;
+        data.songs[0].frames[0][1] = note;
+
+        let mut editor = SfxEditor::new();
+        editor.frame = 0;
+        editor.param = 1;
+
+        editor.channel = 0;
+        editor.bump_param(&mut data, 1, false);
+        assert_eq!(data.songs[0].frames[0][0].timbre(), 1);
+        editor.bump_param(&mut data, 1, true);
+        assert_eq!(data.songs[0].frames[0][0].timbre(), 3);
+
+        editor.channel = 1;
+        editor.bump_param(&mut data, 1, true);
+        assert_eq!(data.songs[0].frames[0][1].timbre(), 2);
     }
 
     #[test]
