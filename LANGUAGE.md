@@ -356,23 +356,23 @@ Built-in functions that compile to single opcodes.
 
 ### Graphics
 
-- `cls(col)`: Clear screen with color
-- `pset(x, y, col)`: Set pixel.
-- `pget(x, y): int`: Get pixel color.
-- `line(x0, y0, x1, y1, col)`: Draw line.
-- `rect(x, y, w, h, col)`: Draw rectangle.
-- `circ(x, y, r, col)`: Draw circle
-- `spr(n, x, y, flip_x, flip_y)`: Draw sprite. Colors marked transparent by `palt` are skipped.
-- `map(sx, sy, dx, dy, w, h)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), wxh tiles. Tiles are drawn as sprites, so `palt` applies.
-- `palt(mask)`: Set which colors `spr` and `map` skip. Bit `i` set means color `i` is transparent. Defaults to 1, so color 0 is transparent and the other three are drawn. `palt(0)` makes sprites fully opaque.
-- `prints(s, x, y, col)`: Print string.
-- `printi(val, x, y, col)`: Print integer.
-- `printf(val, x, y, col)`: Print fixed-point as decimal (e.g. "1.25").
+- `cls(col: int)`: Clear screen with color.
+- `pset(x: int, y: int, col: int)`: Set pixel.
+- `pget(x: int, y: int): int`: Get pixel color.
+- `line(x0: int, y0: int, x1: int, y1: int, col: int)`: Draw line.
+- `rect(x: int, y: int, w: int, h: int, col: int)`: Draw rectangle.
+- `circ(x: int, y: int, r: int, col: int)`: Draw circle.
+- `spr(n: int, x: int, y: int, flip_x: bool, flip_y: bool)`: Draw sprite. Colors marked transparent by `palt` are skipped.
+- `map(sx: int, sy: int, dx: int, dy: int, w: int, h: int)`: Draw map region. Tiles at (sx,sy) to screen at (dx,dy), wxh tiles. Tiles are drawn as sprites, so `palt` applies.
+- `palt(mask: int)`: Set which colors `spr` and `map` skip. Bit `i` set means color `i` is transparent. Defaults to 1, so color 0 is transparent and the other three are drawn. `palt(0)` makes sprites fully opaque.
+- `prints(s: str, x: int, y: int, col: int)`: Print string.
+- `printi(val: int, x: int, y: int, col: int)`: Print integer.
+- `printf(val: fixed, x: int, y: int, col: int)`: Print fixed-point as decimal (e.g. "1.25").
 
 ### Input
 
-- `btn(n): bool`: Button held down
-- `btnp(n): bool`: Button just pressed
+- `btn(n: int): bool`: Button held down
+- `btnp(n: int): bool`: Button just pressed
 
 Button mapping:
 
@@ -387,10 +387,10 @@ Button mapping:
 
 ### Memory
 
-- `peek(addr): int`: Read byte from memory
-- `poke(addr, val)`: Write byte to memory
-- `mget(x, y): int`: Get sprite index of the map tile at position
-- `mset(x, y, tile)`: Set sprite index of the map tile at position
+- `peek(addr: int): int`: Read byte from memory
+- `poke(addr: int, val: int)`: Write byte to memory
+- `mget(x: int, y: int): int`: Get sprite index of the map tile at position
+- `mset(x: int, y: int, tile: int)`: Set sprite index of the map tile at position
 
 Memory layout:
 
@@ -416,21 +416,21 @@ val = peek(addr) + peek(addr + 1) * 256
 
 ### Math
 
-- `sin(x): fixed`: Sine.
-- `cos(x): fixed`: Cosine.
-- `sqrt(x): fixed`: Square root.
-- `abs(x): int`: Absolute value.
-- `min(a, b): int`: Minimum.
-- `max(a, b): int`: Maximum.
-- `exp(x): fixed`: Euler's number raised to the power `x`. Clamps to the `fixed` range instead of wrapping.
-- `log(x): fixed`: Natural logarithm (ln). Returns `0` for `x <= 0`.
-- `pow(x, y): fixed`: `x` raised to the power `y`. Clamps to the `fixed` range instead of wrapping.
-- `atan2(y, x): fixed`: Two-argument arctangent (radians).
+- `sin(x: fixed): fixed`: Sine.
+- `cos(x: fixed): fixed`: Cosine.
+- `sqrt(x: fixed): fixed`: Square root.
+- `abs(x: int): int`: Absolute value.
+- `min(a: int, b: int): int`: Minimum.
+- `max(a: int, b: int): int`: Maximum.
+- `exp(x: fixed): fixed`: Euler's number raised to the power `x`. Clamps to the `fixed` range instead of wrapping.
+- `log(x: fixed): fixed`: Natural logarithm (ln). Returns `0` for `x <= 0`.
+- `pow(x: fixed, y: fixed): fixed`: `x` raised to the power `y`. Clamps to the `fixed` range instead of wrapping.
+- `atan2(y: fixed, x: fixed): fixed`: Two-argument arctangent (radians).
 
 ### Conversion
 
-- `ftoi(x): int`: Fixed to integer, rounding down.
-- `itof(x): fixed`: Integer to fixed-point. The integer must fit the `fixed` range or the result wraps.
+- `ftoi(x: fixed): int`: Fixed to integer, rounding down.
+- `itof(x: int): fixed`: Integer to fixed-point. The integer must fit the `fixed` range or the result wraps.
 
 ### Constants
 
@@ -449,17 +449,17 @@ Constants are inlined at compile time.
 
 - `flip()`: End frame, present screen
 - `time(): int`: Seconds since program start
-- `rnd(max): int`: Random integer in [0, max)
+- `rnd(max: int): int`: Random integer in [0, max)
 
 ### Debug
 
-- `tracei(val)`: Print integer to terminal
-- `traces(s)`: Print string to terminal
-- `tracef(val)`: Print fixed-point as decimal to terminal
+- `tracei(val: int)`: Print integer to terminal
+- `traces(s: str)`: Print string to terminal
+- `tracef(val: fixed)`: Print fixed-point as decimal to terminal
 
 ### Audio
 
-- `sfx(n, frame)`: Play frame `frame` of sfx `n`. `n < 0` stops all channels.
+- `sfx(n: int, frame: int)`: Play frame `frame` of sfx `n`. `n < 0` stops all channels.
 
 ## Game Loop
 
