@@ -135,10 +135,11 @@ This section shows how to navigate through each screen. Depending on the screen,
 - **Ctrl+Shift+Left/Right** increase/decrease selected parameter value by big steps
 - **Up/Down** switch selected channel
 - **Ctrl+Up/Down** switch selected parameter
-- **A/B/C/D/E/F/G** put A, B, C, D, E, F or G note in selected frame in P1, P2 and WV channels, gate the noise on in NS channel
-- **Shift+A/B/C/D/E/F/G** put A#, B# (C), C#, D#, E# (F), F# or G# note in selected frame in P1, P2 and WV channels, gate the noise on in NS channel
-- **Delete/Backspace** remove note, put rest or remove rest in selected frame
-- **Ctrl+C/V** copy/paste selected frame
+- **A/B/C/D/E/F/G** put A, B, C, D, E, F or G note in selected cell in P1, P2 and WV channels, gate the noise on in NS channel
+- **Shift+A/B/C/D/E/F/G** put A#, B# (C), C#, D#, E# (F), F# or G# note in selected cell in P1, P2 and WV channels, gate the noise on in NS channel
+- **2/3/4/5/6/7** set octave in selected cell in P1, P2 and WV channels
+- **Delete/Backspace** remove note, put rest or remove rest in selected cell
+- **Ctrl+C/V** copy/paste selected event
 
 ### Exporting
 
